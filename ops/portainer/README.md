@@ -170,14 +170,13 @@ DATABASE_PASSWORD=<real-postgres-password>
 DATABASE_SSL=false
 
 REDIS_PASSWORD=<real-redis-password>
-REDIS_URL=redis://:<url-encoded-redis-password>@redis:6379
-RATE_LIMIT_REDIS_URL=redis://:<url-encoded-redis-password>@redis:6379
-HTTP_CACHE_REDIS_URL=redis://:<url-encoded-redis-password>@redis:6379
 ```
 
 Nie używaj wartości `replace_me`, `changeme`, `sk_test_`, `pk_test_`, `whsec_test_` ani URL-i localhost. Guard produkcyjny przerwie deploy.
 
 Ważne: `STAR_SIGN_PRODUCTION_ENV` waliduje release candidate w GitHub Actions, ale nie zasila runtime stacka w Portainerze. Te same wartości muszą być skonfigurowane osobno w zmiennych stacka Portainer.
+
+Ważne dla Redis: w Portainerze ustawiaj tylko `REDIS_PASSWORD`. Stack sam zbuduje `REDIS_URL`, `RATE_LIMIT_REDIS_URL` i `HTTP_CACHE_REDIS_URL` dla kontenera API. Nie dodawaj tych trzech URL-i ręcznie do zmiennych stacka, bo stara wartość URL-a może powodować `WRONGPASS invalid username-password pair`.
 
 ## GitHub Variables
 
@@ -303,11 +302,8 @@ DATABASE_PASSWORD=<ten-sam-sekret-co-POSTGRES_PASSWORD>
 | Zmienna | Wymagana | Przykład |
 |---|---:|---|
 | `REDIS_PASSWORD` | tak | losowy sekret |
-| `REDIS_URL` | zalecane | `redis://:<encoded-password>@redis:6379` |
-| `RATE_LIMIT_REDIS_URL` | zalecane | `redis://:<encoded-password>@redis:6379` |
-| `HTTP_CACHE_REDIS_URL` | zalecane | `redis://:<encoded-password>@redis:6379` |
 
-Jeżeli hasło Redis zawiera znaki specjalne, zakoduj je URL encodingiem w URL-ach. Najprostsza operacyjnie opcja to wygenerować hasło z bezpiecznego alfabetu bez `@`, `:`, `/`, `?`, `#`, `&`.
+Nie ustawiaj w Portainerze `REDIS_URL`, `RATE_LIMIT_REDIS_URL` ani `HTTP_CACHE_REDIS_URL`. Stack generuje je automatycznie z `REDIS_PASSWORD`, żeby Redis, healthcheck API, rate limit i cache używały tego samego sekretu.
 
 Rate limit i cache:
 
@@ -542,7 +538,7 @@ Po stabilizacji możesz zostawić konkretny SHA albo wrócić do `STAR_SIGN_IMAG
 | Traefik zwraca `404` | router nie pasuje albo usługa nie jest w sieci | DNS, `PRODUCTION_DOMAIN`, `API_DOMAIN`, `traefik-public` |
 | Traefik zwraca `502` | kontener niezdrowy albo zły port | healthcheck, logi serwisu, port `4000` lub `1337` |
 | API nie startuje | brak sekretów, DB albo Redis | logi `api`, `postgres`, `redis`, zmienne Portainera |
-| Redis auth error | hasło niezgodne lub niezakodowane w URL | `REDIS_PASSWORD`, `REDIS_URL`, URL encoding |
+| Redis auth error | hasło Redis w kontenerze i URL używany przez API nie są spójne | usuń z Portainera `REDIS_URL`, `RATE_LIMIT_REDIS_URL`, `HTTP_CACHE_REDIS_URL`; zostaw tylko `REDIS_PASSWORD` i redeploy `redis` oraz `api` |
 | Media nie działają | brak rekordów DB albo zły CDN/R2 | Strapi Media Library, `upload_file`, `R2_PUBLIC_BASE_URL`, CSP |
 | Webhook Stripe/Brevo nie dochodzi | blokada middleware albo zły URL | API nie ma `geo-block@file`, sprawdź route i provider webhook |
 | E2E po deployu failuje | rollout jeszcze trwa albo UI/API niedostępne | zwiększ `DEPLOY_WAIT_SECONDS`, sprawdź smoke i logi |

@@ -190,11 +190,10 @@ if ! is_true "$rate_limit_enabled"; then
   fail "RATE_LIMIT_ENABLED" "must stay enabled"
 fi
 require_secret "REDIS_PASSWORD"
-require_any_value "RATE_LIMIT_REDIS_URL" "REDIS_URL"
 
 http_cache_enabled="$(get_env HTTP_CACHE_ENABLED)"
 if is_true "$http_cache_enabled"; then
-  require_any_value "HTTP_CACHE_REDIS_URL" "REDIS_URL"
+  require_secret "REDIS_PASSWORD"
 fi
 
 ga4_id="$(get_env GA4_MEASUREMENT_ID)"
