@@ -146,12 +146,12 @@ const ARTICLES = [
     categoryName: 'Tarot',
   },
   {
-    title: 'Dlaczego personalizacja działa najlepiej z profilem urodzeniowym',
-    slug: 'dlaczego-personalizacja-dziala-z-profilem-urodzeniowym',
+    title: 'Dlaczego wersja premium działa najlepiej z profilem urodzeniowym',
+    slug: 'dlaczego-premium-dziala-z-profilem-urodzeniowym',
     excerpt:
       'Personalizacja treści to różnica między inspiracją a konkretną wskazówką.',
     content:
-      'Podstawowy horoskop daje kierunek, a profil urodzeniowy dodaje kontekst. Dzięki danym profilu łatwiej dobrać moment działania, obszar priorytetu i styl komunikatu. To zwiększa trafność i pomaga wracać do codziennych rytuałów.',
+      'Podstawowy horoskop daje kierunek, a profil urodzeniowy dodaje kontekst. Dzięki danym profilu łatwiej dobrać moment działania, obszar priorytetu i styl komunikatu. To zwiększa trafność i retencję użytkownika.',
     read_time_minutes: 6,
     author: 'Zespół Produktowy',
     categoryName: 'Rozwój',
@@ -260,7 +260,7 @@ const ARTICLES = [
 const PREMIUM_ARTICLE_SLUGS = new Set([
   'jak-czytac-sygnaly-dnia-wedlug-znaku',
   'karta-dnia-jak-prowadzic-archiwum-odczytow',
-  'dlaczego-personalizacja-dziala-z-profilem-urodzeniowym',
+  'dlaczego-premium-dziala-z-profilem-urodzeniowym',
   'tygodniowy-przeglad-energii',
 ]);
 
@@ -964,7 +964,9 @@ export const ensureBootstrapContent = async (
   const categories = await seedCategories(strapi);
   await seedArticles(strapi, categories);
   const cards = await seedTarotCards(strapi);
-  await ensureSeedMedia(strapi);
+  await ensureSeedMedia(strapi, {
+    articleSlugs: ARTICLES.map((article) => article.slug),
+  });
   await seedDailyTarotDraw(strapi, cards);
   await seedNumerology(strapi);
   await seedHoroscopes(strapi, signs);

@@ -151,6 +151,54 @@ describe('BlogList', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('should render visual placeholders when article thumbnails are missing', () => {
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(
+      host.querySelector('[data-test="blog-hero-image-placeholder"]'),
+    ).toBeTruthy();
+    expect(
+      host.querySelector('[data-test="blog-article-image-placeholder"]'),
+    ).toBeTruthy();
+  });
+
+  it('should render article thumbnail images when provided by the API', () => {
+    component.articles.set([
+      {
+        id: 10,
+        documentId: 'article-10',
+        title: 'Article with hero image',
+        slug: 'article-with-hero-image',
+        category: { name: 'Category 1', slug: 'category-1' },
+        image: {
+          url: '/uploads/blog_placeholder.webp',
+          alternativeText: 'Miniatura hero',
+        },
+      },
+      {
+        id: 11,
+        documentId: 'article-11',
+        title: 'Article with card image',
+        slug: 'article-with-card-image',
+        category: { name: 'Category 2', slug: 'category-2' },
+        image: {
+          url: '/uploads/blog_card.webp',
+          alternativeText: 'Miniatura karty',
+        },
+      },
+    ]);
+    component.loading.set(false);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('img[alt="Miniatura hero"]')).toBeTruthy();
+    expect(host.querySelector('img[alt="Miniatura karty"]')).toBeTruthy();
+    expect(
+      host.querySelector('[data-test="blog-hero-image-placeholder"]'),
+    ).toBeFalsy();
+  });
+
   it('should render empty state when no articles are available', () => {
     component.articles.set([]);
     component.loading.set(false);

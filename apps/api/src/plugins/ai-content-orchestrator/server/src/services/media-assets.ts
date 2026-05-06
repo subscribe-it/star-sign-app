@@ -142,6 +142,9 @@ const parseOptionalString = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const purposeUsesSign = (purpose: MediaAssetRecord['purpose']): boolean =>
+  purpose === 'horoscope_sign' || purpose === 'zodiac_profile';
+
 const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
   const entityService = getEntityService(strapi);
 
@@ -149,8 +152,10 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
     purpose: MediaAssetRecord['purpose'];
     sign_slug?: string | null;
   }): void => {
-    if (payload.purpose === 'horoscope_sign' && !payload.sign_slug?.trim()) {
-      throw new Error('Dla purpose=horoscope_sign pole sign_slug jest wymagane.');
+    if (purposeUsesSign(payload.purpose) && !payload.sign_slug?.trim()) {
+      throw new Error(
+        `Dla purpose=${payload.purpose} pole sign_slug jest wymagane.`,
+      );
     }
   };
 
@@ -176,7 +181,7 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
       asset_key: payload.asset_key.trim(),
       label: payload.label.trim(),
       purpose,
-      sign_slug: purpose === 'horoscope_sign' ? signSlug : null,
+      sign_slug: purposeUsesSign(purpose) ? signSlug : null,
       period_scope: periodScope,
       keywords: normalizeKeywords(payload.keywords),
       priority: clampInt(payload.priority, 0, -9999, 9999),
@@ -272,7 +277,7 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
       sign_slug: finalSignSlug,
     });
 
-    if (finalPurpose !== 'horoscope_sign') {
+    if (!purposeUsesSign(finalPurpose)) {
       data.sign_slug = null;
     }
 
@@ -355,7 +360,7 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
       const identity = generateMediaAssetIdentity({
         fileName: getUploadFileName(fileId, uploadFile),
         purpose: input.purpose,
-        signSlug: input.purpose === 'horoscope_sign' ? signSlug : null,
+        signSlug: purposeUsesSign(input.purpose) ? signSlug : null,
         periodScope,
         existingAssetKeys,
       });
@@ -364,7 +369,7 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
         ...identity,
         fileId,
         purpose: input.purpose,
-        sign_slug: input.purpose === 'horoscope_sign' ? signSlug : null,
+        sign_slug: purposeUsesSign(input.purpose) ? signSlug : null,
         period_scope: periodScope,
       };
     },
@@ -443,7 +448,7 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
       const identity = generateMediaAssetIdentity({
         fileName: getUploadFileName(fileId, uploadFile),
         purpose,
-        signSlug: purpose === 'horoscope_sign' ? signSlug : null,
+        signSlug: purposeUsesSign(purpose) ? signSlug : null,
         periodScope,
         existingAssetKeys,
       });
@@ -453,7 +458,7 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
           ...payload,
           ...identity,
           purpose,
-          sign_slug: purpose === 'horoscope_sign' ? signSlug : null,
+          sign_slug: purposeUsesSign(purpose) ? signSlug : null,
           period_scope: periodScope,
           asset: fileId,
         }),
@@ -503,7 +508,7 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
       const identity = generateMediaAssetIdentity({
         fileName: getUploadFileName(finalFileId, uploadFile),
         purpose: finalPurpose,
-        signSlug: finalPurpose === 'horoscope_sign' ? finalSignSlug : null,
+        signSlug: purposeUsesSign(finalPurpose) ? finalSignSlug : null,
         periodScope: finalPeriodScope,
         existingAssetKeys,
       });
@@ -512,7 +517,7 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
         ...payload,
         ...identity,
         purpose: finalPurpose,
-        sign_slug: finalPurpose === 'horoscope_sign' ? finalSignSlug : null,
+        sign_slug: purposeUsesSign(finalPurpose) ? finalSignSlug : null,
         period_scope: finalPeriodScope,
         asset: finalFileId,
       });
@@ -583,7 +588,7 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
           const identity = generateMediaAssetIdentity({
             fileName,
             purpose: resolvedPurpose,
-            signSlug: resolvedPurpose === 'horoscope_sign' ? resolvedSign : null,
+            signSlug: purposeUsesSign(resolvedPurpose) ? resolvedSign : null,
             periodScope: resolvedPeriodScope,
             existingAssetKeys: keyPool,
           });
@@ -596,7 +601,7 @@ const mediaAssets = ({ strapi }: { strapi: Strapi }) => {
             asset_key: identity.asset_key,
             label: identity.label,
             purpose: resolvedPurpose,
-            sign_slug: resolvedPurpose === 'horoscope_sign' ? resolvedSign : null,
+            sign_slug: purposeUsesSign(resolvedPurpose) ? resolvedSign : null,
             period_scope: resolvedPeriodScope,
             keywords:
               typeof rawItem.keywords !== 'undefined'

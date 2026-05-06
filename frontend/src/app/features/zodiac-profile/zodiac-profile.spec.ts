@@ -50,6 +50,14 @@ describe('ZodiacProfile', () => {
     expect(component.error()).toBeNull();
   });
 
+  it('should render the sign image across the profile elements', () => {
+    const images = fixture.nativeElement.querySelectorAll(
+      'img[alt*="Baran"]',
+    ) as NodeListOf<HTMLImageElement>;
+
+    expect(images.length).toBeGreaterThan(1);
+  });
+
   it('should set error if sign not found', () => {
     activatedRoute.paramMap = of(convertToParamMap({ sign: 'nie-istnieje' }));
     // We need to re-initialize or trigger the switchMap

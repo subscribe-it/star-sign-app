@@ -3,7 +3,7 @@ import { BlogDetail } from './blog-detail';
 import { ArticleService } from '../../core/services/article.service';
 import { SeoService } from '../../core/services/seo.service';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { RouterTestingModule } from '@angular/router/testing';
 import { vi } from 'vitest';
 
@@ -20,6 +20,7 @@ describe('BlogDetail', () => {
   let authService: any;
   let accountService: any;
   let analyticsService: any;
+  let fragment$: BehaviorSubject<string | null>;
 
   const mockArticle = {
     id: 1,
@@ -35,6 +36,8 @@ describe('BlogDetail', () => {
   };
 
   beforeEach(async () => {
+    fragment$ = new BehaviorSubject<string | null>(null);
+
     articleService = {
       getArticleBySlug: vi.fn().mockReturnValue(of(mockArticle)),
       getRelatedArticles: vi.fn().mockReturnValue(of([])),
@@ -69,6 +72,7 @@ describe('BlogDetail', () => {
           provide: ActivatedRoute,
           useValue: {
             paramMap: of(convertToParamMap({ slug: 'test-article' })),
+            fragment: fragment$.asObservable(),
           },
         },
       ],
@@ -108,6 +112,128 @@ describe('BlogDetail', () => {
     );
 
     expect(link?.getAttribute('href')).toBe('/#newsletter');
+  });
+
+  it('should render visible decorative mystic orbs in the article hero', () => {
+    const host = fixture.nativeElement as HTMLElement;
+    const roseOrb = host.querySelector('[data-test="blog-detail-orb-rose"]');
+    const goldOrb = host.querySelector('[data-test="blog-detail-orb-gold"]');
+
+    expect(roseOrb).toBeTruthy();
+    expect(goldOrb).toBeTruthy();
+    expect(roseOrb?.getAttribute('aria-hidden')).toBe('true');
+    expect(goldOrb?.getAttribute('aria-hidden')).toBe('true');
+    expect(roseOrb?.classList.contains('article-hero__orb--rose')).toBe(true);
+    expect(goldOrb?.classList.contains('article-hero__orb--gold')).toBe(true);
+  });
+
+  it('should expose stable article fragment anchors', () => {
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('#article-content')).toBeTruthy();
+    expect(host.querySelector('#article-text')).toBeTruthy();
+    expect(host.querySelector('#article-share')).toBeTruthy();
+  });
+
+  it('should scroll to article content when no fragment is provided', () => {
+    vi.useFakeTimers();
+    const scrollSpy = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollSpy,
+    });
+
+    fixture = TestBed.createComponent(BlogDetail);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    vi.runOnlyPendingTimers();
+
+    expect(scrollSpy).toHaveBeenCalledWith({
+      block: 'start',
+      behavior: 'auto',
+    });
+    expect((scrollSpy.mock.contexts.at(-1) as HTMLElement).id).toBe(
+      'article-content',
+    );
+
+    if (originalScrollIntoView) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    } else {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+    }
+    vi.useRealTimers();
+  });
+
+  it('should scroll to requested article fragment when it exists', () => {
+    vi.useFakeTimers();
+    fragment$.next('article-share');
+    const scrollSpy = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollSpy,
+    });
+
+    fixture = TestBed.createComponent(BlogDetail);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    vi.runOnlyPendingTimers();
+
+    expect(scrollSpy).toHaveBeenCalledWith({
+      block: 'start',
+      behavior: 'auto',
+    });
+    expect((scrollSpy.mock.contexts.at(-1) as HTMLElement).id).toBe(
+      'article-share',
+    );
+
+    if (originalScrollIntoView) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    } else {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+    }
+    vi.useRealTimers();
+  });
+
+  it('should fall back to article content when requested fragment does not exist', () => {
+    vi.useFakeTimers();
+    fragment$.next('missing-fragment');
+    const scrollSpy = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollSpy,
+    });
+
+    fixture = TestBed.createComponent(BlogDetail);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    vi.runAllTimers();
+
+    expect(scrollSpy).toHaveBeenCalledWith({
+      block: 'start',
+      behavior: 'auto',
+    });
+    expect((scrollSpy.mock.contexts.at(-1) as HTMLElement).id).toBe(
+      'article-content',
+    );
+
+    if (originalScrollIntoView) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    } else {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+    }
+    vi.useRealTimers();
   });
 
   it('should identify premium user', () => {

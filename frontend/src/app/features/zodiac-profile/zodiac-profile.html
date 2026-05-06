@@ -80,6 +80,20 @@
         <div
           class="glass-panel p-6 md:p-12 rounded-3xl md:rounded-[2rem] shadow-xl shadow-mystic-rose/5 animate-scale-in"
         >
+          @if (currentSign.image; as signImage) {
+          <div
+            class="mb-8 overflow-hidden rounded-3xl border border-mystic-rose/10 bg-[#FDF4F5]"
+          >
+            <img
+              [src]="signImage.url | strapiImage"
+              [srcset]="signImage | strapiSrcset"
+              sizes="(max-width: 1024px) 100vw, 720px"
+              [alt]="currentSign.name + ', zdjęcie znaku zodiaku'"
+              class="h-48 w-full object-cover sm:h-64"
+              loading="lazy"
+            />
+          </div>
+          }
           <h2 class="serif-display text-3xl text-mystic-cocoa mb-8">
             Charakterystyka
           </h2>
@@ -103,6 +117,20 @@
           <div
             class="bg-[#fbf5f7] p-6 sm:p-8 rounded-3xl border border-mystic-rose/10 hover:shadow-lg transition-shadow"
           >
+            @if (currentSign.image; as signImage) {
+            <div
+              class="mb-6 h-28 overflow-hidden rounded-2xl border border-white/60 bg-white"
+            >
+              <img
+                [src]="signImage.url | strapiImage"
+                [srcset]="signImage | strapiSrcset"
+                sizes="(max-width: 768px) 100vw, 320px"
+                [alt]="currentSign.name + ', energia mocnych stron'"
+                class="h-full w-full object-cover opacity-85"
+                loading="lazy"
+              />
+            </div>
+            }
             <h3
               class="serif-display text-xl text-mystic-cocoa mb-6 flex items-center gap-3"
             >
@@ -127,6 +155,20 @@
           <div
             class="bg-white p-6 sm:p-8 rounded-3xl border border-mystic-rose/10 hover:shadow-lg transition-shadow"
           >
+            @if (currentSign.image; as signImage) {
+            <div
+              class="mb-6 h-28 overflow-hidden rounded-2xl border border-mystic-rose/10 bg-[#FDF4F5]"
+            >
+              <img
+                [src]="signImage.url | strapiImage"
+                [srcset]="signImage | strapiSrcset"
+                sizes="(max-width: 768px) 100vw, 320px"
+                [alt]="currentSign.name + ', energia wyzwań'"
+                class="h-full w-full object-cover opacity-80"
+                loading="lazy"
+              />
+            </div>
+            }
             <h3
               class="serif-display text-xl text-mystic-cocoa mb-6 flex items-center gap-3"
             >
@@ -156,6 +198,16 @@
         <div
           class="glass-panel p-6 sm:p-10 rounded-3xl text-center relative overflow-hidden group hover:shadow-2xl transition-all duration-500"
         >
+          @if (currentSign.image; as signImage) {
+          <img
+            [src]="signImage.url | strapiImage"
+            [srcset]="signImage | strapiSrcset"
+            sizes="(max-width: 1024px) 100vw, 420px"
+            [alt]="currentSign.name + ', tło kompatybilności'"
+            class="absolute inset-0 h-full w-full object-cover opacity-[0.08] transition-opacity duration-500 group-hover:opacity-[0.14]"
+            loading="lazy"
+          />
+          }
           <div class="relative z-10">
             <h3 class="serif-display text-2xl text-mystic-cocoa mb-8">
               Kompatybilność
@@ -201,10 +253,29 @@
               class="flex items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all hover:-translate-x-1 group/item"
             >
               <div class="flex min-w-0 items-center gap-3 sm:gap-5">
+                @if (currentSign.image; as signImage) {
+                <span
+                  class="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/10"
+                >
+                  <img
+                    [src]="signImage.url | strapiImage"
+                    [srcset]="signImage | strapiSrcset"
+                    sizes="44px"
+                    [alt]="currentSign.name + ', miniatura horoskopu'"
+                    class="h-full w-full object-cover opacity-80 transition-transform duration-300 group-hover/item:scale-110"
+                    loading="lazy"
+                  />
+                  <span
+                    class="absolute inset-0 bg-mystic-cocoa/20"
+                    aria-hidden="true"
+                  ></span>
+                </span>
+                } @else {
                 <span
                   class="text-2xl group-hover/item:scale-125 transition-transform"
                   >{{ link.icon }}</span
                 >
+                }
                 <div class="flex min-w-0 flex-col">
                   <span class="font-medium tracking-wide text-sm uppercase"
                     >{{ link.label }}</span

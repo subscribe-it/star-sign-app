@@ -5,16 +5,22 @@
 >
   @if (currentArticle) {
   <!-- Article Hero -->
-  <section class="relative pt-24 pb-14 sm:pt-32 sm:pb-20 overflow-hidden bg-[#FDF4F5]">
+  <section
+    class="article-hero relative pt-24 pb-14 sm:pt-32 sm:pb-20 overflow-hidden bg-[#FDF4F5]"
+  >
     <div
-      class="absolute inset-0 bg-gradient-to-b from-transparent to-[#FFFBFB] opacity-50 z-0"
+      class="article-hero__wash absolute inset-0 bg-gradient-to-b from-transparent to-[#FFFBFB] opacity-50 z-0"
     ></div>
 
     <div
-      class="mystic-orb top-20 right-[10%] w-64 h-64 bg-mystic-rose/10 animate-float"
+      data-test="blog-detail-orb-rose"
+      aria-hidden="true"
+      class="mystic-orb article-hero__orb article-hero__orb--rose top-12 right-[4%] w-80 h-80 sm:w-[28rem] sm:h-[28rem] animate-float"
     ></div>
     <div
-      class="mystic-orb bottom-10 left-[5%] w-48 h-48 bg-mystic-gold/10 animate-float"
+      data-test="blog-detail-orb-gold"
+      aria-hidden="true"
+      class="mystic-orb article-hero__orb article-hero__orb--gold bottom-4 left-[-2rem] w-72 h-72 sm:left-[4%] sm:w-80 sm:h-80 animate-float"
       style="animation-delay: 2s"
     ></div>
 
@@ -100,11 +106,15 @@
   }
 
   <!-- Article Content -->
-  <section class="section-container py-16">
+  <section
+    id="article-content"
+    data-test="article-content-start"
+    class="section-container py-16"
+  >
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16">
       <!-- Main Content -->
       <div class="lg:col-span-8">
-        <div class="prose prose-mystic max-w-none">
+        <div id="article-text" class="prose prose-mystic max-w-none">
           <!-- Wstęp / Excerpt -->
           @if (currentArticle.excerpt) {
           <p
@@ -124,6 +134,7 @@
             </div>
 
             <app-premium-preview-block
+              id="article-premium"
               variant="article"
               [isPremium]="canDisplayPremiumContent(currentArticle)"
               [premiumContent]="currentArticle.premiumContent"
@@ -138,6 +149,7 @@
         </div>
 
         <div
+          id="article-share"
           class="mt-16 pt-8 border-t border-mystic-rose/10 flex flex-col sm:flex-row sm:items-center justify-between gap-6"
         >
           <span
@@ -236,7 +248,10 @@
 
   <!-- Related Articles -->
   @let related = relatedArticles(); @if (related.length > 0) {
-  <section class="section-container pb-24 border-t border-mystic-rose/10 pt-16">
+  <section
+    id="related-articles"
+    class="section-container pb-24 border-t border-mystic-rose/10 pt-16"
+  >
     <h2 class="serif-display text-3xl text-mystic-cocoa mb-12">
       Może Cię również zainteresować
     </h2>

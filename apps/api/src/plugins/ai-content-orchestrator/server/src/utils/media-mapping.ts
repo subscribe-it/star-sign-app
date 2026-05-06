@@ -80,6 +80,9 @@ const pad2 = (value: number): string => String(value).padStart(2, '0');
 
 const stripExtension = (fileName: string): string => fileName.replace(/\.[a-z0-9]+$/i, '');
 
+const purposeUsesSign = (purpose: MediaPurpose): boolean =>
+  purpose === 'horoscope_sign' || purpose === 'zodiac_profile';
+
 export const toTokens = (fileName: string): string[] => {
   const normalized = slugify(stripExtension(fileName)).replace(/-/g, '_');
   return normalized
@@ -128,10 +131,6 @@ const detectPurpose = (tokens: string[], signSlug: string | null): MediaPurpose 
     return 'blog_article';
   }
 
-  if (tokens.includes('card') || tokens.includes('karta') || tokens.includes('tarot')) {
-    return 'daily_card';
-  }
-
   if (
     signSlug &&
     (tokens.includes('zodiac') ||
@@ -140,6 +139,14 @@ const detectPurpose = (tokens: string[], signSlug: string | null): MediaPurpose 
       tokens.includes('profil'))
   ) {
     return 'zodiac_profile';
+  }
+
+  if (signSlug && tokens.includes('tarot')) {
+    return 'horoscope_sign';
+  }
+
+  if (tokens.includes('card') || tokens.includes('karta') || tokens.includes('tarot')) {
+    return 'daily_card';
   }
 
   if (tokens.includes('horoscope') || tokens.includes('horoskop') || signSlug) {
@@ -325,7 +332,7 @@ export const generateMediaAssetIdentity = (
 } => {
   const tokens = toTokens(input.fileName);
   const numericHints = extractNumericHints(tokens);
-  const normalizedSign = input.purpose === 'horoscope_sign' ? input.signSlug : null;
+  const normalizedSign = purposeUsesSign(input.purpose) ? input.signSlug : null;
 
   const assetKey = deriveAssetKey({
     purpose: input.purpose,
@@ -396,7 +403,7 @@ export const suggestMediaMapping = (input: {
     asset_key: identity.asset_key,
     label: identity.label,
     purpose,
-    sign_slug: purpose === 'horoscope_sign' ? signSlug : null,
+    sign_slug: purposeUsesSign(purpose) ? signSlug : null,
     period_scope: periodScope,
     keywords: deriveKeywords(tokens, signSlug),
     confidence: boundedConfidence,

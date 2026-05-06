@@ -72,10 +72,10 @@
           <div
             class="absolute inset-0 bg-gradient-to-tr from-mystic-rose/10 to-transparent"
           ></div>
-          @if (item.image?.url) {
+          @if (item.image; as image) {
           <img
-            [src]="item.image.url | strapiImage"
-            [alt]="item.image.alternativeText || item.name"
+            [src]="image.url | strapiImage"
+            [alt]="image.alternativeText || item.name"
             class="absolute inset-0 h-full w-full object-cover"
             loading="eager"
             decoding="async"

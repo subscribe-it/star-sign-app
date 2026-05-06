@@ -1402,7 +1402,12 @@ const seedAicoSettings = async (strapi) => {
 
 const seedAicoWorkflows = async (strapi, mode, categoriesByName) => {
   const defaults = getModeDefaults(mode);
+  const enableByDefault = toBoolean(
+    process.env.AICO_ENABLE_WORKFLOWS,
+    defaults.defaultEnableWorkflows,
+  );
   const requireToken =
+    enableByDefault &&
     defaults.requireOpenRouterToken &&
     process.env.AICO_ALLOW_MISSING_TOKEN !== 'true';
 
@@ -1421,10 +1426,6 @@ const seedAicoWorkflows = async (strapi, mode, categoriesByName) => {
     encryptedToken = strapi.service('admin::encryption').encrypt(token);
   }
 
-  const enableByDefault = toBoolean(
-    process.env.AICO_ENABLE_WORKFLOWS,
-    defaults.defaultEnableWorkflows,
-  );
   const enableWorkflows = Boolean(token) && enableByDefault;
 
   const category =
@@ -1546,8 +1547,12 @@ const seedAicoTopicQueue = async (
     categoriesByName.get('Astrologia') ||
     [...categoriesByName.values()][0] ||
     null;
+  const forceTopicQueue = toBoolean(
+    process.env.AICO_SEED_TOPIC_QUEUE_ENABLED,
+    false,
+  );
 
-  if (!workflow || !category) {
+  if (!workflow || !category || (!workflow.enabled && !forceTopicQueue)) {
     return 0;
   }
 

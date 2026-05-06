@@ -20,6 +20,7 @@ import auditTrail from '../services/audit-trail';
 import performanceFeedback from '../services/performance-feedback';
 import runtimeLocks from '../services/runtime-locks';
 import runsService from '../services/runs';
+import mediaAssets from '../services/media-assets';
 import seoGuardrails from '../services/seo-guardrails';
 import siteAlive from '../services/site-alive';
 import socialPublisher from '../services/social-publisher';
@@ -2410,6 +2411,57 @@ describe('ai-content-orchestrator runtime', () => {
       sign_slug: 'baran',
       period_scope: 'daily',
       asset_key: 'horoscope-baran-daily-01',
+    });
+  });
+
+  it('maps tarot sign filenames to horoscope media suggestions', () => {
+    const suggestion = suggestMediaMapping({
+      fileName: 'tarot_baran.webp',
+      existingAssetKeys: new Set(),
+    });
+
+    expect(suggestion).toMatchObject({
+      purpose: 'horoscope_sign',
+      sign_slug: 'baran',
+      asset_key: 'horoscope-baran-daily-01',
+    });
+  });
+
+  it('keeps sign slug for zodiac profile media suggestions', () => {
+    const suggestion = suggestMediaMapping({
+      fileName: 'zodiac-baran-profile-01.webp',
+      existingAssetKeys: new Set(),
+    });
+
+    expect(suggestion).toMatchObject({
+      purpose: 'zodiac_profile',
+      sign_slug: 'baran',
+      asset_key: 'zodiac-profile-baran-01',
+    });
+  });
+
+  it('keeps sign slug when previewing zodiac profile media asset identity', async () => {
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 14,
+        name: 'zodiac-baran-profile-01.webp',
+      })),
+      findMany: vi.fn(async () => []),
+    };
+    const strapi = createStrapi({}, entityService);
+
+    const result = await mediaAssets({ strapi }).previewIdentity({
+      fileId: 14,
+      purpose: 'zodiac_profile',
+      sign_slug: 'baran',
+      period_scope: 'any',
+    });
+
+    expect(result).toMatchObject({
+      fileId: 14,
+      purpose: 'zodiac_profile',
+      sign_slug: 'baran',
+      asset_key: 'zodiac-profile-baran-01',
     });
   });
 });

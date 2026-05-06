@@ -3,9 +3,10 @@ import {
   ChangeDetectionStrategy,
   inject,
   effect,
+  PLATFORM_ID,
 } from '@angular/core';
 import { RouterLink, ActivatedRoute } from '@angular/router';
-import { DatePipe } from '@angular/common';
+import { DatePipe, isPlatformBrowser } from '@angular/common';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { switchMap, map, of } from 'rxjs';
 import { NgIcon, provideIcons } from '@ng-icons/core';
@@ -57,6 +58,8 @@ export class BlogDetail {
   private readonly authService = inject(AuthService);
   private readonly accountService = inject(AccountService);
   private readonly analyticsService = inject(AnalyticsService);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private lastScrollTargetKey: string | null = null;
 
   public readonly isLoggedIn = this.authService.isLoggedIn;
   public readonly isPremiumUser = toSignal(
@@ -91,6 +94,9 @@ export class BlogDetail {
     ),
     { initialValue: undefined },
   );
+  public readonly fragment = toSignal(this.route.fragment, {
+    initialValue: null,
+  });
 
   public readonly relatedArticles = toSignal(
     toObservable(this.article).pipe(
@@ -142,6 +148,15 @@ export class BlogDetail {
           category: article.category?.name,
         });
       }
+    });
+
+    effect(() => {
+      const article = this.article();
+      if (!article?.slug) {
+        return;
+      }
+
+      this.scrollToArticleTarget(article.slug, this.fragment());
     });
   }
 
@@ -202,5 +217,51 @@ export class BlogDetail {
       funnel_step: 'cta_click',
       route: `/artykuly/${article.slug}`,
     });
+  }
+
+  private scrollToArticleTarget(slug: string, fragment: string | null): void {
+    if (!this.isBrowser) {
+      return;
+    }
+
+    const requestedTargetId = fragment?.replace(/^#/, '').trim() || null;
+    const targetId = requestedTargetId || 'article-content';
+    const scrollKey = `${slug}#${targetId}`;
+
+    if (this.lastScrollTargetKey === scrollKey) {
+      return;
+    }
+
+    this.lastScrollTargetKey = scrollKey;
+
+    this.scrollToElementWhenReady(requestedTargetId, 0);
+  }
+
+  private scrollToElementWhenReady(
+    requestedTargetId: string | null,
+    attempt: number,
+  ): void {
+    window.setTimeout(
+      () => {
+        const requestedTarget = requestedTargetId
+          ? document.getElementById(requestedTargetId)
+          : null;
+        const fallbackTarget = document.getElementById('article-content');
+        const target =
+          requestedTarget || (!requestedTargetId || attempt >= 5
+            ? fallbackTarget
+            : null);
+
+        if (target && typeof target.scrollIntoView === 'function') {
+          target.scrollIntoView({ block: 'start', behavior: 'auto' });
+          return;
+        }
+
+        if (requestedTargetId && attempt < 5) {
+          this.scrollToElementWhenReady(requestedTargetId, attempt + 1);
+        }
+      },
+      attempt === 0 ? 0 : 80,
+    );
   }
 }

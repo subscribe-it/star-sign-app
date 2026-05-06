@@ -616,6 +616,33 @@ export interface ApiAppSettingAppSetting extends Struct.SingleTypeSchema {
       'api::app-setting.app-setting'
     > &
       Schema.Attribute.Private;
+    maintenance_allowed_paths: Schema.Attribute.JSON &
+      Schema.Attribute.DefaultTo<
+        [
+          '/regulamin',
+          '/polityka-prywatnosci',
+          '/cookies',
+          '/disclaimer',
+          '/newsletter/potwierdz',
+          '/newsletter/wypisz',
+        ]
+      >;
+    maintenance_contact_url: Schema.Attribute.String &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 300;
+      }>;
+    maintenance_eta: Schema.Attribute.DateTime;
+    maintenance_message: Schema.Attribute.Text &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 500;
+      }>;
+    maintenance_mode_enabled: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<false>;
+    maintenance_title: Schema.Attribute.String &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 120;
+      }>;
     monthly_price: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<24.99>;
     premium_mode: Schema.Attribute.Enumeration<['open', 'paid']> &
       Schema.Attribute.Required &
@@ -1180,6 +1207,83 @@ export interface ApiZodiacSignZodiacSign extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface PluginAiContentOrchestratorAuditEvent
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'aico_audit_events';
+  info: {
+    displayName: 'AICO Audit Event';
+    pluralName: 'audit-events';
+    singularName: 'audit-event';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: false;
+    };
+  };
+  attributes: {
+    action: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 160;
+      }>;
+    actor_id: Schema.Attribute.String &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 120;
+      }>;
+    actor_type: Schema.Attribute.Enumeration<['admin', 'system', 'unknown']> &
+      Schema.Attribute.DefaultTo<'unknown'>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    event_key: Schema.Attribute.UID &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    ip_hash: Schema.Attribute.String &
+      Schema.Attribute.Private &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 128;
+      }>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'plugin::ai-content-orchestrator.audit-event'
+    > &
+      Schema.Attribute.Private;
+    metadata: Schema.Attribute.JSON;
+    occurred_at: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    outcome: Schema.Attribute.Enumeration<['success', 'failure', 'skipped']> &
+      Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    request_id: Schema.Attribute.String &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 160;
+      }>;
+    resource_id: Schema.Attribute.String &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 120;
+      }>;
+    resource_label: Schema.Attribute.String &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 220;
+      }>;
+    resource_uid: Schema.Attribute.String &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 180;
+      }>;
+    severity: Schema.Attribute.Enumeration<['info', 'warn', 'error']> &
+      Schema.Attribute.DefaultTo<'info'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface PluginAiContentOrchestratorContentPerformanceSnapshot
   extends Struct.CollectionTypeSchema {
   collectionName: 'aico_content_performance_snapshots';
@@ -1663,6 +1767,56 @@ export interface PluginAiContentOrchestratorRunLog
   };
 }
 
+export interface PluginAiContentOrchestratorRuntimeLock
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'aico_runtime_locks';
+  info: {
+    displayName: 'AICO Runtime Lock';
+    pluralName: 'runtime-locks';
+    singularName: 'runtime-lock';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: false;
+    };
+  };
+  attributes: {
+    acquired_at: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    expires_at: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'plugin::ai-content-orchestrator.runtime-lock'
+    > &
+      Schema.Attribute.Private;
+    lock_key: Schema.Attribute.UID &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    metadata: Schema.Attribute.JSON;
+    owner_id: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.SetMinMaxLength<{
+        maxLength: 220;
+      }>;
+    publishedAt: Schema.Attribute.DateTime;
+    released_at: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<['active', 'released']> &
+      Schema.Attribute.DefaultTo<'active'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface PluginAiContentOrchestratorSocialPostTicket
   extends Struct.CollectionTypeSchema {
   collectionName: 'aico_social_post_tickets';
@@ -1703,7 +1857,7 @@ export interface PluginAiContentOrchestratorSocialPostTicket
       ['facebook', 'instagram', 'twitter', 'tiktok']
     > &
       Schema.Attribute.Required;
-    provider_payload: Schema.Attribute.JSON;
+    provider_payload: Schema.Attribute.JSON & Schema.Attribute.Private;
     provider_post_id: Schema.Attribute.String;
     published_on: Schema.Attribute.DateTime;
     publishedAt: Schema.Attribute.DateTime;
@@ -1884,7 +2038,7 @@ export interface PluginAiContentOrchestratorWorkflow
       Schema.Attribute.DefaultTo<250000>;
     enabled: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     enabled_channels: Schema.Attribute.JSON;
-    fb_access_token_encrypted: Schema.Attribute.Text;
+    fb_access_token_encrypted: Schema.Attribute.Text & Schema.Attribute.Private;
     fb_page_id: Schema.Attribute.String;
     force_regenerate: Schema.Attribute.Boolean &
       Schema.Attribute.DefaultTo<false>;
@@ -1893,9 +2047,10 @@ export interface PluginAiContentOrchestratorWorkflow
       ['Dzienny', 'Tygodniowy', 'Miesi\u0119czny', 'Roczny']
     >;
     horoscope_type_values: Schema.Attribute.JSON;
-    ig_access_token_encrypted: Schema.Attribute.Text;
+    ig_access_token_encrypted: Schema.Attribute.Text & Schema.Attribute.Private;
     ig_user_id: Schema.Attribute.String;
-    image_gen_api_token_encrypted: Schema.Attribute.Text;
+    image_gen_api_token_encrypted: Schema.Attribute.Text &
+      Schema.Attribute.Private;
     image_gen_model: Schema.Attribute.String &
       Schema.Attribute.DefaultTo<'openai/gpt-image-2'>;
     last_error: Schema.Attribute.Text;
@@ -1903,7 +2058,7 @@ export interface PluginAiContentOrchestratorWorkflow
     last_generation_slot: Schema.Attribute.String;
     last_publish_slot: Schema.Attribute.String;
     last_published_at: Schema.Attribute.DateTime;
-    llm_api_token_encrypted: Schema.Attribute.Text;
+    llm_api_token_encrypted: Schema.Attribute.Text & Schema.Attribute.Private;
     llm_model: Schema.Attribute.String & Schema.Attribute.Required;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -1935,7 +2090,7 @@ export interface PluginAiContentOrchestratorWorkflow
       Schema.Attribute.DefaultTo<'Europe/Warsaw'>;
     topic_mode: Schema.Attribute.Enumeration<['manual', 'mixed']> &
       Schema.Attribute.DefaultTo<'mixed'>;
-    tt_access_token_encrypted: Schema.Attribute.Text;
+    tt_access_token_encrypted: Schema.Attribute.Text & Schema.Attribute.Private;
     tt_creator_id: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1944,10 +2099,11 @@ export interface PluginAiContentOrchestratorWorkflow
       ['horoscope', 'daily_card', 'article']
     > &
       Schema.Attribute.Required;
-    x_access_token_encrypted: Schema.Attribute.Text;
-    x_access_token_secret_encrypted: Schema.Attribute.Text;
+    x_access_token_encrypted: Schema.Attribute.Text & Schema.Attribute.Private;
+    x_access_token_secret_encrypted: Schema.Attribute.Text &
+      Schema.Attribute.Private;
     x_api_key: Schema.Attribute.String;
-    x_api_secret_encrypted: Schema.Attribute.Text;
+    x_api_secret_encrypted: Schema.Attribute.Text & Schema.Attribute.Private;
   };
 }
 
@@ -2477,6 +2633,7 @@ declare module '@strapi/strapi' {
       'api::user-profile.user-profile': ApiUserProfileUserProfile;
       'api::user-reading.user-reading': ApiUserReadingUserReading;
       'api::zodiac-sign.zodiac-sign': ApiZodiacSignZodiacSign;
+      'plugin::ai-content-orchestrator.audit-event': PluginAiContentOrchestratorAuditEvent;
       'plugin::ai-content-orchestrator.content-performance-snapshot': PluginAiContentOrchestratorContentPerformanceSnapshot;
       'plugin::ai-content-orchestrator.content-plan-item': PluginAiContentOrchestratorContentPlanItem;
       'plugin::ai-content-orchestrator.editorial-memory': PluginAiContentOrchestratorEditorialMemory;
@@ -2485,6 +2642,7 @@ declare module '@strapi/strapi' {
       'plugin::ai-content-orchestrator.media-usage-log': PluginAiContentOrchestratorMediaUsageLog;
       'plugin::ai-content-orchestrator.publication-ticket': PluginAiContentOrchestratorPublicationTicket;
       'plugin::ai-content-orchestrator.run-log': PluginAiContentOrchestratorRunLog;
+      'plugin::ai-content-orchestrator.runtime-lock': PluginAiContentOrchestratorRuntimeLock;
       'plugin::ai-content-orchestrator.social-post-ticket': PluginAiContentOrchestratorSocialPostTicket;
       'plugin::ai-content-orchestrator.topic-queue-item': PluginAiContentOrchestratorTopicQueueItem;
       'plugin::ai-content-orchestrator.usage-daily': PluginAiContentOrchestratorUsageDaily;
