@@ -3,7 +3,7 @@
 
 services:
   frontend:
-    image: ghcr.io/${GHCR_OWNER:-dawid268}/star-sign-frontend:${STAR_SIGN_IMAGE_TAG:-main}
+    image: ghcr.io/${GHCR_OWNER:-subscribe-it}/star-sign-frontend:${STAR_SIGN_IMAGE_TAG:-main}
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -93,7 +93,7 @@ services:
         - "traefik.http.middlewares.star-sign-frontend-headers.headers.contentSecurityPolicy=frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
 
   api:
-    image: ghcr.io/${GHCR_OWNER:-dawid268}/star-sign-api:${STAR_SIGN_IMAGE_TAG:-main}
+    image: ghcr.io/${GHCR_OWNER:-subscribe-it}/star-sign-api:${STAR_SIGN_IMAGE_TAG:-main}
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0

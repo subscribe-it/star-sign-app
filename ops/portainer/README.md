@@ -8,8 +8,8 @@ Produkcja składa się z czterech serwisów w jednym stacku Portainer Swarm:
 
 | Serwis | Rola | Obraz | Port wewnętrzny |
 |---|---|---|---:|
-| `frontend` | Angular SSR | `ghcr.io/dawid268/star-sign-frontend:<tag>` | `4000` |
-| `api` | Strapi API | `ghcr.io/dawid268/star-sign-api:<tag>` | `1337` |
+| `frontend` | Angular SSR | `ghcr.io/subscribe-it/star-sign-frontend:<tag>` | `4000` |
+| `api` | Strapi API | `ghcr.io/subscribe-it/star-sign-api:<tag>` | `1337` |
 | `postgres` | baza danych aplikacji | `postgres:16-alpine` | `5432` |
 | `redis` | cache i rate limit | `redis:7-alpine` | `6379` |
 
@@ -116,10 +116,10 @@ Kolejność jobów:
 Publikowane obrazy:
 
 ```text
-ghcr.io/dawid268/star-sign-api:main
-ghcr.io/dawid268/star-sign-api:<git-sha>
-ghcr.io/dawid268/star-sign-frontend:main
-ghcr.io/dawid268/star-sign-frontend:<git-sha>
+ghcr.io/subscribe-it/star-sign-api:main
+ghcr.io/subscribe-it/star-sign-api:<git-sha>
+ghcr.io/subscribe-it/star-sign-frontend:main
+ghcr.io/subscribe-it/star-sign-frontend:<git-sha>
 ```
 
 Trivy skanuje oba obrazy pod kątem `HIGH` i `CRITICAL`, ale na start działa raportowo przez `continue-on-error: true`. Po pierwszej klasyfikacji podatności można zmienić to na twardy gate.
@@ -155,7 +155,7 @@ API_DOMAIN=api.star-sign.pl
 CORS_ORIGIN=https://star-sign.pl
 UPLOAD_ASSET_CSP_ORIGINS=https://cdn.star-sign.pl
 
-GHCR_OWNER=dawid268
+GHCR_OWNER=subscribe-it
 STAR_SIGN_IMAGE_TAG=main
 
 POSTGRES_DB=star_sign
@@ -231,7 +231,7 @@ Poniżej są zmienne runtime dla stacka. Wartości w nawiasach to rekomendacje s
 
 | Zmienna | Wymagana | Przykład |
 |---|---:|---|
-| `GHCR_OWNER` | tak | `dawid268` |
+| `GHCR_OWNER` | tak | `subscribe-it` |
 | `STAR_SIGN_IMAGE_TAG` | tak | `main` albo konkretny `<git-sha>` |
 | `PRODUCTION_DOMAIN` | tak | `star-sign.pl` |
 | `API_DOMAIN` | tak | `api.star-sign.pl` |
