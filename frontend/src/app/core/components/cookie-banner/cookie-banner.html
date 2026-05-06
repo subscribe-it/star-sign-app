@@ -1,94 +1,92 @@
 @if (isVisible()) {
 <div
-  class="fixed inset-x-0 bottom-0 z-[60] animate-slide-up px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:bottom-6 sm:left-6 sm:right-auto sm:px-0 sm:pb-0"
+  class="cookie-banner-shell"
   data-test="cookie-banner"
 >
-  <div
-    class="glass-panel max-h-[34vh] w-full overflow-y-auto rounded-2xl border border-mystic-rose/20 bg-white/95 p-3 shadow-2xl backdrop-blur-xl sm:max-h-[20rem] sm:max-w-xl sm:rounded-3xl sm:p-5 md:max-h-[18rem] md:max-w-2xl md:p-6"
-  >
+  <div class="cookie-panel">
     @if (!showSettings()) {
-    <div class="flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
-      <div class="min-w-0 flex-grow text-left">
-        <h3 class="serif-display text-base sm:text-xl text-mystic-cocoa mb-1 sm:mb-2">
-          Twoja prywatność w gwiazdach ✦
-        </h3>
-        <p class="text-mystic-cocoa text-xs font-light leading-snug sm:text-sm sm:leading-relaxed">
-          Używamy ciasteczek niezbędnych do działania konta i bezpieczeństwa.
-          Analityka i marketing są opcjonalne; możesz je zaakceptować, odrzucić
-          albo ustawić ręcznie.
-        </p>
+    <div class="cookie-content">
+      <div class="cookie-heading">
+        <span class="cookie-icon" aria-hidden="true">✦</span>
+        <div class="cookie-heading-copy">
+          <h3 class="cookie-title" data-test="cookie-banner-title">
+            Twoja prywatność w gwiazdach
+          </h3>
+          <p class="cookie-copy">
+            Używamy ciasteczek niezbędnych do działania konta i bezpieczeństwa.
+            Analityka i marketing są opcjonalne. Możesz je zaakceptować,
+            odrzucić albo ustawić ręcznie.
+          </p>
+        </div>
       </div>
-      <div class="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-center sm:gap-3 sm:shrink-0">
+
+      <div class="cookie-actions">
         <button
           (click)="declineAll()"
           data-test="cookie-decline-button"
-          class="btn-outline w-full !py-2 !px-3 text-xs sm:w-auto sm:!py-3 sm:!px-6 sm:text-sm"
+          class="cookie-button cookie-button--outline"
         >
           Odrzuć opcjonalne
         </button>
         <button
           (click)="toggleSettings()"
           data-test="cookie-settings-button"
-          class="rounded-full border border-mystic-rose/15 px-3 py-2 text-xs font-medium uppercase tracking-widest text-mystic-cocoa transition-colors hover:text-mystic-rose sm:border-0 sm:px-4 sm:py-3"
+          class="cookie-button cookie-button--ghost"
         >
           Ustawienia
         </button>
         <button
           (click)="acceptAll()"
           data-test="cookie-accept-all-button"
-          class="btn-primary col-span-2 w-full !py-2 !px-3 text-xs sm:col-span-1 sm:w-auto sm:!py-3 sm:!px-7 sm:text-sm"
+          class="cookie-button cookie-button--primary"
         >
           Zgadzam się na wszystko
         </button>
       </div>
     </div>
     } @else {
-    <div>
-      <div class="flex items-center justify-between gap-4 mb-5">
-        <h3 class="serif-display text-lg sm:text-xl text-mystic-cocoa">
-          Ustawienia Prywatności
+    <div class="cookie-content">
+      <div class="cookie-settings-header">
+        <h3 class="cookie-title cookie-title--settings">
+          Ustawienia prywatności
         </h3>
         <button
           (click)="toggleSettings()"
-          class="text-mystic-rose text-sm hover:underline"
+          class="cookie-back-button"
         >
           Powrót
         </button>
       </div>
 
-      <div class="space-y-3 mb-6">
-        <div
-          class="flex items-start gap-3 p-3 sm:gap-4 sm:p-4 rounded-2xl bg-mystic-rose/[0.03] border border-mystic-rose/5"
-        >
+      <div class="cookie-option-list">
+        <div class="cookie-option cookie-option--required">
           <input
             type="checkbox"
             checked
             disabled
-            class="mt-1 accent-mystic-rose"
+            class="cookie-checkbox"
           />
           <div>
-            <p class="text-sm font-bold text-mystic-cocoa">
+            <p class="cookie-option-title">
               Niezbędne (Wymagane)
             </p>
-            <p class="text-xs text-mystic-cocoa font-light">
+            <p class="cookie-option-copy">
               Konieczne do działania podstawowych funkcji serwisu, jak koszyk
               czy logowanie.
             </p>
           </div>
         </div>
 
-        <div
-          class="flex items-start gap-3 p-3 sm:gap-4 sm:p-4 rounded-2xl border border-mystic-rose/10"
-        >
+        <div class="cookie-option">
           <input
             type="checkbox"
             [checked]="consent().analytics"
             (change)="updateOption('analytics', $event)"
-            class="mt-1 accent-mystic-rose"
+            class="cookie-checkbox"
           />
           <div>
-            <p class="text-sm font-bold text-mystic-cocoa">Analityczne</p>
-            <p class="text-xs text-mystic-cocoa font-light">
+            <p class="cookie-option-title">Analityczne</p>
+            <p class="cookie-option-copy">
               Pomagają nam zrozumieć, jak użytkownicy korzystają ze strony, co
               pozwala nam ją ulepszać.
             </p>
@@ -96,18 +94,16 @@
         </div>
 
         @if (adsEnabled) {
-        <div
-          class="flex items-start gap-3 p-3 sm:gap-4 sm:p-4 rounded-2xl border border-mystic-rose/10"
-        >
+        <div class="cookie-option">
           <input
             type="checkbox"
             [checked]="consent().marketing"
             (change)="updateOption('marketing', $event)"
-            class="mt-1 accent-mystic-rose"
+            class="cookie-checkbox"
           />
           <div>
-            <p class="text-sm font-bold text-mystic-cocoa">Marketingowe</p>
-            <p class="text-xs text-mystic-cocoa font-light">
+            <p class="cookie-option-title">Marketingowe</p>
+            <p class="cookie-option-copy">
               Służą do wyświetlania reklam dopasowanych do Twoich zainteresowań.
             </p>
           </div>
@@ -115,18 +111,18 @@
         }
       </div>
 
-      <div class="grid grid-cols-1 gap-2 sm:flex sm:justify-end sm:gap-3">
+      <div class="cookie-actions cookie-actions--settings">
         <button
           (click)="declineAll()"
           data-test="cookie-settings-decline-button"
-          class="btn-outline w-full !py-2.5 !px-5 text-sm sm:w-auto sm:!px-6"
+          class="cookie-button cookie-button--outline"
         >
           Odrzuć opcjonalne
         </button>
         <button
           (click)="acceptSelected()"
           data-test="cookie-save-button"
-          class="btn-primary w-full !py-2.5 !px-5 text-sm sm:w-auto sm:!px-6"
+          class="cookie-button cookie-button--primary"
         >
           Zapisz wybrane
         </button>

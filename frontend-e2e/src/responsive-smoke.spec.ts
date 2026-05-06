@@ -5,6 +5,7 @@ type ViewportPreset = {
   name: string;
   width: number;
   height: number;
+  cookieTitleMaxHeight: number;
 };
 
 type ResponsiveRoute = {
@@ -16,9 +17,9 @@ type ResponsiveRoute = {
 const authStorageKey = 'star-sign-auth-session';
 
 const viewports: ViewportPreset[] = [
-  { name: 'mobile', width: 390, height: 844 },
-  { name: 'tablet', width: 768, height: 1024 },
-  { name: 'desktop', width: 1440, height: 900 },
+  { name: 'mobile', width: 390, height: 844, cookieTitleMaxHeight: 80 },
+  { name: 'tablet', width: 768, height: 1024, cookieTitleMaxHeight: 64 },
+  { name: 'desktop', width: 1440, height: 900, cookieTitleMaxHeight: 64 },
 ];
 
 const routes: ResponsiveRoute[] = [
@@ -253,7 +254,9 @@ test.describe('cookie banner responsive layout', () => {
       await page.goto('/');
 
       const banner = page.locator('[data-test="cookie-banner"]');
+      const title = page.locator('[data-test="cookie-banner-title"]');
       await expect(banner).toBeVisible({ timeout: 4000 });
+      await expect(title).toBeVisible();
       await expect(
         page.locator('[data-test="cookie-accept-all-button"]'),
       ).toBeVisible();
@@ -261,6 +264,11 @@ test.describe('cookie banner responsive layout', () => {
       const bannerBox = await banner.boundingBox();
       expect(bannerBox?.height ?? viewport.height).toBeLessThanOrEqual(
         viewport.height * (viewport.width < 640 ? 0.45 : 0.35),
+      );
+
+      const titleBox = await title.boundingBox();
+      expect(titleBox?.height ?? viewport.height).toBeLessThanOrEqual(
+        viewport.cookieTitleMaxHeight,
       );
 
       await expectElementCenterUncovered(page, '[data-test="home-hero-start"]');

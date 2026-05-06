@@ -99,7 +99,7 @@ test.describe('Soft premium flow', () => {
     await page.goto('/tarot/karta-dnia');
 
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Gwiazda' }),
+      page.getByRole('heading', { level: 1, name: /^(Gwiazda|The Star)$/ }),
     ).toBeVisible();
     await expect(
       page.getByText(
