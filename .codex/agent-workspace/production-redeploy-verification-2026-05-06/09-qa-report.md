@@ -66,3 +66,9 @@ Poprawka zawęża asercję do głównego nagłówka:
 - `getByRole('heading', { level: 1, name: 'Gwiazda' })`
 
 To jest korekta testu, nie zmiana zachowania produktu.
+
+Walidacja:
+
+- lokalnie: `BASE_URL=https://star-sign.pl npm exec -- playwright test frontend-e2e/src/soft-premium.spec.ts --grep "keeps daily tarot readable and adds the premium analysis teaser" --config=frontend-e2e/playwright.config.ts`: PASS, 1 test;
+- GitHub Actions `Production Deploy` run `25425710399`: PASS;
+- w runie `25425710399` przeszły: release gate, build/push GHCR, webhook Portainera, smoke, security headers i Playwright E2E przeciw produkcji.
