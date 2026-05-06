@@ -39,38 +39,44 @@ const createStrapiMock = (options: {
     ...data,
   }));
   const mediaAssetFindOne = vi.fn(async () => options.existingMediaAsset ?? null);
-  const findMany = vi.fn(async (uid: string) => {
-    if (uid === 'plugin::upload.file') {
-      return options.existingUploadFiles ?? [];
-    }
-
-    if (uid === 'api::tarot-card.tarot-card') {
-      return [
-        {
-          id: 10,
-          slug: 'glupiec',
-          image: options.tarotCardImage ?? null,
-        },
-      ];
-    }
-
-    throw new Error(`Unexpected findMany uid: ${uid}`);
-  });
+  const uploadFileFindMany = vi.fn(
+    async () => options.existingUploadFiles ?? [],
+  );
+  const tarotFindOne = vi.fn(async () => ({
+    id: 10,
+    slug: 'glupiec',
+    image: options.tarotCardImage ?? null,
+  }));
 
   const strapi = {
-    entityService: {
-      findMany,
-      update: tarotUpdate,
-    },
     plugin: vi.fn(() => ({
       service: vi.fn(() => ({ upload })),
     })),
     db: {
-      query: vi.fn(() => ({
-        findOne: mediaAssetFindOne,
-        create: mediaAssetCreate,
-        update: mediaAssetUpdate,
-      })),
+      query: vi.fn((uid: string) => {
+        if (uid === 'plugin::upload.file') {
+          return {
+            findMany: uploadFileFindMany,
+          };
+        }
+
+        if (uid === 'api::tarot-card.tarot-card') {
+          return {
+            findOne: tarotFindOne,
+            update: tarotUpdate,
+          };
+        }
+
+        if (uid === 'plugin::ai-content-orchestrator.media-asset') {
+          return {
+            findOne: mediaAssetFindOne,
+            create: mediaAssetCreate,
+            update: mediaAssetUpdate,
+          };
+        }
+
+        throw new Error(`Unexpected query uid: ${uid}`);
+      }),
     },
     log: {
       info: vi.fn(),
@@ -79,12 +85,12 @@ const createStrapiMock = (options: {
   };
 
   return {
-    findMany,
     mediaAssetCreate,
     mediaAssetFindOne,
     mediaAssetUpdate,
     strapi,
     tarotUpdate,
+    uploadFileFindMany,
     upload,
   };
 };
@@ -140,11 +146,10 @@ describe('seed media bootstrap', () => {
         }),
       }),
     );
-    expect(mocks.tarotUpdate).toHaveBeenCalledWith(
-      'api::tarot-card.tarot-card',
-      10,
-      { data: { image: 55 } },
-    );
+    expect(mocks.tarotUpdate).toHaveBeenCalledWith({
+      where: { id: 10 },
+      data: { image: 55 },
+    });
     expect(mocks.mediaAssetCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         asset: 55,

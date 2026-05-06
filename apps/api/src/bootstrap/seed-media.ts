@@ -147,8 +147,8 @@ const findReusableUploadFile = async (
   asset: SeedMediaAsset,
 ): Promise<UploadFileRecord | null> => {
   const files = asRecordArray(
-    await strapi.entityService.findMany('plugin::upload.file', {
-      filters: {
+    await strapi.db.query('plugin::upload.file').findMany({
+      where: {
         $or: [
           { name: asset.fileName },
           { name: stripExtension(asset.fileName) },
@@ -233,15 +233,11 @@ const ensureTarotCardImage = async (
   asset: SeedMediaAsset,
   file: UploadFileRecord,
 ): Promise<boolean> => {
-  const cards = (await strapi.entityService.findMany(
-    'api::tarot-card.tarot-card',
-    {
-      filters: { slug: asset.cardSlug },
-      populate: ['image'],
-      limit: 1,
-    },
-  )) as Array<{ id: number; image?: unknown }>;
-  const card = cards[0];
+  const query = strapi.db.query('api::tarot-card.tarot-card');
+  const card = (await query.findOne({
+    where: { slug: asset.cardSlug },
+    populate: ['image'],
+  })) as { id: number; image?: unknown } | null;
 
   if (!card?.id) {
     return false;
@@ -257,7 +253,8 @@ const ensureTarotCardImage = async (
     return false;
   }
 
-  await strapi.entityService.update('api::tarot-card.tarot-card', card.id, {
+  await query.update({
+    where: { id: card.id },
     data: { image: file.id },
   });
 
