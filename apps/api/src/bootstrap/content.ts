@@ -3,6 +3,7 @@ import {
   AICO_LEGACY_WORKFLOW_NAMES,
   buildAicoWorkflowDefinitions,
 } from './aico-contract';
+import { ensureSeedMedia } from './seed-media';
 import { toBoolean } from '../utils/features';
 import { evaluatePremiumContentQuality } from '../utils/premium-quality';
 
@@ -963,6 +964,7 @@ export const ensureBootstrapContent = async (
   const categories = await seedCategories(strapi);
   await seedArticles(strapi, categories);
   const cards = await seedTarotCards(strapi);
+  await ensureSeedMedia(strapi);
   await seedDailyTarotDraw(strapi, cards);
   await seedNumerology(strapi);
   await seedHoroscopes(strapi, signs);
