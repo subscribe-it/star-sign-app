@@ -17,10 +17,11 @@ import { map, of, switchMap } from 'rxjs';
 
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { PremiumPreviewBlock } from '../../shared/components/premium-preview-block/premium-preview-block';
+import { StrapiImagePipe } from '../../core/pipes/strapi-image-pipe';
 
 @Component({
   selector: 'app-tarot-result',
-  imports: [RouterLink, NgIcon, PremiumPreviewBlock],
+  imports: [RouterLink, NgIcon, PremiumPreviewBlock, StrapiImagePipe],
   viewProviders: [provideIcons({ heroShare })],
   templateUrl: './tarot-result.html',
   styleUrl: './tarot-result.scss',

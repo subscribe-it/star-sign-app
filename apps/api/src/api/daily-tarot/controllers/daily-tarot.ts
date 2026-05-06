@@ -21,6 +21,19 @@ const toPublicPayload = (draw: any) => ({
         description: draw.card.description,
         symbol: draw.card.symbol,
         slug: draw.card.slug,
+        image: draw.card.image
+          ? {
+              id: draw.card.image.id,
+              documentId: draw.card.image.documentId,
+              name: draw.card.image.name,
+              alternativeText: draw.card.image.alternativeText,
+              caption: draw.card.image.caption,
+              width: draw.card.image.width,
+              height: draw.card.image.height,
+              formats: draw.card.image.formats,
+              url: draw.card.image.url,
+            }
+          : null,
       }
     : null,
   message: draw.message || undefined,
@@ -34,7 +47,7 @@ export default {
       .query('api::daily-tarot-draw.daily-tarot-draw')
       .findOne({
         where: { draw_date: today },
-        populate: { card: true },
+        populate: { card: { populate: { image: true } } },
       });
 
     if (!draw) {
@@ -59,7 +72,7 @@ export default {
               draw_date: today,
               card: selectedCard.id,
             },
-            populate: { card: true },
+            populate: { card: { populate: { image: true } } },
           });
       } catch (error: any) {
         // Handle race conditions when two requests try to create today's draw.
@@ -67,7 +80,7 @@ export default {
           .query('api::daily-tarot-draw.daily-tarot-draw')
           .findOne({
             where: { draw_date: today },
-            populate: { card: true },
+            populate: { card: { populate: { image: true } } },
           });
 
         if (!draw) {
