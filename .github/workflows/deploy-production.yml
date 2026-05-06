@@ -16,7 +16,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_OWNER: subscribe-it
+  IMAGE_OWNER: dawid268
   API_IMAGE: star-sign-api
   FRONTEND_IMAGE: star-sign-frontend
 

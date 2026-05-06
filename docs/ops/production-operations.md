@@ -92,8 +92,8 @@ Produkcyjny stack dla VPS 2 vCPU / 4 GB jest w `ops/portainer/star-sign-producti
 Wymagane obrazy:
 
 ```text
-ghcr.io/subscribe-it/star-sign-api:main
-ghcr.io/subscribe-it/star-sign-frontend:main
+ghcr.io/dawid268/star-sign-api:main
+ghcr.io/dawid268/star-sign-frontend:main
 ```
 
 Rollback: ustaw w Portainerze `STAR_SIGN_IMAGE_TAG` na konkretny `git sha`, zaktualizuj stack i uruchom smoke/e2e.

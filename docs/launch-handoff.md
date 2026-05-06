@@ -99,8 +99,8 @@ PRODUCTION_ENV_FILE=.env npm run ops:env
 Docelowy deploy produkcyjny idzie przez GitHub Actions, GHCR i Portainer Swarm:
 
 - stack: `ops/portainer/star-sign-production-stack.yml`
-- API image: `ghcr.io/subscribe-it/star-sign-api:main`
-- frontend image: `ghcr.io/subscribe-it/star-sign-frontend:main`
+- API image: `ghcr.io/dawid268/star-sign-api:main`
+- frontend image: `ghcr.io/dawid268/star-sign-frontend:main`
 - reverse proxy: istniejący Traefik `traefik-load-balancer`
 - media: Cloudflare R2, bez trwałego lokalnego wolumenu `uploads`
 
