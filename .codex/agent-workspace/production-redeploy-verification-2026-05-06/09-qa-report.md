@@ -52,3 +52,17 @@ Walidacja:
 - `sh -n ops/security-headers-check.sh`: PASS
 - `FRONTEND_BASE_URL=https://star-sign.pl API_BASE_URL=https://api.star-sign.pl/api npm run ops:headers`: PASS
 - `SECURITY_HEADER_URLS=https://star-sign.pl,https://api.star-sign.pl/api/health/ready npm run ops:headers`: PASS
+
+## Aktualizacja: Playwright E2E soft premium
+
+Live API zwraca obecnie `ready`, a Redis w healthchecku ma status `true`. Najnowszy workflow produkcyjny przeszedł smoke i security headers, ale zatrzymał się na jednym teście Playwright:
+
+- `frontend-e2e/src/soft-premium.spec.ts`
+- test `keeps daily tarot readable and adds the premium analysis teaser`
+- przyczyna: selektor `getByRole('heading', { name: 'Gwiazda' })` trafiał jednocześnie w `h1` i `h3`, więc Playwright zgłosił strict mode violation.
+
+Poprawka zawęża asercję do głównego nagłówka:
+
+- `getByRole('heading', { level: 1, name: 'Gwiazda' })`
+
+To jest korekta testu, nie zmiana zachowania produktu.

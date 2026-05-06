@@ -98,7 +98,9 @@ test.describe('Soft premium flow', () => {
   }) => {
     await page.goto('/tarot/karta-dnia');
 
-    await expect(page.getByRole('heading', { name: 'Gwiazda' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Gwiazda' }),
+    ).toBeVisible();
     await expect(
       page.getByText(
         'Darmowe przesłanie karty dnia pokazuje kierunek bez blokady kontem.',
