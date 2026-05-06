@@ -3,16 +3,22 @@ set -eu
 
 SECURITY_HEADER_URLS="${SECURITY_HEADER_URLS:-}"
 
+append_security_header_url() {
+  url="$1"
+
+  if [ -n "$SECURITY_HEADER_URLS" ]; then
+    SECURITY_HEADER_URLS="${SECURITY_HEADER_URLS},${url}"
+  else
+    SECURITY_HEADER_URLS="$url"
+  fi
+}
+
 if [ -z "$SECURITY_HEADER_URLS" ]; then
   if [ -n "${FRONTEND_BASE_URL:-}" ]; then
-    SECURITY_HEADER_URLS="$FRONTEND_BASE_URL"
+    append_security_header_url "$FRONTEND_BASE_URL"
   fi
   if [ -n "${API_BASE_URL:-}" ]; then
-    if [ -n "$SECURITY_HEADER_URLS" ]; then
-      SECURITY_HEADER_URLS="${SECURITY_HEADER_URLS},${API_BASE_URL}"
-    else
-      SECURITY_HEADER_URLS="$API_BASE_URL"
-    fi
+    append_security_header_url "${API_BASE_URL%/}/health/ready"
   fi
 fi
 

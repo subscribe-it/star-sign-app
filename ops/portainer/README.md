@@ -185,7 +185,7 @@ Ustaw w `Settings -> Secrets and variables -> Actions -> Variables`.
 | Variable | Wymagany | Przykład | Opis |
 |---|---:|---|---|
 | `FRONTEND_BASE_URL` | tak | `https://star-sign.pl` | używany przez smoke, headers i e2e |
-| `API_BASE_URL` | tak | `https://api.star-sign.pl/api` | używany przez smoke i headers |
+| `API_BASE_URL` | tak | `https://api.star-sign.pl/api` | używany przez smoke; headers automatycznie sprawdza `${API_BASE_URL}/health/ready` |
 | `DEPLOY_WAIT_SECONDS` | opcjonalny | `90` | opóźnienie przed post-deploy checks |
 
 ## GHCR i Portainer Registry

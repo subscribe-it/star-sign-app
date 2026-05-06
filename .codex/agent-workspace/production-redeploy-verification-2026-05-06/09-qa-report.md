@@ -40,3 +40,15 @@ Wyniki lokalne:
 - `git diff --check`: PASS
 
 Pozostałe ostrzeżenia lint i npm audit są znanymi ostrzeżeniami niezwiązanymi z tą poprawką i nie zatrzymały predeploy check.
+
+## Aktualizacja: security headers
+
+Po naprawie Redis production smoke przeszedł, ale GitHub Actions zatrzymał się na `Verify security headers`, ponieważ `ops/security-headers-check.sh` sprawdzał bazowy `API_BASE_URL`, czyli `https://api.star-sign.pl/api`. Strapi poprawnie zwraca dla tego adresu 404, bo realny endpoint do sprawdzenia gotowości to `/api/health/ready`.
+
+Poprawiono skrypt tak, aby przy `API_BASE_URL=https://api.star-sign.pl/api` sprawdzał `https://api.star-sign.pl/api/health/ready`.
+
+Walidacja:
+
+- `sh -n ops/security-headers-check.sh`: PASS
+- `FRONTEND_BASE_URL=https://star-sign.pl API_BASE_URL=https://api.star-sign.pl/api npm run ops:headers`: PASS
+- `SECURITY_HEADER_URLS=https://star-sign.pl,https://api.star-sign.pl/api/health/ready npm run ops:headers`: PASS
