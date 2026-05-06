@@ -55,6 +55,57 @@ const getRedisClient = (): Redis | null => {
   return redisClient;
 };
 
+const waitForRedisReady = async (
+  redis: Redis,
+  timeoutMs = 1_000,
+): Promise<void> => {
+  if (redis.status === 'ready') {
+    return;
+  }
+
+  if (redis.status === 'wait' || redis.status === 'end') {
+    await redis.connect();
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(
+        new Error(
+          `Redis client did not become ready within ${timeoutMs}ms; status=${redis.status}`,
+        ),
+      );
+    }, timeoutMs);
+
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      redis.off('ready', onReady);
+      redis.off('error', onError);
+      redis.off('end', onEnd);
+    };
+
+    const onReady = (): void => {
+      cleanup();
+      resolve();
+    };
+
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+
+    const onEnd = (): void => {
+      cleanup();
+      reject(new Error('Redis connection ended before becoming ready.'));
+    };
+
+    redis.once('ready', onReady);
+    redis.once('error', onError);
+    redis.once('end', onEnd);
+  });
+};
+
 const checkRedis = async (): Promise<boolean> => {
   if (!redisRequired()) {
     return true;
@@ -67,8 +118,12 @@ const checkRedis = async (): Promise<boolean> => {
   }
 
   try {
+    await waitForRedisReady(redis);
     return (await redis.ping()) === 'PONG';
   } catch (error) {
+    if (redis.status === 'end') {
+      redisClient = undefined;
+    }
     strapi.log.error('Healthcheck Redis probe failed.', error);
     return false;
   }
