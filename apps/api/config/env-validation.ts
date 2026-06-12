@@ -67,6 +67,7 @@ const productionEnvSchema = z.object({
   AICO_SOCIAL_PUBLISH_REQUIRED: z.string().optional(),
   AICO_STRATEGY_AUTOPILOT_ENABLED: z.string().optional(),
   AICO_STRATEGY_AUTO_APPROVE_PLAN: z.string().optional(),
+  AICO_INSIGHTS_ENABLED: z.string().optional(),
   AICO_FACEBOOK_PAGE_ID: z.string().optional(),
   AICO_FACEBOOK_ACCESS_TOKEN: z.string().optional(),
   AICO_INSTAGRAM_USER_ID: z.string().optional(),
@@ -477,8 +478,18 @@ const validateAico = (issues: Issue[], env: NodeJS.ProcessEnv): void => {
     requireSecret(issues, env, 'AICO_AUDIT_IP_HASH_SALT');
     requireFalse(issues, env, 'AICO_RUNTIME_LOCKS_DISABLED');
     requireFalse(issues, env, 'AICO_SOCIAL_CONTENT_SAFETY_DISABLED');
-    requireNotValue(issues, env, 'AICO_ADS_PROVIDER_MODE', 'live');
     requireNotValue(issues, env, 'AICO_VIDEO_PROVIDER_MODE', 'live');
+
+    if (
+      env.AICO_ADS_PROVIDER_MODE?.trim().toLowerCase() === 'live' &&
+      !isEnabled(env.AICO_CONTROLLED_LIVE_ENABLED, false)
+    ) {
+      issues.push({
+        key: 'AICO_ADS_PROVIDER_MODE',
+        message:
+          'AICO_ADS_PROVIDER_MODE=live requires AICO_CONTROLLED_LIVE_ENABLED=true and a recorded controlled ads smoke.',
+      });
+    }
   }
 
   if (isEnabled(env.AICO_STRICT_AUDIT_REQUIRED, false)) {
@@ -495,7 +506,7 @@ const validateAico = (issues: Issue[], env: NodeJS.ProcessEnv): void => {
     );
   }
 
-  if (env.AICO_ADS_PROVIDER_MODE?.trim().toLowerCase() === 'controlled') {
+  if (['controlled', 'live'].includes(env.AICO_ADS_PROVIDER_MODE?.trim().toLowerCase() ?? '')) {
     requireSecret(issues, env, 'AICO_META_ADS_ACCESS_TOKEN');
     requireValue(issues, env, 'AICO_META_AD_ACCOUNT_ID');
     requireSecret(issues, env, 'AICO_GOOGLE_ADS_DEVELOPER_TOKEN');
@@ -541,7 +552,16 @@ const validateAico = (issues: Issue[], env: NodeJS.ProcessEnv): void => {
     'AICO_ADMIN_RUN_NOW_ENABLED',
   ].forEach((key) => requireTrue(issues, env, key));
 
-  requireExactValue(issues, env, 'AICO_ADS_PROVIDER_MODE', 'controlled');
+  requireNotValue(issues, env, 'AICO_INSIGHTS_ENABLED', 'false');
+
+  const fullAutonomyAdsMode = env.AICO_ADS_PROVIDER_MODE?.trim().toLowerCase();
+  if (fullAutonomyAdsMode !== 'controlled' && fullAutonomyAdsMode !== 'live') {
+    issues.push({
+      key: 'AICO_ADS_PROVIDER_MODE',
+      message:
+        "AICO_ADS_PROVIDER_MODE must be 'controlled' or 'live' (live only after a recorded controlled smoke).",
+    });
+  }
   requireExactValue(issues, env, 'AICO_VIDEO_PROVIDER_MODE', 'replicate');
   requireValue(issues, env, 'GA4_PROPERTY_ID');
   requireAnyValue(

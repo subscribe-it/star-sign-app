@@ -1,6 +1,28 @@
 # Raport audytu: Star Sign — production-ready + pełna automatyzacja
 Data: 2026-06-12 · Werdykt: **NO-GO LIVE** (do czasu usunięcia blokerów P0)
 
+## AKTUALIZACJA 2026-06-12 (po remediacji)
+
+Wykonane tego samego dnia (commity `4a6648f`, `a7cc052`, `7d179d9`):
+
+- ✅ **P0-1 zamknięty**: wszystkie ~8,5k linii zmian RC zacommitowane na main (predeploy local PASS przed commitem).
+- ✅ **CSP**: pełne dyrektywy script/style/img/connect/frame z allowlistami GA4/Stripe/Turnstile/Sentry/CDN (frontend, Traefik).
+- ✅ **Redis dev**: maxmemory 128mb + allkeys-lru (prod stack już miał).
+- ✅ **Backupy + uptime**: jednostki systemd (`ops/systemd/`) — backup 02:30 UTC + verify, uptime-watch co 5 min; README z instalacją. Wymaga włączenia na hoście.
+- ✅ **Gitleaks**: krytyczna poprawka — config nie miał `[extend] useDefault`, więc skan nie miał ŻADNYCH reguł; dodane reguły default + OpenRouter/Brevo/Replicate; pełny skan repo czysty.
+- ✅ **.nvmrc**: Node 20 (zgodnie z CI/Dockerfile).
+- ✅ **RODO — usunięcie konta**: `DELETE /account` (profil, odczyty, newsletter, anonimizacja analytics, user; potwierdzenie "USUWAM KONTO"); 3 testy.
+- ✅ **RODO — baner cookies**: CookieConsentService + odświeżony CookieBanner; GA4 ładuje się wyłącznie po zgodzie, cofnięcie ustawia `ga-disable-*`; „Zarządzaj zgodami" w stopce; migracja starej decyzji.
+- ✅ **JSON-LD**: Organization+WebSite na home (artykuły/horoskopy/znaki/produkty już miały — wniosek audytu skorygowany).
+- ✅ **E2E w CI**: nowy job `e2e` (mock API, chromium, artefakt raportu przy porażce).
+
+### Pozostałe blokery (wymagają działań właściciela/operatora — poza repo):
+1. Sekrety produkcyjne: 20 braków w `.env.production` (AICO/GA4/social/Stripe) + rotacja klucza OpenRouter.
+2. Decyzja JWT (localStorage vs cookies) i wybór error-trackingu (Sentry/Bugsink).
+3. Instalacja timerów systemd na hoście + webhook alertów.
+4. Live adaptery Meta/Google Ads (kod) — wymagane tylko do realnych wydatków reklamowych.
+5. Deploy → post-seed preflight na targecie → production-readiness GO → włączenie autonomii.
+
 ## 1. Werdykt ogólny
 
 Architektura jest solidna i w dużej mierze gotowa: AICO jest **production-ready w trybie controlled** (fail-closed, kill switch, audit trail, bramka GO/NO_GO), CI/CD i skrypty ops są kompletne, testy zielone lokalnie (RC 2026-06-11). Blokują: brudne repo, brak sekretów produkcyjnych, brak live-adapterów reklam oraz luki RODO (brak banera cookies).

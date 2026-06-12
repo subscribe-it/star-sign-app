@@ -545,6 +545,39 @@ const createStripeCustomerPortalSession = async (input: {
   return portalUrl;
 };
 
+const cancelStripeSubscription = async (input: {
+  secretKey: string;
+  subscriptionId: string;
+}): Promise<void> => {
+  const response = await fetch(
+    `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(
+      input.subscriptionId,
+    )}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${input.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    },
+  );
+
+  const payload = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+
+  // Stripe zwraca 404 dla subskrypcji już anulowanej/nieistniejącej — to bezpieczne,
+  // bo billing i tak jest zatrzymany. Każdy inny błąd traktujemy jako twardy.
+  if (!response.ok && response.status !== 404) {
+    throw new Error(
+      `Nie udało się anulować subskrypcji Stripe. Kod: ${response.status}`,
+    );
+  }
+
+  void payload;
+};
+
 const saveReadingForType = async (input: {
   userId: number;
   readingType: ReadingType;
@@ -884,37 +917,72 @@ export default {
     const userId = user.id;
     const email = typeof user.email === 'string' ? user.email : null;
 
+    // Najpierw odczytaj profil, aby poznać identyfikatory Stripe ZANIM go usuniemy.
+    const profile = await strapi.db
+      .query('api::user-profile.user-profile')
+      .findOne({ where: { user: userId } });
+
+    const subscriptionId = toNullableString(profile?.stripe_subscription_id);
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+
+    // KROK 1 (zewnętrzny, nieodwracalny): anuluj aktywną subskrypcję Stripe,
+    // żeby po usunięciu konta nie było dalszych obciążeń. Fail closed: jeśli
+    // anulowanie się nie powiedzie, NIE usuwamy danych lokalnych.
+    if (subscriptionId && stripeSecretKey) {
+      try {
+        await cancelStripeSubscription({
+          secretKey: stripeSecretKey,
+          subscriptionId,
+        });
+      } catch (error) {
+        strapi.log.error(
+          `Nie udało się anulować subskrypcji Stripe przy usuwaniu konta ${userId}.`,
+          error,
+        );
+        ctx.status = 502;
+        ctx.body = {
+          error:
+            'Nie udało się anulować subskrypcji w Stripe. Konto nie zostało usunięte. Spróbuj ponownie później.',
+        };
+        return;
+      }
+    }
+
+    // KROK 2 (lokalny, transakcyjny): usunięcie danych w jednej transakcji,
+    // aby częściowy błąd nie zostawił niespójnego stanu.
     try {
-      await strapi.db
-        .query('api::user-reading.user-reading')
-        .deleteMany({ where: { user: userId } });
-
-      await strapi.db
-        .query('api::user-profile.user-profile')
-        .deleteMany({ where: { user: userId } });
-
-      // Zdarzenia analityczne zostają (statystyki), ale bez powiązania z osobą.
-      const analyticsEvents = await strapi.db
-        .query('api::analytics-event.analytics-event')
-        .findMany({ where: { user: userId }, select: ['id'] });
-      for (const event of analyticsEvents) {
+      await strapi.db.transaction(async () => {
         await strapi.db
+          .query('api::user-reading.user-reading')
+          .deleteMany({ where: { user: userId } });
+
+        await strapi.db
+          .query('api::user-profile.user-profile')
+          .deleteMany({ where: { user: userId } });
+
+        // Zdarzenia analityczne zostają (statystyki), ale bez powiązania z osobą.
+        const analyticsEvents = await strapi.db
           .query('api::analytics-event.analytics-event')
-          .update({ where: { id: event.id }, data: { user: null } });
-      }
+          .findMany({ where: { user: userId }, select: ['id'] });
+        for (const event of analyticsEvents) {
+          await strapi.db
+            .query('api::analytics-event.analytics-event')
+            .update({ where: { id: event.id }, data: { user: null } });
+        }
 
-      if (email) {
+        if (email) {
+          await strapi.db
+            .query('api::newsletter-subscription.newsletter-subscription')
+            .deleteMany({ where: { email } });
+        }
+
+        // Zamówienia pozostają bez zmian — obowiązek przechowywania dokumentów
+        // rozliczeniowych (podstawa prawna niezależna od zgody użytkownika).
+
         await strapi.db
-          .query('api::newsletter-subscription.newsletter-subscription')
-          .deleteMany({ where: { email } });
-      }
-
-      // Zamówienia pozostają bez zmian — obowiązek przechowywania dokumentów
-      // rozliczeniowych (podstawa prawna niezależna od zgody użytkownika).
-
-      await strapi.db
-        .query('plugin::users-permissions.user')
-        .delete({ where: { id: userId } });
+          .query('plugin::users-permissions.user')
+          .delete({ where: { id: userId } });
+      });
 
       strapi.log.info(`Konto użytkownika ${userId} usunięte na żądanie (RODO).`);
       ctx.body = { deleted: true };

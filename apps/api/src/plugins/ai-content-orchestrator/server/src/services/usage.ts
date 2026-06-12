@@ -29,7 +29,8 @@ const usage = ({ strapi }: { strapi: Strapi }) => {
         data: {
           day,
           unique_key: key,
-          workflow: workflowId,
+          // workflowId <= 0 oznacza zużycie "systemowe" (np. insights) bez relacji do workflowu.
+          ...(workflowId > 0 ? { workflow: workflowId } : {}),
           status: 'ok',
           request_count: 0,
           prompt_tokens: 0,

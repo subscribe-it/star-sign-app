@@ -28,7 +28,9 @@ describe('release env helpers', () => {
       });
 
       expect(getAppDir()).toMatch(/apps\/api$/);
-      expect(getWorkspaceDir()).toMatch(/star-sign$/);
+      // Workspace dir is the parent of apps/api — assert that invariant
+      // rather than a hardcoded directory name (CI checks out to star-sign-app).
+      expect(getAppDir()).toBe(join(getWorkspaceDir(), 'apps/api'));
       expect(isAbsolute(getAppDir())).toBe(true);
       expect(isAbsolute(getWorkspaceDir())).toBe(true);
       expect(candidates[0]).toBe(join(getWorkspaceDir(), 'ops/.env.production'));

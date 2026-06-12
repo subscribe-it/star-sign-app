@@ -248,15 +248,34 @@ const productionReadiness = ({ strapi }: { strapi: Strapi }) => ({
 
     const adsMode = String(process.env.AICO_ADS_PROVIDER_MODE ?? 'disabled');
     const videoMode = String(process.env.AICO_VIDEO_PROVIDER_MODE ?? 'disabled');
+    const adsProviderKeys: ProviderKey[] = ['meta_ads', 'google_ads'];
+    const adsProvidersNotReady = providerMatrix.filter(
+      (provider) => adsProviderKeys.includes(provider.provider) && !provider.ready
+    );
+    const liveAdsSmokeReady = adsProvidersNotReady.length === 0;
     addCheck(
       checks,
-      adsMode === 'controlled' ? 'pass' : 'fail',
+      adsMode === 'controlled' ? 'pass' : adsMode === 'live' && liveAdsSmokeReady ? 'pass' : 'fail',
       'live.ads-adapter',
       'controlled-live',
       adsMode === 'controlled'
         ? 'Ads provider mode=controlled ma zaimplementowany preflight bez live spendu.'
-        : `Ads provider mode=${adsMode}; pelny PROD GO wymaga kontrolowanego ads preflight bez live spendu.`,
-      { mode: adsMode, liveEffectsAllowed: false, liveSpendEnabled: false }
+        : adsMode === 'live' && liveAdsSmokeReady
+          ? 'Ads provider mode=live jest dopuszczony: meta_ads i google_ads maja swiezy status ready po controlled smoke.'
+          : adsMode === 'live'
+            ? 'Ads provider mode=live wymaga swiezego statusu ready dla meta_ads i google_ads (controlled smoke przed przelaczeniem na live).'
+            : `Ads provider mode=${adsMode}; pelny PROD GO wymaga kontrolowanego ads preflight bez live spendu.`,
+      {
+        mode: adsMode,
+        liveEffectsAllowed: false,
+        liveSpendEnabled: false,
+        liveAdsSmokeReady,
+        adsProvidersNotReady: adsProvidersNotReady.map((provider) => ({
+          provider: provider.provider,
+          status: provider.status,
+          blockedReason: provider.blockedReason,
+        })),
+      }
     );
     addCheck(
       checks,

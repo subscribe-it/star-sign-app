@@ -384,6 +384,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           return;
         }
         await this.processStrategyAutomationTick(now);
+        await this.processInsightsTick(now);
         await this.processGenerationTick(now);
         await this.processPublicationTick(now);
         if (await this.isAutoPublishGloballyEnabled()) {
@@ -481,6 +482,19 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
         }
       } catch (error) {
         strapi.log.warn(`[AICO] Strategy autopilot failed: ${toSafeErrorMessage(error)}`);
+      }
+    },
+
+    async processInsightsTick(now: Date): Promise<void> {
+      try {
+        const insights = getPluginService<
+          { runDailyTick?: (input: { now: Date }) => Promise<unknown> } | undefined
+        >(strapi, 'insights-engine');
+        if (insights && typeof insights.runDailyTick === 'function') {
+          await insights.runDailyTick({ now });
+        }
+      } catch (error) {
+        strapi.log.warn(`[AICO] Insights tick failed: ${toSafeErrorMessage(error)}`);
       }
     },
 

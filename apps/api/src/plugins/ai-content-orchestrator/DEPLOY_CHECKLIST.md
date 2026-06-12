@@ -7,6 +7,7 @@
 - `AICO_FULL_AUTONOMY_REQUIRED=true` is set before validating the full production profile.
 - `AICO_STRICT_AUDIT_REQUIRED=true` and `AICO_AUDIT_TRAIL_STRICT=true` are set.
 - `AICO_ADS_PROVIDER_MODE=controlled`, `AICO_VIDEO_PROVIDER_MODE=replicate`, `AICO_CONTROLLED_LIVE_ENABLED=true`.
+  `AICO_ADS_PROVIDER_MODE=live` is allowed only after completing the "Live ads enablement" steps below.
 - `AICO_ADMIN_RUN_NOW_ENABLED=true` only after the operator accepts the controlled live run-now boundary.
 - Social credentials are complete for every enabled workflow:
   - Facebook: `fb_page_id` + page token
@@ -42,6 +43,25 @@
   - `RUN_SECURITY_HEADERS=true`
 - `api:aico-post-seed-preflight` returns `passed`.
 - `production-readiness` returns `GO`. `GO_WITH_WARNINGS` is not sufficient for full autonomy.
+
+## Live ads enablement (Meta Ads + Google Ads)
+
+Switch `AICO_ADS_PROVIDER_MODE` from `controlled` to `live` only in this order:
+
+1. Run the full controlled profile first (`AICO_ADS_PROVIDER_MODE=controlled`, `AICO_CONTROLLED_LIVE_ENABLED=true`) and confirm `production-readiness` returns `GO`.
+2. Verify complete live credentials: `AICO_META_ADS_ACCESS_TOKEN`, `AICO_META_AD_ACCOUNT_ID`, `AICO_GOOGLE_ADS_DEVELOPER_TOKEN`, `AICO_GOOGLE_ADS_CLIENT_ID`, `AICO_GOOGLE_ADS_CLIENT_SECRET`, `AICO_GOOGLE_ADS_REFRESH_TOKEN`, `AICO_GOOGLE_ADS_CUSTOMER_ID`. When operating through a Google Ads MCC (manager) account, also set `AICO_GOOGLE_ADS_LOGIN_CUSTOMER_ID` (sent as the `login-customer-id` header).
+   - **Provider API versions**: confirm `AICO_META_GRAPH_API_VERSION` (default `v21.0`) and `AICO_GOOGLE_ADS_API_VERSION` (default `v18`) point at versions that are still supported. These MUST be reviewed against the Meta Graph/Marketing API and Google Ads API deprecation schedules before each release; bump them via env (no code change required) when a version is sunset/archived.
+3. Set `AICO_ADS_PROVIDER_MODE=live` and run `POST /ai-content-orchestrator/providers/test-readiness` with connectivity for `meta_ads` and `google_ads`. The probe is read-only (`act_<id>?fields=account_status`, `customers:listAccessibleCustomers`) and must record fresh `ready` statuses; without them `production-readiness` keeps live mode a blocker.
+4. Confirm autonomy policy caps: global daily ads budget <= 25 PLN, Meta <= 15 PLN, Google <= 10 PLN. The live adapter additionally clamps every provider daily budget to these caps.
+5. Activation safety invariants (verify in audit trail after the first live activation):
+   - Campaign, ad set/ad group and ad are created with `PAUSED` status; spend can start only after an explicit second activation step un-pauses the campaign.
+   - Every provider mutation produces an `ads.provider.*` audit event with the provider campaign id.
+   - Budget ledger reservation precedes any provider call; reservation failure blocks the mutation.
+   - Re-activating an already-active plan is a no-op (no provider call, no extra ledger reservation).
+6. Verify stop-loss controls:
+   - `POST /ai-content-orchestrator/ads/campaign-plans/stop-loss` pauses live campaigns at the provider.
+   - Spend reconciliation (`reconcileLiveSpend`) reads Meta insights / Google `searchStream` `cost_micros` and pauses plans whose spend reached the daily budget.
+7. Rollback: set `AICO_ADS_PROVIDER_MODE=controlled` (or flip the global kill switch) and run the stop-loss sweep to pause all live campaigns.
 
 ## Operational readiness
 

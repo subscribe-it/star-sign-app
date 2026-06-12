@@ -4,6 +4,15 @@ import { getPluginService } from '../utils/plugin';
 
 type ProviderProbeStatus = 'ready' | 'missing_credentials' | 'blocked' | 'failed';
 
+const normalizeApiVersion = (value: unknown, fallback: string): string => {
+  const trimmed = String(value ?? '').trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+};
+
+// API versions must be reviewed against provider deprecation schedules.
+const META_API_VERSION = normalizeApiVersion(process.env.AICO_META_GRAPH_API_VERSION, 'v21.0');
+const GOOGLE_ADS_API_VERSION = normalizeApiVersion(process.env.AICO_GOOGLE_ADS_API_VERSION, 'v18');
+
 type ProviderStatusService = {
   upsert: (input: {
     provider: ProviderKey;
@@ -186,6 +195,89 @@ const runConnectivityProbe = async (
   return { ok: false, reason: `provider_probe_http_${response.status}` };
 };
 
+const fetchProbeJson = async (
+  url: string,
+  init: RequestInit
+): Promise<{ status: number; payload: Record<string, unknown> }> => {
+  const response = await fetch(url, init);
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = (await response.json()) as Record<string, unknown>;
+  } catch {
+    payload = {};
+  }
+  return { status: response.status, payload };
+};
+
+// Read-only credential probes for live ads providers. No mutations are performed.
+const runLiveAdsCredentialProbe = async (
+  provider: ProviderKey
+): Promise<{ ok: boolean; reason?: string; metadata?: Record<string, unknown> }> => {
+  if (provider === 'meta_ads') {
+    const accountIdRaw = String(process.env.AICO_META_AD_ACCOUNT_ID ?? '').trim();
+    const accountId = accountIdRaw.startsWith('act_') ? accountIdRaw.slice(4) : accountIdRaw;
+    const { status, payload } = await fetchProbeJson(
+      `https://graph.facebook.com/${META_API_VERSION}/act_${accountId}?fields=account_status`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${String(process.env.AICO_META_ADS_ACCESS_TOKEN ?? '').trim()}`,
+          Accept: 'application/json',
+        },
+      }
+    );
+
+    if (status === 401 || status === 403) {
+      return { ok: false, reason: 'provider_auth_failed' };
+    }
+    if (status < 200 || status >= 300) {
+      return { ok: false, reason: `provider_probe_http_${status}` };
+    }
+
+    return { ok: true, metadata: { accountStatus: payload.account_status ?? null, readOnlyProbe: true } };
+  }
+
+  const tokenResponse = await fetchProbeJson('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: String(process.env.AICO_GOOGLE_ADS_CLIENT_ID ?? '').trim(),
+      client_secret: String(process.env.AICO_GOOGLE_ADS_CLIENT_SECRET ?? '').trim(),
+      refresh_token: String(process.env.AICO_GOOGLE_ADS_REFRESH_TOKEN ?? '').trim(),
+      grant_type: 'refresh_token',
+    }).toString(),
+  });
+  const accessToken = String(tokenResponse.payload.access_token ?? '');
+  if (!accessToken) {
+    return { ok: false, reason: 'provider_auth_failed' };
+  }
+
+  const { status, payload } = await fetchProbeJson(
+    `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers:listAccessibleCustomers`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'developer-token': String(process.env.AICO_GOOGLE_ADS_DEVELOPER_TOKEN ?? '').trim(),
+        Accept: 'application/json',
+      },
+    }
+  );
+
+  if (status === 401 || status === 403) {
+    return { ok: false, reason: 'provider_auth_failed' };
+  }
+  if (status < 200 || status >= 300) {
+    return { ok: false, reason: `provider_probe_http_${status}` };
+  }
+
+  const resourceNames = Array.isArray(payload.resourceNames) ? payload.resourceNames : [];
+  return {
+    ok: true,
+    metadata: { accessibleCustomers: resourceNames.length, readOnlyProbe: true },
+  };
+};
+
 const getControlledAdsProbeResult = (
   provider: ProviderKey,
   spec: ProviderSpec,
@@ -243,7 +335,37 @@ const providerProbe = ({ strapi }: { strapi: Strapi }) => ({
     };
     result = getControlledAdsProbeResult(provider, spec, hasCredentials) ?? result;
 
-    if (hasCredentials && input.includeConnectivity && spec.connectivity && token) {
+    const liveAdsProbeApplicable =
+      CONTROLLED_ADS_PROVIDERS.has(provider) &&
+      hasCredentials &&
+      Boolean(input.includeConnectivity) &&
+      normalizeEnvMode(process.env.AICO_ADS_PROVIDER_MODE ?? 'disabled') === 'live';
+
+    if (liveAdsProbeApplicable) {
+      try {
+        const liveProbe = await runLiveAdsCredentialProbe(provider);
+        result = {
+          ...result,
+          status: liveProbe.ok ? 'ready' : 'failed',
+          blockedReason: liveProbe.ok ? undefined : liveProbe.reason,
+          connectivity: liveProbe.ok ? 'passed' : 'failed',
+          metadata: {
+            ...(result.metadata ?? {}),
+            providerMode: 'live',
+            liveEffects: false,
+            mutations: false,
+            ...(liveProbe.metadata ?? {}),
+          },
+        };
+      } catch {
+        result = {
+          ...result,
+          status: 'failed',
+          blockedReason: 'provider_probe_failed',
+          connectivity: 'failed',
+        };
+      }
+    } else if (hasCredentials && input.includeConnectivity && spec.connectivity && token) {
       try {
         const connectivity = await runConnectivityProbe(spec, token);
         result = {

@@ -264,9 +264,24 @@ describe('account subscription checkout settings gate', () => {
 });
 
 describe('account deletion (RODO)', () => {
-  const createDeleteStrapiMock = () => {
-    const userReadingQuery = { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) };
-    const userProfileQuery = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) };
+  const createDeleteStrapiMock = (
+    profile: Record<string, unknown> | null = {
+      id: 7,
+      stripe_customer_id: 'cus_123',
+      stripe_subscription_id: 'sub_123',
+    },
+  ) => {
+    const callOrder: string[] = [];
+    const userReadingQuery = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 2 }),
+    };
+    const userProfileQuery = {
+      findOne: vi.fn().mockResolvedValue(profile),
+      deleteMany: vi.fn().mockImplementation(async () => {
+        callOrder.push('profileDelete');
+        return { count: 1 };
+      }),
+    };
     const analyticsEventQuery = {
       findMany: vi.fn().mockResolvedValue([{ id: 11 }, { id: 12 }]),
       update: vi.fn().mockResolvedValue({}),
@@ -274,8 +289,11 @@ describe('account deletion (RODO)', () => {
     const newsletterQuery = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) };
     const userQuery = { delete: vi.fn().mockResolvedValue({}) };
 
+    const transaction = vi.fn(async (cb: () => Promise<void>) => cb());
+
     const strapiMock = {
       db: {
+        transaction,
         query: vi.fn((uid: string) => {
           if (uid === 'api::user-reading.user-reading') return userReadingQuery;
           if (uid === 'api::user-profile.user-profile') return userProfileQuery;
@@ -293,6 +311,8 @@ describe('account deletion (RODO)', () => {
     vi.stubGlobal('strapi', strapiMock);
 
     return {
+      transaction,
+      callOrder,
       userReadingQuery,
       userProfileQuery,
       analyticsEventQuery,
@@ -322,6 +342,13 @@ describe('account deletion (RODO)', () => {
 
   it('deletes profile, readings, newsletter and user, anonymizes analytics', async () => {
     const mocks = createDeleteStrapiMock();
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_delete');
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'sub_123', status: 'canceled' }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
     const ctx = createCtx({ confirmation: 'USUWAM KONTO' });
 
     await accountController.deleteAccount(ctx);
@@ -339,6 +366,81 @@ describe('account deletion (RODO)', () => {
     expect(mocks.userQuery.delete).toHaveBeenCalledWith({
       where: { id: 123 },
     });
+    expect(ctx.body).toEqual({ deleted: true });
+  });
+
+  it('cancels the Stripe subscription before deleting the profile', async () => {
+    const mocks = createDeleteStrapiMock();
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_delete');
+    const fetchMock = vi.fn(async () => {
+      mocks.callOrder.push('stripeCancel');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'sub_123', status: 'canceled' }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const ctx = createCtx({ confirmation: 'USUWAM KONTO' });
+
+    await accountController.deleteAccount(ctx);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.stripe.com/v1/subscriptions/sub_123',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer sk_test_delete',
+        }),
+      }),
+    );
+    expect(mocks.callOrder).toEqual(['stripeCancel', 'profileDelete']);
+  });
+
+  it('wraps the local deletions in a single transaction', async () => {
+    const mocks = createDeleteStrapiMock(null);
+    const ctx = createCtx({ confirmation: 'USUWAM KONTO' });
+
+    await accountController.deleteAccount(ctx);
+
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(ctx.body).toEqual({ deleted: true });
+  });
+
+  it('aborts with 502 and keeps local data when Stripe cancel fails', async () => {
+    const mocks = createDeleteStrapiMock();
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_delete');
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: { message: 'boom' } }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const ctx = createCtx({ confirmation: 'USUWAM KONTO' });
+
+    await accountController.deleteAccount(ctx);
+
+    expect(ctx.status).toBe(502);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.userProfileQuery.deleteMany).not.toHaveBeenCalled();
+    expect(mocks.userQuery.delete).not.toHaveBeenCalled();
+  });
+
+  it('deletes without calling Stripe when there is no subscription', async () => {
+    const mocks = createDeleteStrapiMock({
+      id: 7,
+      stripe_customer_id: 'cus_123',
+      stripe_subscription_id: null,
+    });
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_delete');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const ctx = createCtx({ confirmation: 'USUWAM KONTO' });
+
+    await accountController.deleteAccount(ctx);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.userQuery.delete).toHaveBeenCalledWith({ where: { id: 123 } });
     expect(ctx.body).toEqual({ deleted: true });
   });
 });
