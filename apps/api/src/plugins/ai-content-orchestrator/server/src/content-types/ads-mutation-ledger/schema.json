@@ -1,0 +1,47 @@
+{
+  "kind": "collectionType",
+  "collectionName": "aico_ads_mutation_ledgers",
+  "info": {
+    "singularName": "ads-mutation-ledger",
+    "pluralName": "ads-mutation-ledgers",
+    "displayName": "AICO Ads Mutation Ledger"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": false }
+  },
+  "attributes": {
+    "unique_key": { "type": "string", "required": true, "unique": true },
+    "day": { "type": "date", "required": true },
+    "platform": {
+      "type": "enumeration",
+      "enum": ["meta", "google"],
+      "required": true
+    },
+    "operation": {
+      "type": "enumeration",
+      "enum": ["activate", "pause", "release"],
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["reserved", "applied", "released", "blocked", "failed"],
+      "default": "reserved",
+      "required": true
+    },
+    "amount_pln": { "type": "decimal", "default": 0 },
+    "provider_mode": { "type": "string" },
+    "provider_decision": { "type": "string" },
+    "provider_campaign_id": { "type": "string" },
+    "blocked_reason": { "type": "string" },
+    "metadata": { "type": "json" },
+    "ad_campaign_plan": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.ad-campaign-plan"
+    }
+  }
+}

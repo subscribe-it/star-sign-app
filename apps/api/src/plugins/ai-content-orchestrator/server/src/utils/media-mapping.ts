@@ -5,7 +5,12 @@ type MediaPurpose =
   | 'daily_card'
   | 'blog_article'
   | 'zodiac_profile'
-  | 'fallback_general';
+  | 'fallback_general'
+  | 'short_video_frame'
+  | 'social_story'
+  | 'ad_creative'
+  | 'youtube_short'
+  | 'tiktok_video';
 type MediaPeriodScope = 'any' | 'daily' | 'weekly' | 'monthly';
 
 type MediaMappingSuggestion = {
@@ -123,6 +128,39 @@ const detectPeriodScope = (tokens: string[]): MediaPeriodScope => {
 
 const detectPurpose = (tokens: string[], signSlug: string | null): MediaPurpose => {
   if (
+    tokens.includes('ad') ||
+    tokens.includes('ads') ||
+    tokens.includes('reklama') ||
+    tokens.includes('creative')
+  ) {
+    return 'ad_creative';
+  }
+
+  if (
+    tokens.includes('story') ||
+    tokens.includes('stories') ||
+    tokens.includes('relacja') ||
+    tokens.includes('social')
+  ) {
+    return 'social_story';
+  }
+
+  if (
+    tokens.includes('short') ||
+    tokens.includes('shorts') ||
+    tokens.includes('video') ||
+    tokens.includes('wideo')
+  ) {
+    if (tokens.includes('youtube')) {
+      return 'youtube_short';
+    }
+    if (tokens.includes('tiktok')) {
+      return 'tiktok_video';
+    }
+    return 'short_video_frame';
+  }
+
+  if (
     tokens.includes('blog') ||
     tokens.includes('article') ||
     tokens.includes('artykul') ||
@@ -218,6 +256,26 @@ const deriveAssetKey = (input: {
 
   if (purpose === 'daily_card') {
     return useHintOrNext('daily-card');
+  }
+
+  if (purpose === 'short_video_frame') {
+    return useHintOrNext('short-video-frame');
+  }
+
+  if (purpose === 'social_story') {
+    return useHintOrNext('social-story');
+  }
+
+  if (purpose === 'ad_creative') {
+    return useHintOrNext('ad-creative');
+  }
+
+  if (purpose === 'youtube_short') {
+    return useHintOrNext('youtube-short');
+  }
+
+  if (purpose === 'tiktok_video') {
+    return useHintOrNext('tiktok-video');
   }
 
   if (purpose === 'horoscope_sign' && signSlug) {

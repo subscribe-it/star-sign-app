@@ -5,10 +5,14 @@ import { api } from '../api';
 import { WorkflowSocialStep } from './homepage/WorkflowSocialStep';
 import type {
   AuditReport,
+  AdCampaignPlan,
+  AutonomyStatus,
   ContentPerformanceSnapshot,
   ContentPlanItem,
   DashboardSummary,
   DiagnosticsSummary,
+  GenerationJob,
+  GrowthExperiment,
   HomepageRecommendation,
   LlmTrace,
   MediaAsset,
@@ -22,6 +26,10 @@ import type {
   RunStep,
   SettingsPayload,
   PerformanceAggregateResult,
+  ProviderCredentialStatus,
+  ProviderProbeRunResult,
+  ProviderReadiness,
+  ProductionReadinessReport,
   StrategyApprovePlanResult,
   StrategyGeneratePlanResult,
   SocialConnectionResult,
@@ -29,6 +37,7 @@ import type {
   SocialPlatform,
   SocialTicket,
   Topic,
+  VideoAsset,
   Workflow,
 } from '../types';
 
@@ -43,11 +52,12 @@ type TabKey =
   | 'growth'
   | 'settings';
 type OpsState = 'ready' | 'needs_action' | 'blocked' | 'degraded';
+const RUN_NOW_CONFIRMATION = 'RUN_AICO_CONTROLLED_TICK';
 
 type WorkflowFormState = {
   name: string;
   enabled: boolean;
-  workflow_type: 'horoscope' | 'daily_card' | 'article';
+  workflow_type: Workflow['workflow_type'];
   generate_cron: string;
   publish_cron: string;
   timezone: string;
@@ -342,11 +352,18 @@ const initialHomepageForm = (): HomepageFormState => ({
 });
 
 const WORKFLOW_STEP_LABELS = ['Basics', 'Schedule', 'Content', 'Social', 'Controls'] as const;
+const ADS_STOP_LOSS_CONFIRMATION = 'PAUSE_ACTIVE_ADS';
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; color: string }> = {
   idle: { bg: '#f1f5f9', border: '#e2e8f0', color: '#64748b' },
   pending: { bg: '#f1f5f9', border: '#e2e8f0', color: '#64748b' },
   ready: { bg: '#f0fdf4', border: '#dcfce7', color: '#16a34a' },
+  GO: { bg: '#f0fdf4', border: '#dcfce7', color: '#16a34a' },
+  GO_WITH_WARNINGS: { bg: '#fffbeb', border: '#fde68a', color: '#b45309' },
+  NO_GO: { bg: '#fef2f2', border: '#fecaca', color: '#dc2626' },
+  pass: { bg: '#f0fdf4', border: '#dcfce7', color: '#16a34a' },
+  warn: { bg: '#fffbeb', border: '#fde68a', color: '#b45309' },
+  fail: { bg: '#fef2f2', border: '#fecaca', color: '#dc2626' },
   needs_action: { bg: '#fffbeb', border: '#fde68a', color: '#b45309' },
   blocked: { bg: '#fef2f2', border: '#fecaca', color: '#dc2626' },
   degraded: { bg: '#eff6ff', border: '#dbeafe', color: '#2563eb' },
@@ -979,6 +996,17 @@ const HomePage = () => {
   const [homepageRunResult, setHomepageRunResult] = useState<Record<string, unknown> | null>(null);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsSummary | null>(null);
   const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
+  const [autonomyStatus, setAutonomyStatus] = useState<AutonomyStatus | null>(null);
+  const [generationJobs, setGenerationJobs] = useState<GenerationJob[]>([]);
+  const [videoAssets, setVideoAssets] = useState<VideoAsset[]>([]);
+  const [adCampaignPlans, setAdCampaignPlans] = useState<AdCampaignPlan[]>([]);
+  const [growthExperiments, setGrowthExperiments] = useState<GrowthExperiment[]>([]);
+  const [providerStatuses, setProviderStatuses] = useState<ProviderCredentialStatus[]>([]);
+  const [providerProbeResult, setProviderProbeResult] = useState<ProviderProbeRunResult | null>(null);
+  const [productionReadiness, setProductionReadiness] =
+    useState<ProductionReadinessReport | null>(null);
+  const [runNowConfirmation, setRunNowConfirmation] = useState<string>('');
+  const [adsStopLossConfirmation, setAdsStopLossConfirmation] = useState<string>('');
   const [socialConnectionResult, setSocialConnectionResult] =
     useState<SocialConnectionResult | null>(null);
   const [socialDryRunResult, setSocialDryRunResult] = useState<SocialDryRunResult | null>(null);
@@ -1315,6 +1343,13 @@ const HomePage = () => {
         strategyPlanResult,
         performanceResult,
         homepageRecommendationsResult,
+        autonomyResult,
+        generationJobsResult,
+        videoAssetsResult,
+        adCampaignPlansResult,
+        growthExperimentsResult,
+        providerStatusesResult,
+        productionReadinessResult,
       ] = await Promise.all([
         runOptionalRequest(api.getDashboard(client)),
         runOptionalRequest(api.getDiagnostics(client)),
@@ -1329,6 +1364,13 @@ const HomePage = () => {
         runOptionalRequest(api.getStrategyPlan(client, { limit: 50 })),
         runOptionalRequest(api.getPerformance(client, { limit: 50 })),
         runOptionalRequest(api.getHomepageRecommendations(client, { limit: 20 })),
+        runOptionalRequest(api.getAutonomyStatus(client)),
+        runOptionalRequest(api.getGenerationJobs(client, { limit: 50 })),
+        runOptionalRequest(api.getVideoAssets(client, { limit: 50 })),
+        runOptionalRequest(api.getAdCampaignPlans(client, { limit: 50 })),
+        runOptionalRequest(api.getGrowthExperiments(client, { limit: 50 })),
+        runOptionalRequest(api.getProviderStatus(client, { limit: 100 })),
+        runOptionalRequest(api.getProductionReadiness(client)),
       ]);
 
       const coreErrors: string[] = [];
@@ -1430,6 +1472,14 @@ const HomePage = () => {
       } else {
         setHomepageRecommendations([]);
       }
+
+      setAutonomyStatus(autonomyResult.ok ? autonomyResult.data : null);
+      setGenerationJobs(generationJobsResult.ok ? generationJobsResult.data : []);
+      setVideoAssets(videoAssetsResult.ok ? videoAssetsResult.data : []);
+      setAdCampaignPlans(adCampaignPlansResult.ok ? adCampaignPlansResult.data : []);
+      setGrowthExperiments(growthExperimentsResult.ok ? growthExperimentsResult.data : []);
+      setProviderStatuses(providerStatusesResult.ok ? providerStatusesResult.data : []);
+      setProductionReadiness(productionReadinessResult.ok ? productionReadinessResult.data : null);
 
       if (socialTicketsResult.ok) {
         setSocialTickets(socialTicketsResult.data);
@@ -1836,8 +1886,8 @@ const HomePage = () => {
         workflowId,
         channels: workflowForm.enabled_channels,
         caption: 'Test autopublikacji Star Sign',
-        mediaUrl: 'https://star-sign.app/assets/og-default.jpg',
-        targetUrl: 'https://star-sign.app',
+        mediaUrl: 'https://star-sign.pl/assets/og-default.png',
+        targetUrl: 'https://star-sign.pl',
       });
       setSocialDryRunResult(result);
       setSocialOpsState(toOpsStateFromSocialOverall(result.overall));
@@ -1914,18 +1964,132 @@ const HomePage = () => {
   };
 
   const refreshGrowthData = async (): Promise<void> => {
-    const [planResult, performanceResult, homepageResult] = await Promise.all([
+    const [
+      planResult,
+      performanceResult,
+      homepageResult,
+      autonomyResult,
+      generationJobsResult,
+      videoAssetsResult,
+      adCampaignPlansResult,
+      growthExperimentsResult,
+      providerStatusesResult,
+      productionReadinessResult,
+    ] = await Promise.all([
       runOptionalRequest(api.getStrategyPlan(client, { limit: 50 })),
       runOptionalRequest(api.getPerformance(client, { limit: 50 })),
       runOptionalRequest(api.getHomepageRecommendations(client, { limit: 20 })),
+      runOptionalRequest(api.getAutonomyStatus(client)),
+      runOptionalRequest(api.getGenerationJobs(client, { limit: 50 })),
+      runOptionalRequest(api.getVideoAssets(client, { limit: 50 })),
+      runOptionalRequest(api.getAdCampaignPlans(client, { limit: 50 })),
+      runOptionalRequest(api.getGrowthExperiments(client, { limit: 50 })),
+      runOptionalRequest(api.getProviderStatus(client, { limit: 100 })),
+      runOptionalRequest(api.getProductionReadiness(client)),
     ]);
 
     if (planResult.ok) setStrategyPlan(planResult.data);
     if (performanceResult.ok) setPerformanceSnapshots(performanceResult.data);
     if (homepageResult.ok) setHomepageRecommendations(homepageResult.data);
+    if (autonomyResult.ok) setAutonomyStatus(autonomyResult.data);
+    if (generationJobsResult.ok) setGenerationJobs(generationJobsResult.data);
+    if (videoAssetsResult.ok) setVideoAssets(videoAssetsResult.data);
+    if (adCampaignPlansResult.ok) setAdCampaignPlans(adCampaignPlansResult.data);
+    if (growthExperimentsResult.ok) setGrowthExperiments(growthExperimentsResult.data);
+    if (providerStatusesResult.ok) setProviderStatuses(providerStatusesResult.data);
+    if (productionReadinessResult.ok) setProductionReadiness(productionReadinessResult.data);
 
-    if (!planResult.ok || !performanceResult.ok || !homepageResult.ok) {
+    if (
+      !planResult.ok ||
+      !performanceResult.ok ||
+      !homepageResult.ok ||
+      !autonomyResult.ok ||
+      !generationJobsResult.ok ||
+      !videoAssetsResult.ok ||
+      !adCampaignPlansResult.ok ||
+      !growthExperimentsResult.ok ||
+      !providerStatusesResult.ok ||
+      !productionReadinessResult.ok
+    ) {
       showError('Część danych Growth Ops nie załadowała się. Sprawdź uprawnienia i backend.');
+    }
+  };
+
+  const runProviderReadinessProbe = async (): Promise<void> => {
+    setSaving(true);
+    try {
+      const result = await api.testProviderReadiness(client, { includeConnectivity: false });
+      setProviderProbeResult(result);
+      await refreshGrowthData();
+      showSuccess(`Provider preflight zapisał ${result.results.length} statusów readiness.`);
+    } catch (error) {
+      showError(`Provider preflight nie powiódł się: ${String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runControlledAutonomyTick = async (): Promise<void> => {
+    if (productionReadiness?.decision !== 'GO') {
+      showError('Production readiness musi mieć decyzję GO.');
+      return;
+    }
+
+    if (runNowConfirmation.trim() !== RUN_NOW_CONFIRMATION) {
+      showError('Potwierdzenie run-now jest niepoprawne.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await api.runAutonomyTickNow(client, {
+        live: true,
+        mode: 'controlled_live',
+        confirmation: RUN_NOW_CONFIRMATION,
+      });
+      setRunNowConfirmation('');
+      await refreshGrowthData();
+      showSuccess(`Controlled run-now zakończony: ${String(result.runNowMode ?? 'done')}.`);
+    } catch (error) {
+      showError(`Controlled run-now nie powiódł się: ${String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runAdsStopLoss = async (): Promise<void> => {
+    if (adsStopLossConfirmation.trim() !== ADS_STOP_LOSS_CONFIRMATION) {
+      showError('Potwierdzenie ads stop-loss jest niepoprawne.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await api.pauseActiveAdCampaignPlans(client, {
+        confirmation: ADS_STOP_LOSS_CONFIRMATION,
+      });
+      setAdsStopLossConfirmation('');
+      await refreshGrowthData();
+      showSuccess(
+        `Ads stop-loss: attempted ${result.attempted}, paused ${result.paused}, blocked ${result.blocked}, failed ${result.failed}.`
+      );
+    } catch (error) {
+      showError(`Ads stop-loss nie powiódł się: ${String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const importGa4Traffic = async (): Promise<void> => {
+    setSaving(true);
+    try {
+      const result = await api.importTraffic(client, { source: 'ga4' });
+      await refreshGrowthData();
+      showSuccess(`GA4 traffic import zapisany: ${String(result.uniqueKey ?? 'snapshot')}.`);
+    } catch (error) {
+      showError(`GA4 traffic import nie powiódł się: ${String(error)}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -2897,6 +3061,22 @@ const HomePage = () => {
       ) : null}
     </Modal>
   );
+
+  const autonomyPolicy = autonomyStatus?.policy ?? {};
+  const providerReadiness = autonomyStatus?.providerReadiness ?? [];
+  const blockedProviderCount = providerReadiness.filter((provider) => !provider.ready).length;
+  const readyProviderCount = providerReadiness.length - blockedProviderCount;
+  const dryRunPreview = autonomyStatus?.dryRunPreview as { steps?: unknown } | undefined;
+  const dryRunSteps = Array.isArray(dryRunPreview?.steps)
+    ? dryRunPreview.steps.filter(isRecordValue)
+    : [];
+  const blockedDryRunStepCount = dryRunSteps.filter((step) => step.status === 'blocked').length;
+  const autonomyMode = String(autonomyPolicy.autonomy_mode ?? autonomyPolicy.mode ?? '-');
+  const killSwitch = Boolean(autonomyPolicy.global_kill_switch);
+  const productionDecision = productionReadiness?.decision ?? 'NO_GO';
+  const canRunControlledAutonomyTick =
+    productionDecision === 'GO' && runNowConfirmation.trim() === RUN_NOW_CONFIRMATION;
+  const canRunAdsStopLoss = adsStopLossConfirmation.trim() === ADS_STOP_LOSS_CONFIRMATION;
 
   if (loading) {
     return <Page.Loading />;
@@ -5240,16 +5420,38 @@ const HomePage = () => {
                     otwartego dostępu Premium.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  disabled={saving}
-                  style={secondaryButtonStyle}
-                  onClick={() => {
-                    void refreshGrowthData();
-                  }}
-                >
-                  Odśwież dane
-                </button>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    style={secondaryButtonStyle}
+                    onClick={() => {
+                      void refreshGrowthData();
+                    }}
+                  >
+                    Odśwież dane
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    style={primaryButtonStyle}
+                    onClick={() => {
+                      void runProviderReadinessProbe();
+                    }}
+                  >
+                    Provider preflight
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    style={primaryButtonStyle}
+                    onClick={() => {
+                      void importGa4Traffic();
+                    }}
+                  >
+                    Importuj GA4
+                  </button>
+                </div>
               </div>
 
               <div
@@ -5263,10 +5465,456 @@ const HomePage = () => {
                 <StatTile label="Snapshoty performance" value={performanceSnapshots.length} />
                 <StatTile label="Rekomendacje homepage" value={homepageRecommendations.length} />
                 <StatTile
+                  label="PROD readiness"
+                  value={productionDecision}
+                  color={
+                    productionDecision === 'GO'
+                      ? COLORS.secondary
+                      : productionDecision === 'GO_WITH_WARNINGS'
+                        ? COLORS.warning
+                        : COLORS.danger
+                  }
+                />
+                <StatTile
+                  label="Provider readiness"
+                  value={`${readyProviderCount}/${providerReadiness.length || 0}`}
+                  color={blockedProviderCount > 0 ? COLORS.danger : COLORS.secondary}
+                />
+                <StatTile
+                  label="Autonomy mode"
+                  value={killSwitch ? 'KILL' : autonomyMode}
+                  color={killSwitch ? COLORS.danger : undefined}
+                />
+                <StatTile
+                  label="Dry-run blokady"
+                  value={blockedDryRunStepCount}
+                  color={blockedDryRunStepCount > 0 ? COLORS.warning : COLORS.secondary}
+                />
+                <StatTile
                   label="Global auto-publish"
                   value={settings.aico_auto_publish_enabled === false ? 'OFF' : 'ON'}
                   color={settings.aico_auto_publish_enabled === false ? COLORS.warning : undefined}
                 />
+              </div>
+            </section>
+
+            <section style={CARD_STYLE}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  flexWrap: 'wrap',
+                  marginBottom: 16,
+                }}
+              >
+                <div>
+                  <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16, marginBottom: 4 }}>
+                    PROD GO / NO-GO
+                  </h3>
+                  <div style={{ fontSize: 12, color: COLORS.textLight }}>
+                    Raport produkcyjnej gotowości agreguje policy, provider readiness, audit i live gates.
+                  </div>
+                </div>
+                <StatusPill status={productionDecision} />
+              </div>
+
+              {productionReadiness ? (
+                <div style={{ display: 'grid', gap: 14 }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                      gap: 12,
+                    }}
+                  >
+                    <StatTile
+                      label="Blockery"
+                      value={productionReadiness.blockers.length}
+                      color={productionReadiness.blockers.length > 0 ? COLORS.danger : COLORS.secondary}
+                    />
+                    <StatTile
+                      label="Warningi"
+                      value={productionReadiness.warnings.length}
+                      color={productionReadiness.warnings.length > 0 ? COLORS.warning : COLORS.secondary}
+                    />
+                    <StatTile
+                      label="Live effects"
+                      value={productionReadiness.liveEffectsAllowed ? 'ON' : 'OFF'}
+                      color={productionReadiness.liveEffectsAllowed ? COLORS.danger : COLORS.textLight}
+                    />
+                    <StatTile
+                      label="Providerzy wymagani"
+                      value={productionReadiness.requiredProviders.length}
+                    />
+                  </div>
+
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          <Th>Check</Th>
+                          <Th>Area</Th>
+                          <Th>Status</Th>
+                          <Th>Message</Th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productionReadiness.checks.map((check) => (
+                          <tr key={check.id}>
+                            <Td>{check.id}</Td>
+                            <Td>{check.area}</Td>
+                            <Td>
+                              <StatusPill status={check.status} />
+                            </Td>
+                            <Td>{check.message}</Td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: 24, color: COLORS.textLight, textAlign: 'center' }}>
+                  Brak raportu production readiness.
+                </div>
+              )}
+            </section>
+
+            <section style={CARD_STYLE}>
+              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Autonomy Control Plane</h3>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: 16,
+                  marginBottom: 16,
+                }}
+              >
+                <StatTile
+                  label="Daily ads cap"
+                  value={String(autonomyPolicy.daily_ads_budget_pln ?? '-')}
+                />
+                <StatTile
+                  label="LLM requests dziś"
+                  value={String(autonomyStatus?.counts?.llmRequestsToday ?? '-')}
+                />
+                <StatTile
+                  label="Media jobs dziś"
+                  value={String(autonomyStatus?.counts?.mediaJobsToday ?? '-')}
+                />
+                <StatTile
+                  label="Ads mutations dziś"
+                  value={String(autonomyStatus?.counts?.adsMutationsToday ?? '-')}
+                />
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(220px, 1fr) auto',
+                  gap: 12,
+                  alignItems: 'end',
+                  padding: 12,
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 10,
+                  background: '#f8fafc',
+                  marginBottom: 16,
+                }}
+              >
+                <Field label="Controlled run-now confirmation">
+                  <input
+                    style={inputStyle}
+                    value={runNowConfirmation}
+                    onChange={(event) => setRunNowConfirmation(event.target.value)}
+                    placeholder={RUN_NOW_CONFIRMATION}
+                    autoComplete="off"
+                  />
+                </Field>
+                <button
+                  type="button"
+                  disabled={saving || !canRunControlledAutonomyTick}
+                  style={{
+                    ...primaryButtonStyle,
+                    background:
+                      canRunControlledAutonomyTick && !saving
+                        ? COLORS.danger
+                        : COLORS.textLight,
+                    boxShadow: 'none',
+                    minWidth: 180,
+                  }}
+                  onClick={() => {
+                    void runControlledAutonomyTick();
+                  }}
+                >
+                  Controlled run-now
+                </button>
+              </div>
+
+              {providerProbeResult ? (
+                <div
+                  style={{
+                    padding: 12,
+                    background: '#f8fafc',
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: 10,
+                    marginBottom: 16,
+                    fontSize: 12,
+                    color: COLORS.textLight,
+                  }}
+                >
+                  Ostatni provider preflight: {providerProbeResult.results.length} providerów,
+                  connectivity {providerProbeResult.includeConnectivity ? 'ON' : 'OFF'}, live effects{' '}
+                  {providerProbeResult.liveEffects ? 'ON' : 'OFF'}.
+                </div>
+              ) : null}
+
+              <div style={{ overflowX: 'auto', marginBottom: 18 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <Th>Provider</Th>
+                      <Th>Status</Th>
+                      <Th>Credentials</Th>
+                      <Th>Scopes</Th>
+                      <Th>Last test</Th>
+                      <Th>Blocked reason</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {providerReadiness.map((provider: ProviderReadiness) => (
+                      <tr key={provider.provider}>
+                        <Td>{provider.provider}</Td>
+                        <Td>
+                          <StatusPill status={provider.ready ? 'ready' : 'blocked'} />
+                        </Td>
+                        <Td>{provider.hasCredentials ? 'yes' : 'no'}</Td>
+                        <Td>
+                          {provider.missingScopes.length > 0
+                            ? `missing: ${provider.missingScopes.join(', ')}`
+                            : provider.requiredScopes.join(', ') || '-'}
+                        </Td>
+                        <Td>{provider.lastTestedAt ? formatDateTime(provider.lastTestedAt) : '-'}</Td>
+                        <Td>{provider.blockedReason || '-'}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {providerReadiness.length === 0 ? (
+                  <div style={{ padding: 24, color: COLORS.textLight, textAlign: 'center' }}>
+                    Brak macierzy provider readiness.
+                  </div>
+                ) : null}
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <Th>Dry-run step</Th>
+                      <Th>Status</Th>
+                      <Th>Reason</Th>
+                      <Th>Output</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dryRunSteps.map((step) => (
+                      <tr key={String(step.id ?? step.label)}>
+                        <Td>{String(step.label ?? step.id ?? '-')}</Td>
+                        <Td>
+                          <StatusPill status={String(step.status ?? 'idle')} />
+                        </Td>
+                        <Td>{String(step.reason ?? '-')}</Td>
+                        <Td>
+                          <pre
+                            style={{
+                              margin: 0,
+                              whiteSpace: 'pre-wrap',
+                              fontSize: 11,
+                              color: COLORS.textLight,
+                              maxWidth: 420,
+                            }}
+                          >
+                            {formatDetailValue(step.output ?? {})}
+                          </pre>
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {dryRunSteps.length === 0 ? (
+                  <div style={{ padding: 24, color: COLORS.textLight, textAlign: 'center' }}>
+                    Brak dry-run preview autopilota.
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            <section style={CARD_STYLE}>
+              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Queues, Video, Ads, Experiments</h3>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: 16,
+                  marginBottom: 16,
+                }}
+              >
+                <StatTile label="Generation jobs" value={generationJobs.length} />
+                <StatTile label="Video assets" value={videoAssets.length} />
+                <StatTile label="Ad plans" value={adCampaignPlans.length} />
+                <StatTile label="Experiments" value={growthExperiments.length} />
+                <StatTile label="Provider records" value={providerStatuses.length} />
+              </div>
+
+              <div style={{ overflowX: 'auto', marginBottom: 18 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <Th>Job</Th>
+                      <Th>Type</Th>
+                      <Th>Status</Th>
+                      <Th>Priority</Th>
+                      <Th>Blocked</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {generationJobs.slice(0, 10).map((job) => (
+                      <tr key={job.id}>
+                        <Td>#{job.id}</Td>
+                        <Td>{job.job_type}</Td>
+                        <Td>
+                          <StatusPill status={job.status} />
+                        </Td>
+                        <Td>{job.priority_score ?? '-'}</Td>
+                        <Td>{job.blocked_reason || job.last_error || '-'}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {generationJobs.length === 0 ? (
+                  <div style={{ padding: 18, color: COLORS.textLight, textAlign: 'center' }}>
+                    Brak generation jobs.
+                  </div>
+                ) : null}
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                  gap: 18,
+                }}
+              >
+                <div style={{ overflowX: 'auto' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Video assets</div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <Th>Title</Th>
+                        <Th>Status</Th>
+                        <Th>Blocked</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {videoAssets.slice(0, 8).map((asset) => (
+                        <tr key={asset.id}>
+                          <Td>{asset.title}</Td>
+                          <Td>
+                            <StatusPill status={asset.status} />
+                          </Td>
+                          <Td>{asset.blocked_reason || asset.last_error || '-'}</Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Ad plans</div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(220px, 1fr) auto',
+                      gap: 12,
+                      alignItems: 'end',
+                      marginBottom: 12,
+                    }}
+                  >
+                    <Field label="Ads stop-loss confirmation">
+                      <input
+                        style={inputStyle}
+                        value={adsStopLossConfirmation}
+                        onChange={(event) => setAdsStopLossConfirmation(event.target.value)}
+                        placeholder={ADS_STOP_LOSS_CONFIRMATION}
+                        autoComplete="off"
+                      />
+                    </Field>
+                    <button
+                      type="button"
+                      disabled={saving || !canRunAdsStopLoss}
+                      style={{
+                        ...primaryButtonStyle,
+                        background:
+                          canRunAdsStopLoss && !saving ? COLORS.danger : COLORS.textLight,
+                        boxShadow: 'none',
+                        minWidth: 180,
+                      }}
+                      onClick={() => {
+                        void runAdsStopLoss();
+                      }}
+                    >
+                      Pause active ads
+                    </button>
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <Th>Name</Th>
+                        <Th>Platform</Th>
+                        <Th>Status</Th>
+                        <Th>Budget</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adCampaignPlans.slice(0, 8).map((plan) => (
+                        <tr key={plan.id}>
+                          <Td>{plan.name}</Td>
+                          <Td>{plan.platform}</Td>
+                          <Td>
+                            <StatusPill status={plan.status} />
+                          </Td>
+                          <Td>{plan.daily_budget_pln ?? '-'}</Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Experiments</div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <Th>Name</Th>
+                        <Th>Type</Th>
+                        <Th>Status</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {growthExperiments.slice(0, 8).map((experiment) => (
+                        <tr key={experiment.id}>
+                          <Td>{experiment.name}</Td>
+                          <Td>{experiment.experiment_type}</Td>
+                          <Td>
+                            <StatusPill status={experiment.status} />
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </section>
 

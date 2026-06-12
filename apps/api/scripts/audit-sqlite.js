@@ -1,11 +1,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { resolveFromApp } = require('./release-env');
 
-const resolveSqliteDatabaseFilename = () => {
-  const filename = path.resolve(
-    process.cwd(),
-    process.env.DATABASE_FILENAME || '.tmp/data.db',
-  );
+const resolveSqliteDatabaseFilename = (env = process.env) => {
+  const configured = env.DATABASE_FILENAME || '.tmp/data.db';
+  const filename = path.isAbsolute(configured)
+    ? configured
+    : resolveFromApp(configured);
 
   if (!fs.existsSync(filename)) {
     throw new Error(

@@ -144,6 +144,12 @@ export type ContentPerformanceSnapshotRecord = {
   checkout_events?: number;
   social_published?: number;
   social_failed?: number;
+  organic_clicks?: number;
+  social_engagements?: number;
+  ad_spend_pln?: number;
+  ad_clicks?: number;
+  ad_conversions?: number;
+  revenue_or_value?: number;
   freshness_days?: number;
   score?: number;
   recommendations?: Record<string, unknown> | null;
@@ -242,7 +248,12 @@ export type MediaPurpose =
   | 'daily_card'
   | 'blog_article'
   | 'zodiac_profile'
-  | 'fallback_general';
+  | 'fallback_general'
+  | 'short_video_frame'
+  | 'social_story'
+  | 'ad_creative'
+  | 'youtube_short'
+  | 'tiktok_video';
 export type MediaPeriodScope = 'any' | 'daily' | 'weekly' | 'monthly';
 
 export type MediaAssetRecord = {
@@ -258,7 +269,13 @@ export type MediaAssetRecord = {
   cooldown_days?: number;
   last_used_at?: string | null;
   use_count?: number;
-  mapping_source?: 'manual' | 'suggestion' | 'bulk_suggestion' | 'seed' | null;
+  mapping_source?:
+    | 'manual'
+    | 'suggestion'
+    | 'bulk_suggestion'
+    | 'seed'
+    | 'autonomous_agent'
+    | null;
   mapping_confidence?: number | null;
   mapping_reasons?: string[] | null;
   notes?: string | null;
@@ -339,6 +356,7 @@ export type SocialPostTicketRecord = {
   id: number;
   platform: SocialPlatform;
   status: 'pending' | 'scheduled' | 'published' | 'failed' | 'canceled';
+  content_format?: 'image' | 'video' | 'link' | 'story';
   caption: string;
   media_url?: string | null;
   target_url?: string | null;
@@ -351,10 +369,205 @@ export type SocialPostTicketRecord = {
   blocked_reason?: string | null;
   idempotency_key?: string | null;
   provider_payload?: Record<string, unknown> | null;
+  utm_campaign?: string | null;
   workflow?: number | { id: number } | null;
+  video_asset?: number | { id: number } | null;
+  experiment?: number | { id: number } | null;
   source_run?: number | { id: number } | null;
   related_content_uid?: string | null;
   related_content_id?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type AutonomyMode = 'off' | 'draft_only' | 'guarded' | 'full';
+export type AdsPlatform = 'meta' | 'google';
+export type ProviderKey =
+  | 'openrouter'
+  | 'replicate'
+  | 'openai'
+  | 'facebook'
+  | 'instagram'
+  | 'twitter'
+  | 'tiktok'
+  | 'youtube'
+  | 'meta_ads'
+  | 'google_ads'
+  | 'ga4';
+
+export type AutonomyPolicyRecord = {
+  id: number;
+  policy_key: string;
+  autonomy_mode: AutonomyMode;
+  global_kill_switch?: boolean;
+  daily_ads_budget_pln?: number;
+  daily_meta_ads_budget_pln?: number;
+  daily_google_ads_budget_pln?: number;
+  daily_llm_request_limit?: number;
+  daily_media_job_limit?: number;
+  daily_video_job_limit?: number;
+  max_auto_publish_per_day?: number;
+  max_social_posts_per_day?: number;
+  max_ads_mutations_per_day?: number;
+  brand_safety_required?: boolean;
+  legal_disclaimer_required?: boolean;
+  no_sensitive_targeting?: boolean;
+  allowed_social_channels?: string[] | null;
+  allowed_ads_platforms?: AdsPlatform[] | null;
+  stop_loss_rules?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type GenerationJobType =
+  | 'article'
+  | 'horoscope'
+  | 'image'
+  | 'video'
+  | 'social_caption'
+  | 'ad_creative'
+  | 'homepage_slot';
+export type GenerationJobStatus = 'queued' | 'running' | 'blocked' | 'succeeded' | 'failed' | 'canceled';
+
+export type GenerationJobRecord = {
+  id: number;
+  job_type: GenerationJobType;
+  status: GenerationJobStatus;
+  priority_score?: number;
+  scheduled_for?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  attempt_count?: number;
+  max_attempts?: number;
+  blocked_reason?: string | null;
+  last_error?: string | null;
+  input_summary?: Record<string, unknown> | null;
+  output_summary?: Record<string, unknown> | null;
+  provider?: string | null;
+  provider_job_id?: string | null;
+  cost_weight?: number;
+  idempotency_key?: string | null;
+  metadata?: Record<string, unknown> | null;
+  workflow?: number | { id: number } | null;
+  plan_item?: number | { id: number } | null;
+  source_run?: number | { id: number } | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type TrafficSnapshotRecord = {
+  id: number;
+  unique_key: string;
+  snapshot_day: string;
+  source: 'first_party' | 'ga4' | 'meta' | 'google_ads' | 'social';
+  views?: number;
+  sessions?: number;
+  organic_clicks?: number;
+  social_engagements?: number;
+  ad_spend_pln?: number;
+  ad_clicks?: number;
+  ad_conversions?: number;
+  revenue_or_value?: number;
+  top_content?: Record<string, unknown> | null;
+  recommendations?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type VideoAssetRecord = {
+  id: number;
+  title: string;
+  status: 'queued' | 'storyboard' | 'rendering' | 'qc_passed' | 'uploaded' | 'scheduled' | 'failed' | 'canceled';
+  script?: string | null;
+  storyboard?: Record<string, unknown> | null;
+  text_overlay?: Record<string, unknown> | null;
+  subtitles?: string | null;
+  provider?: string | null;
+  provider_job_id?: string | null;
+  aspect_ratio?: string | null;
+  duration_seconds?: number | null;
+  platform_variants?: Record<string, unknown> | null;
+  blocked_reason?: string | null;
+  last_error?: string | null;
+  metadata?: Record<string, unknown> | null;
+  workflow?: number | { id: number } | null;
+  generation_job?: number | { id: number } | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type AdCampaignPlanRecord = {
+  id: number;
+  name: string;
+  platform: AdsPlatform;
+  status: 'draft' | 'ready' | 'active' | 'paused' | 'blocked' | 'failed' | 'completed';
+  objective?: string | null;
+  target_url: string;
+  utm_campaign?: string | null;
+  daily_budget_pln?: number;
+  provider_campaign_id?: string | null;
+  provider_adset_id?: string | null;
+  provider_ad_id?: string | null;
+  creative_payload?: Record<string, unknown> | null;
+  targeting_payload?: Record<string, unknown> | null;
+  stop_loss_state?: Record<string, unknown> | null;
+  last_error?: string | null;
+  blocked_reason?: string | null;
+  metadata?: Record<string, unknown> | null;
+  workflow?: number | { id: number } | null;
+  experiment?: number | { id: number } | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type AdsMutationLedgerRecord = {
+  id: number;
+  unique_key: string;
+  day: string;
+  platform: AdsPlatform;
+  operation: 'activate' | 'pause' | 'release';
+  status: 'reserved' | 'applied' | 'released' | 'blocked' | 'failed';
+  amount_pln?: number | string;
+  provider_mode?: string | null;
+  provider_decision?: string | null;
+  provider_campaign_id?: string | null;
+  blocked_reason?: string | null;
+  metadata?: Record<string, unknown> | null;
+  ad_campaign_plan?: number | { id: number } | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type GrowthExperimentRecord = {
+  id: number;
+  name: string;
+  experiment_type: 'content_title' | 'cta' | 'image' | 'social_caption' | 'ad_creative' | 'homepage_slot';
+  status: 'draft' | 'running' | 'paused' | 'completed' | 'failed';
+  primary_metric?: string | null;
+  variants?: Record<string, unknown> | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+  winner_variant_key?: string | null;
+  decision?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  workflow?: number | { id: number } | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ProviderCredentialStatusRecord = {
+  id: number;
+  provider: ProviderKey;
+  status: 'unknown' | 'ready' | 'missing_credentials' | 'blocked' | 'failed';
+  has_credentials?: boolean;
+  scopes?: string[] | null;
+  last_tested_at?: string | null;
+  blocked_reason?: string | null;
+  last_error?: string | null;
+  metadata?: Record<string, unknown> | null;
+  workflow?: number | { id: number } | null;
   createdAt?: string;
   updatedAt?: string;
 };

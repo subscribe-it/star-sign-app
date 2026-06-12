@@ -14,6 +14,14 @@ export const EDITORIAL_MEMORY_UID = `plugin::${PLUGIN_ID}.editorial-memory`;
 export const HOMEPAGE_RECOMMENDATION_UID = `plugin::${PLUGIN_ID}.homepage-recommendation`;
 export const AUDIT_EVENT_UID = `plugin::${PLUGIN_ID}.audit-event`;
 export const RUNTIME_LOCK_UID = `plugin::${PLUGIN_ID}.runtime-lock`;
+export const AUTONOMY_POLICY_UID = `plugin::${PLUGIN_ID}.autonomy-policy`;
+export const GENERATION_JOB_UID = `plugin::${PLUGIN_ID}.generation-job`;
+export const VIDEO_ASSET_UID = `plugin::${PLUGIN_ID}.video-asset`;
+export const TRAFFIC_SNAPSHOT_UID = `plugin::${PLUGIN_ID}.traffic-snapshot`;
+export const AD_CAMPAIGN_PLAN_UID = `plugin::${PLUGIN_ID}.ad-campaign-plan`;
+export const ADS_MUTATION_LEDGER_UID = `plugin::${PLUGIN_ID}.ads-mutation-ledger`;
+export const GROWTH_EXPERIMENT_UID = `plugin::${PLUGIN_ID}.growth-experiment`;
+export const PROVIDER_CREDENTIAL_STATUS_UID = `plugin::${PLUGIN_ID}.provider-credential-status`;
 
 export const CONTENT_UIDS = {
   horoscope: 'api::horoscope.horoscope',
@@ -58,9 +66,36 @@ export const ZODIAC_SIGNS_PL = [
   'Ryby',
 ] as const;
 
-export const WORKFLOW_TYPES = ['horoscope', 'daily_card', 'article'] as const;
+export const WORKFLOW_TYPES = [
+  'horoscope',
+  'daily_card',
+  'article',
+  'video_short',
+  'ad_campaign',
+  'homepage_curation',
+  'traffic_analysis',
+] as const;
 export const RUN_TYPES = ['generate', 'publish', 'manual', 'backfill'] as const;
-export const SOCIAL_CHANNELS = ['facebook', 'instagram', 'twitter', 'tiktok'] as const;
+export const SOCIAL_CHANNELS = [
+  'facebook',
+  'instagram',
+  'twitter',
+  'tiktok',
+  'youtube_shorts',
+] as const;
+export const PROVIDER_KEYS = [
+  'openrouter',
+  'replicate',
+  'openai',
+  'facebook',
+  'instagram',
+  'twitter',
+  'tiktok',
+  'youtube',
+  'meta_ads',
+  'google_ads',
+  'ga4',
+] as const;
 
 export const HOROSCOPE_PERIODS = ['Dzienny', 'Tygodniowy', 'Miesięczny', 'Roczny'] as const;
 
@@ -80,6 +115,17 @@ export const RBAC_ACTIONS = {
   managePerformance: `plugin::${PLUGIN_ID}.manage-performance`,
   manageHomepage: `plugin::${PLUGIN_ID}.manage-homepage`,
   viewAuditTrail: `plugin::${PLUGIN_ID}.view-audit-trail`,
+  manageAutonomy: `plugin::${PLUGIN_ID}.manage-autonomy`,
+  manageAds: `plugin::${PLUGIN_ID}.manage-ads`,
+  activateAds: `plugin::${PLUGIN_ID}.activate-ads`,
+  pauseAds: `plugin::${PLUGIN_ID}.pause-ads`,
+  manageVideo: `plugin::${PLUGIN_ID}.manage-video`,
+  renderVideo: `plugin::${PLUGIN_ID}.render-video`,
+  viewTraffic: `plugin::${PLUGIN_ID}.view-traffic`,
+  importTraffic: `plugin::${PLUGIN_ID}.import-traffic`,
+  manageExperiments: `plugin::${PLUGIN_ID}.manage-experiments`,
+  viewProviderStatus: `plugin::${PLUGIN_ID}.view-provider-status`,
+  testProviderReadiness: `plugin::${PLUGIN_ID}.test-provider-readiness`,
 } as const;
 
 export const TICKET_STATUS = {

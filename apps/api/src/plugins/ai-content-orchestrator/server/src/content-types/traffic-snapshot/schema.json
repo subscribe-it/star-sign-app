@@ -1,0 +1,36 @@
+{
+  "kind": "collectionType",
+  "collectionName": "aico_traffic_snapshots",
+  "info": {
+    "singularName": "traffic-snapshot",
+    "pluralName": "traffic-snapshots",
+    "displayName": "AICO Traffic Snapshot"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": { "visible": true },
+    "content-type-builder": { "visible": true }
+  },
+  "attributes": {
+    "unique_key": { "type": "string", "required": true, "unique": true },
+    "snapshot_day": { "type": "date", "required": true },
+    "source": {
+      "type": "enumeration",
+      "enum": ["first_party", "ga4", "meta", "google_ads", "social"],
+      "required": true
+    },
+    "views": { "type": "integer", "default": 0 },
+    "sessions": { "type": "integer", "default": 0 },
+    "organic_clicks": { "type": "integer", "default": 0 },
+    "social_engagements": { "type": "integer", "default": 0 },
+    "ad_spend_pln": { "type": "decimal", "default": 0 },
+    "ad_clicks": { "type": "integer", "default": 0 },
+    "ad_conversions": { "type": "integer", "default": 0 },
+    "revenue_or_value": { "type": "decimal", "default": 0 },
+    "top_content": { "type": "json" },
+    "recommendations": { "type": "json" },
+    "metadata": { "type": "json" }
+  }
+}

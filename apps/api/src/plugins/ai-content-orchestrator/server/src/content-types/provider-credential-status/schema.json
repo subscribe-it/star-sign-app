@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "aico_provider_credential_statuses",
+  "info": {
+    "singularName": "provider-credential-status",
+    "pluralName": "provider-credential-statuses",
+    "displayName": "AICO Provider Credential Status"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": false }
+  },
+  "attributes": {
+    "provider": {
+      "type": "enumeration",
+      "enum": ["openrouter", "replicate", "openai", "facebook", "instagram", "twitter", "tiktok", "youtube", "meta_ads", "google_ads", "ga4"],
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["unknown", "ready", "missing_credentials", "blocked", "failed"],
+      "default": "unknown",
+      "required": true
+    },
+    "has_credentials": { "type": "boolean", "default": false },
+    "scopes": { "type": "json" },
+    "last_tested_at": { "type": "datetime" },
+    "blocked_reason": { "type": "string" },
+    "last_error": { "type": "text" },
+    "metadata": { "type": "json" },
+    "workflow": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.workflow"
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "kind": "collectionType",
+  "collectionName": "aico_generation_jobs",
+  "info": {
+    "singularName": "generation-job",
+    "pluralName": "generation-jobs",
+    "displayName": "AICO Generation Job"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": { "visible": true },
+    "content-type-builder": { "visible": true }
+  },
+  "attributes": {
+    "job_type": {
+      "type": "enumeration",
+      "enum": [
+        "article",
+        "horoscope",
+        "image",
+        "video",
+        "social_caption",
+        "ad_creative",
+        "homepage_slot"
+      ],
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["queued", "running", "blocked", "succeeded", "failed", "canceled"],
+      "default": "queued",
+      "required": true
+    },
+    "priority_score": { "type": "float", "default": 0 },
+    "scheduled_for": { "type": "datetime" },
+    "started_at": { "type": "datetime" },
+    "finished_at": { "type": "datetime" },
+    "attempt_count": { "type": "integer", "default": 0 },
+    "max_attempts": { "type": "integer", "default": 3 },
+    "blocked_reason": { "type": "string" },
+    "last_error": { "type": "text" },
+    "input_summary": { "type": "json" },
+    "output_summary": { "type": "json" },
+    "provider": { "type": "string" },
+    "provider_job_id": { "type": "string" },
+    "cost_weight": { "type": "decimal", "default": 0 },
+    "idempotency_key": { "type": "string", "unique": true },
+    "metadata": { "type": "json" },
+    "workflow": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.workflow"
+    },
+    "plan_item": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.content-plan-item"
+    },
+    "source_run": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.run-log"
+    }
+  }
+}

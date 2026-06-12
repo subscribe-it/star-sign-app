@@ -4,6 +4,78 @@ import axios from 'axios';
 import Replicate from 'replicate';
 import { MEDIA_ASSET_UID } from '../constants';
 import type { Strapi } from '../types';
+import { getPluginService } from '../utils/plugin';
+
+type AutonomyPolicyService = {
+  evaluate: (input: {
+    action: 'media.generate';
+    requiresBrandSafety: boolean;
+  }) => Promise<{ allowed: boolean; reason?: string }>;
+};
+
+type ProviderStatusService = {
+  checkProviders: (input: { action: 'media.generate'; providers: ['replicate'] }) => Promise<{
+    ready: boolean;
+    blockedProviders: Array<{
+      provider: string;
+      status: string;
+      blockedReason?: string | null;
+    }>;
+  }>;
+};
+
+const unique = (values: string[]): string[] => Array.from(new Set(values));
+
+export const getMediaPublicDirCandidates = (): string[] =>
+  unique([
+    path.resolve(__dirname, '../../../../../../public'),
+    path.resolve(__dirname, '../../../../../public'),
+    path.resolve(process.cwd(), 'public'),
+  ]);
+
+export const resolveMediaPublicDir = (): string => {
+  const candidates = getMediaPublicDirCandidates();
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
+};
+
+export const resolveImageGenToken = (inputToken?: string): string | null =>
+  inputToken?.trim() ||
+  process.env.AICO_IMAGE_GEN_TOKEN?.trim() ||
+  process.env.REPLICATE_API_TOKEN?.trim() ||
+  null;
+
+const assertMediaGenerationAllowed = async (strapi: Strapi): Promise<void> => {
+  const policyDecision = await getPluginService<AutonomyPolicyService>(
+    strapi,
+    'autonomy-policy'
+  ).evaluate({
+    action: 'media.generate',
+    requiresBrandSafety: true,
+  });
+
+  if (!policyDecision.allowed) {
+    throw new Error(
+      `AICO media generation blocked by autonomy policy: ${policyDecision.reason ?? 'unknown'}`
+    );
+  }
+
+  const providerDecision = await getPluginService<ProviderStatusService>(
+    strapi,
+    'provider-status'
+  ).checkProviders({
+    action: 'media.generate',
+    providers: ['replicate'],
+  });
+
+  if (!providerDecision.ready) {
+    const blocked = providerDecision.blockedProviders
+      .map((provider) => `${provider.provider}:${provider.blockedReason ?? provider.status}`)
+      .join(', ');
+    throw new Error(
+      `AICO media generation blocked by provider readiness: ${blocked || 'replicate'}`
+    );
+  }
+};
 
 const mediaGenerator = ({ strapi }: { strapi: Strapi }) => {
   return {
@@ -16,8 +88,14 @@ const mediaGenerator = ({ strapi }: { strapi: Strapi }) => {
       model?: string;
       apiToken?: string;
     }): Promise<{ mediaAssetId: number; uploadFileId: number }> {
+      await assertMediaGenerationAllowed(strapi);
+      const token = resolveImageGenToken(input.apiToken);
+      if (!token) {
+        throw new Error('AICO media generation blocked: missing image generation token.');
+      }
+
       const replicate = new Replicate({
-        auth: input.apiToken || process.env.REPLICATE_API_TOKEN,
+        auth: token,
       });
 
       strapi.log.info(`[aico] Autonomiczna generacja obrazu: ${input.label}`);
@@ -41,7 +119,7 @@ const mediaGenerator = ({ strapi }: { strapi: Strapi }) => {
       const buffer = Buffer.from(response.data, 'binary');
 
       // 3. Strategia Temp File dla Strapi 5
-      const publicDir = path.join(process.cwd(), 'public');
+      const publicDir = resolveMediaPublicDir();
       const tmpDir = path.join(publicDir, 'uploads', 'tmp');
       if (!fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir, { recursive: true });

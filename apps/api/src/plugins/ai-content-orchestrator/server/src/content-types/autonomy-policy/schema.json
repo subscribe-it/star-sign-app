@@ -1,0 +1,53 @@
+{
+  "kind": "collectionType",
+  "collectionName": "aico_autonomy_policies",
+  "info": {
+    "singularName": "autonomy-policy",
+    "pluralName": "autonomy-policies",
+    "displayName": "AICO Autonomy Policy"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": { "visible": true },
+    "content-type-builder": { "visible": true }
+  },
+  "attributes": {
+    "policy_key": {
+      "type": "uid",
+      "required": true,
+      "unique": true,
+      "default": "global"
+    },
+    "autonomy_mode": {
+      "type": "enumeration",
+      "enum": ["off", "draft_only", "guarded", "full"],
+      "default": "guarded",
+      "required": true
+    },
+    "global_kill_switch": { "type": "boolean", "default": false },
+    "daily_ads_budget_pln": { "type": "decimal", "default": 25 },
+    "daily_meta_ads_budget_pln": { "type": "decimal", "default": 15 },
+    "daily_google_ads_budget_pln": { "type": "decimal", "default": 10 },
+    "daily_llm_request_limit": { "type": "integer", "default": 120 },
+    "daily_media_job_limit": { "type": "integer", "default": 20 },
+    "daily_video_job_limit": { "type": "integer", "default": 3 },
+    "max_auto_publish_per_day": { "type": "integer", "default": 12 },
+    "max_social_posts_per_day": { "type": "integer", "default": 10 },
+    "max_ads_mutations_per_day": { "type": "integer", "default": 10 },
+    "brand_safety_required": { "type": "boolean", "default": true },
+    "legal_disclaimer_required": { "type": "boolean", "default": true },
+    "no_sensitive_targeting": { "type": "boolean", "default": true },
+    "allowed_social_channels": {
+      "type": "json",
+      "default": ["facebook", "instagram", "twitter", "tiktok", "youtube_shorts"]
+    },
+    "allowed_ads_platforms": {
+      "type": "json",
+      "default": ["meta", "google"]
+    },
+    "stop_loss_rules": { "type": "json" },
+    "metadata": { "type": "json" }
+  }
+}

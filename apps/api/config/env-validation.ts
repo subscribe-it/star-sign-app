@@ -41,6 +41,51 @@ const productionEnvSchema = z.object({
   TURNSTILE_SITE_KEY: z.string().optional(),
   TURNSTILE_SECRET_KEY: z.string().optional(),
   TURNSTILE_FAIL_OPEN: z.string().optional(),
+  AICO_OPENROUTER_TOKEN: z.string().optional(),
+  AICO_ENABLE_WORKFLOWS: z.string().optional(),
+  AICO_ALLOW_MISSING_TOKEN: z.string().optional(),
+  AICO_AUDIT_TRAIL_STRICT: z.string().optional(),
+  AICO_AUDIT_IP_HASH_SALT: z.string().optional(),
+  AICO_RUNTIME_LOCKS_DISABLED: z.string().optional(),
+  AICO_SOCIAL_CONTENT_SAFETY_DISABLED: z.string().optional(),
+  AICO_STRICT_AUDIT_REQUIRED: z.string().optional(),
+  AICO_ADS_PROVIDER_MODE: z.string().optional(),
+  AICO_ADS_TARGET_URL_PREFLIGHT_REQUIRED: z.string().optional(),
+  AICO_VIDEO_PROVIDER_MODE: z.string().optional(),
+  AICO_VIDEO_GEN_TOKEN: z.string().optional(),
+  AICO_VIDEO_GEN_MODEL: z.string().optional(),
+  REPLICATE_API_TOKEN: z.string().optional(),
+  AICO_CONTROLLED_LIVE_ENABLED: z.string().optional(),
+  AICO_ADMIN_RUN_NOW_ENABLED: z.string().optional(),
+  AICO_FULL_AUTONOMY_REQUIRED: z.string().optional(),
+  AICO_AUTO_PUBLISH_ENABLED: z.string().optional(),
+  AICO_IMAGE_GEN_TOKEN: z.string().optional(),
+  AICO_IMAGE_GEN_MODEL: z.string().optional(),
+  AICO_MEDIA_GEN_REQUIRED: z.string().optional(),
+  AICO_PUBLIC_FRONTEND_URL: z.string().optional(),
+  AICO_SOCIAL_DEFAULT_IMAGE_URL: z.string().optional(),
+  AICO_SOCIAL_PUBLISH_REQUIRED: z.string().optional(),
+  AICO_STRATEGY_AUTOPILOT_ENABLED: z.string().optional(),
+  AICO_STRATEGY_AUTO_APPROVE_PLAN: z.string().optional(),
+  AICO_FACEBOOK_PAGE_ID: z.string().optional(),
+  AICO_FACEBOOK_ACCESS_TOKEN: z.string().optional(),
+  AICO_INSTAGRAM_USER_ID: z.string().optional(),
+  AICO_INSTAGRAM_ACCESS_TOKEN: z.string().optional(),
+  AICO_X_API_KEY: z.string().optional(),
+  AICO_X_API_SECRET: z.string().optional(),
+  AICO_X_ACCESS_TOKEN: z.string().optional(),
+  AICO_X_ACCESS_TOKEN_SECRET: z.string().optional(),
+  AICO_META_ADS_ACCESS_TOKEN: z.string().optional(),
+  AICO_META_AD_ACCOUNT_ID: z.string().optional(),
+  AICO_GOOGLE_ADS_DEVELOPER_TOKEN: z.string().optional(),
+  AICO_GOOGLE_ADS_CLIENT_ID: z.string().optional(),
+  AICO_GOOGLE_ADS_CLIENT_SECRET: z.string().optional(),
+  AICO_GOOGLE_ADS_REFRESH_TOKEN: z.string().optional(),
+  AICO_GOOGLE_ADS_CUSTOMER_ID: z.string().optional(),
+  GA4_PROPERTY_ID: z.string().optional(),
+  AICO_GA4_ACCESS_TOKEN: z.string().optional(),
+  GA4_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
 });
 
 let hasValidated = false;
@@ -101,6 +146,76 @@ const requireValue = (
     issues.push({
       key,
       message: `Missing production value for ${key}.`,
+    });
+  }
+};
+
+const requireTrue = (
+  issues: Issue[],
+  env: NodeJS.ProcessEnv,
+  key: string,
+): void => {
+  if (!isEnabled(env[key], false)) {
+    issues.push({
+      key,
+      message: `${key} must be true.`,
+    });
+  }
+};
+
+const requireFalse = (
+  issues: Issue[],
+  env: NodeJS.ProcessEnv,
+  key: string,
+): void => {
+  if (isEnabled(env[key], false)) {
+    issues.push({
+      key,
+      message: `${key} must remain false.`,
+    });
+  }
+};
+
+const requireExactValue = (
+  issues: Issue[],
+  env: NodeJS.ProcessEnv,
+  key: string,
+  expected: string,
+): void => {
+  const value = env[key]?.trim().toLowerCase();
+  if (value !== expected) {
+    issues.push({
+      key,
+      message: `${key} must be ${expected}.`,
+    });
+  }
+};
+
+const requireNotValue = (
+  issues: Issue[],
+  env: NodeJS.ProcessEnv,
+  key: string,
+  forbidden: string,
+): void => {
+  const value = env[key]?.trim().toLowerCase();
+  if (value === forbidden) {
+    issues.push({
+      key,
+      message: `${key} must not be ${forbidden}.`,
+    });
+  }
+};
+
+const requireAnyValue = (
+  issues: Issue[],
+  env: NodeJS.ProcessEnv,
+  keys: string[],
+  issueKey: string,
+): void => {
+  if (!keys.some((key) => !isMissingOrPlaceholder(env[key]))) {
+    issues.push({
+      key: issueKey,
+      message: `${issueKey} requires at least one production value: ${keys.join(', ')}.`,
     });
   }
 };
@@ -354,6 +469,89 @@ const validateTurnstile = (issues: Issue[], env: NodeJS.ProcessEnv): void => {
   }
 };
 
+const validateAico = (issues: Issue[], env: NodeJS.ProcessEnv): void => {
+  requireFalse(issues, env, 'AICO_ALLOW_MISSING_TOKEN');
+
+  if (isEnabled(env.AICO_ENABLE_WORKFLOWS, false)) {
+    requireSecret(issues, env, 'AICO_OPENROUTER_TOKEN');
+    requireSecret(issues, env, 'AICO_AUDIT_IP_HASH_SALT');
+    requireFalse(issues, env, 'AICO_RUNTIME_LOCKS_DISABLED');
+    requireFalse(issues, env, 'AICO_SOCIAL_CONTENT_SAFETY_DISABLED');
+    requireNotValue(issues, env, 'AICO_ADS_PROVIDER_MODE', 'live');
+    requireNotValue(issues, env, 'AICO_VIDEO_PROVIDER_MODE', 'live');
+  }
+
+  if (isEnabled(env.AICO_STRICT_AUDIT_REQUIRED, false)) {
+    requireTrue(issues, env, 'AICO_AUDIT_TRAIL_STRICT');
+  }
+
+  if (env.AICO_VIDEO_PROVIDER_MODE?.trim().toLowerCase() === 'replicate') {
+    requireValue(issues, env, 'AICO_VIDEO_GEN_MODEL');
+    requireAnyValue(
+      issues,
+      env,
+      ['AICO_VIDEO_GEN_TOKEN', 'REPLICATE_API_TOKEN'],
+      'AICO_VIDEO_GEN_TOKEN',
+    );
+  }
+
+  if (env.AICO_ADS_PROVIDER_MODE?.trim().toLowerCase() === 'controlled') {
+    requireSecret(issues, env, 'AICO_META_ADS_ACCESS_TOKEN');
+    requireValue(issues, env, 'AICO_META_AD_ACCOUNT_ID');
+    requireSecret(issues, env, 'AICO_GOOGLE_ADS_DEVELOPER_TOKEN');
+    requireValue(issues, env, 'AICO_GOOGLE_ADS_CLIENT_ID');
+    requireSecret(issues, env, 'AICO_GOOGLE_ADS_CLIENT_SECRET');
+    requireSecret(issues, env, 'AICO_GOOGLE_ADS_REFRESH_TOKEN');
+    requireValue(issues, env, 'AICO_GOOGLE_ADS_CUSTOMER_ID');
+  }
+
+  if (isEnabled(env.AICO_MEDIA_GEN_REQUIRED, false)) {
+    requireSecret(issues, env, 'AICO_IMAGE_GEN_TOKEN');
+    requireValue(issues, env, 'AICO_IMAGE_GEN_MODEL');
+  }
+
+  if (isEnabled(env.AICO_SOCIAL_PUBLISH_REQUIRED, false)) {
+    validateProductionUrl(issues, env, 'AICO_PUBLIC_FRONTEND_URL', true);
+    validateProductionUrl(issues, env, 'AICO_SOCIAL_DEFAULT_IMAGE_URL', true);
+    requireValue(issues, env, 'AICO_FACEBOOK_PAGE_ID');
+    requireSecret(issues, env, 'AICO_FACEBOOK_ACCESS_TOKEN');
+    requireValue(issues, env, 'AICO_INSTAGRAM_USER_ID');
+    requireSecret(issues, env, 'AICO_INSTAGRAM_ACCESS_TOKEN');
+    requireValue(issues, env, 'AICO_X_API_KEY');
+    requireSecret(issues, env, 'AICO_X_API_SECRET');
+    requireSecret(issues, env, 'AICO_X_ACCESS_TOKEN');
+    requireSecret(issues, env, 'AICO_X_ACCESS_TOKEN_SECRET');
+  }
+
+  if (!isEnabled(env.AICO_FULL_AUTONOMY_REQUIRED, false)) {
+    return;
+  }
+
+  [
+    'AICO_ENABLE_WORKFLOWS',
+    'AICO_AUDIT_TRAIL_STRICT',
+    'AICO_STRICT_AUDIT_REQUIRED',
+    'AICO_AUTO_PUBLISH_ENABLED',
+    'AICO_STRATEGY_AUTOPILOT_ENABLED',
+    'AICO_STRATEGY_AUTO_APPROVE_PLAN',
+    'AICO_MEDIA_GEN_REQUIRED',
+    'AICO_SOCIAL_PUBLISH_REQUIRED',
+    'AICO_ADS_TARGET_URL_PREFLIGHT_REQUIRED',
+    'AICO_CONTROLLED_LIVE_ENABLED',
+    'AICO_ADMIN_RUN_NOW_ENABLED',
+  ].forEach((key) => requireTrue(issues, env, key));
+
+  requireExactValue(issues, env, 'AICO_ADS_PROVIDER_MODE', 'controlled');
+  requireExactValue(issues, env, 'AICO_VIDEO_PROVIDER_MODE', 'replicate');
+  requireValue(issues, env, 'GA4_PROPERTY_ID');
+  requireAnyValue(
+    issues,
+    env,
+    ['AICO_GA4_ACCESS_TOKEN', 'GA4_SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS'],
+    'GA4_CREDENTIALS',
+  );
+};
+
 export const validateProductionEnv = (rawEnv: NodeJS.ProcessEnv): void => {
   if (hasValidated || rawEnv.NODE_ENV !== 'production') {
     return;
@@ -382,6 +580,7 @@ export const validateProductionEnv = (rawEnv: NodeJS.ProcessEnv): void => {
   validateGa4(issues, rawEnv);
   validateSentry(issues, rawEnv);
   validateTurnstile(issues, rawEnv);
+  validateAico(issues, rawEnv);
 
   if (issues.length > 0) {
     const details = issues

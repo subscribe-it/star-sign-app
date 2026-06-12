@@ -366,8 +366,37 @@ Nie używaj Mailpit w production stacku.
 | `AICO_ENABLE_WORKFLOWS` | `true` | włącza automatyzację AICO |
 | `AICO_ALLOW_MISSING_TOKEN` | `false` | produkcja nie powinna działać bez tokenu, jeśli AICO jest aktywne |
 | `AICO_BACKUP_ENABLED` | `true` | backup treści AICO |
+| `AICO_AUDIT_TRAIL_STRICT` | `true` dla pełnej autonomii | brak audytu blokuje akcje produkcyjne |
+| `AICO_AUDIT_IP_HASH_SALT` | realny sekret | wymagany, gdy workflows są włączone |
+| `AICO_RUNTIME_LOCKS_DISABLED` | `false` | produkcja nie może omijać locków runtime |
+| `AICO_SOCIAL_CONTENT_SAFETY_DISABLED` | `false` | produkcja nie może omijać content safety |
+| `AICO_STRICT_AUDIT_REQUIRED` | `true` dla pełnej autonomii | wymusza strict audit w release gate |
+| `AICO_FULL_AUTONOMY_REQUIRED` | `true` tylko dla profilu pełnej autonomii | po włączeniu `GO_WITH_WARNINGS` blokuje release |
+| `AICO_AUTO_PUBLISH_ENABLED` | `true` dla pełnej autonomii | wymagane przez preflight full-autonomy |
+| `AICO_STRATEGY_AUTOPILOT_ENABLED` | `true` dla pełnej autonomii | włącza planowanie strategii |
+| `AICO_STRATEGY_AUTO_APPROVE_PLAN` | `true` dla pełnej autonomii | automatyczna akceptacja planu po guardach |
+| `AICO_MEDIA_GEN_REQUIRED` | `true` dla pełnej autonomii | wymaga gotowego providera obrazów |
+| `AICO_IMAGE_GEN_TOKEN` | realny sekret | token obrazu; nie wpisuj placeholdera |
+| `AICO_IMAGE_GEN_MODEL` | `openai/gpt-image-2` | model obrazów |
+| `AICO_SOCIAL_PUBLISH_REQUIRED` | `true` dla pełnej autonomii | wymaga kompletu providerów social |
+| `AICO_PUBLIC_FRONTEND_URL` | `https://star-sign.pl` | publiczny URL strony |
+| `AICO_SOCIAL_DEFAULT_IMAGE_URL` | publiczny HTTPS URL | fallback obrazu social |
+| `AICO_FACEBOOK_PAGE_ID` / `AICO_FACEBOOK_ACCESS_TOKEN` | realne wartości Meta | wymagane, gdy social publish jest wymagany |
+| `AICO_INSTAGRAM_USER_ID` / `AICO_INSTAGRAM_ACCESS_TOKEN` | realne wartości Meta | wymagane, gdy social publish jest wymagany |
+| `AICO_X_API_KEY` / `AICO_X_API_SECRET` / `AICO_X_ACCESS_TOKEN` / `AICO_X_ACCESS_TOKEN_SECRET` | realne wartości X | wymagane, gdy social publish jest wymagany |
+| `AICO_CONTROLLED_LIVE_ENABLED` | `true` dla profilu kontrolowanego | nie włącza wydawania budżetu; pozwala tylko na kontrolowane provider preflight |
+| `AICO_ADMIN_RUN_NOW_ENABLED` | `true` po akceptacji operatora | używaj dopiero po target-env `GO` |
+| `AICO_ADS_PROVIDER_MODE` | `controlled` | pełna autonomia nie używa trybu `live` |
+| `AICO_ADS_TARGET_URL_PREFLIGHT_REQUIRED` | `true` | wymaga preflight docelowych URL-i reklam |
+| `AICO_META_ADS_ACCESS_TOKEN` / `AICO_META_AD_ACCOUNT_ID` | realne wartości Meta Ads | wymagane dla gotowości providera |
+| `AICO_GOOGLE_ADS_DEVELOPER_TOKEN` / `AICO_GOOGLE_ADS_CLIENT_ID` / `AICO_GOOGLE_ADS_CLIENT_SECRET` / `AICO_GOOGLE_ADS_REFRESH_TOKEN` / `AICO_GOOGLE_ADS_CUSTOMER_ID` | realne wartości Google Ads | wymagane dla gotowości providera |
+| `AICO_VIDEO_PROVIDER_MODE` | `replicate` | pełna autonomia wymaga kontrolowanego renderowania wideo |
+| `AICO_VIDEO_GEN_TOKEN` albo `REPLICATE_API_TOKEN` | realny sekret | wymagany dla Replicate |
+| `AICO_VIDEO_GEN_MODEL` | realny model | wymagany dla Replicate |
+| `GA4_PROPERTY_ID` | realny property ID | wymagany dla ingestu ruchu |
+| `AICO_GA4_ACCESS_TOKEN` albo `GA4_SERVICE_ACCOUNT_JSON` albo `GOOGLE_APPLICATION_CREDENTIALS` | realne credentials | wymagane dla gotowości GA4 |
 
-AICO audit nie blokuje deploya. Po deployu sprawdź zakładkę `Audit` w panelu Strapi ręcznie, gdy oceniasz gotowość automatyzacji contentu.
+Dla pełnej autonomii AICO audit i provider smoke są bramkami release, nie ręcznymi dodatkami po deployu. Uruchom predeploy z `RUN_AICO_OPENROUTER_SMOKE=true`, `RUN_AICO_POST_SEED_PREFLIGHT=true` i realnym env; `production-readiness=GO` jest wymagane, a `GO_WITH_WARNINGS` nadal blokuje release. OpenRouter smoke używa `AICO_OPENROUTER_TOKEN` albo `OPENROUTER_API_KEY`, ale nie loguje wartości sekretu.
 
 ### Observability
 
@@ -482,6 +511,7 @@ rtk env \
   RUN_FRONTEND_FULL=true \
   RUN_E2E=true \
   RUN_DOMAIN_AUDITS=true \
+  RUN_AICO_POST_SEED_PREFLIGHT=true \
   RUN_SECURITY_HEADERS=true \
   npm run ops:predeploy:staging
 ```

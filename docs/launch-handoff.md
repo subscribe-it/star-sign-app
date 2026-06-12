@@ -61,6 +61,7 @@ RUN_ENV_GUARD=true \
 RUN_FRONTEND_FULL=true \
 RUN_E2E=true \
 RUN_DOMAIN_AUDITS=true \
+RUN_AICO_POST_SEED_PREFLIGHT=true \
 RUN_SECURITY_HEADERS=true \
 FRONTEND_BASE_URL=https://star-sign.pl \
 API_BASE_URL=https://api.star-sign.pl/api \

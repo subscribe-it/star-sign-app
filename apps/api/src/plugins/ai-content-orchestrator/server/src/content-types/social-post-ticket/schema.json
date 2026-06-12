@@ -16,8 +16,13 @@
   "attributes": {
     "platform": {
       "type": "enumeration",
-      "enum": ["facebook", "instagram", "twitter", "tiktok"],
+      "enum": ["facebook", "instagram", "twitter", "tiktok", "youtube_shorts"],
       "required": true
+    },
+    "content_format": {
+      "type": "enumeration",
+      "enum": ["image", "video", "link", "story"],
+      "default": "link"
     },
     "status": {
       "type": "enumeration",
@@ -36,10 +41,21 @@
     "blocked_reason": { "type": "string" },
     "idempotency_key": { "type": "string", "unique": true },
     "provider_payload": { "type": "json", "private": true },
+    "utm_campaign": { "type": "string" },
     "workflow": {
       "type": "relation",
       "relation": "manyToOne",
       "target": "plugin::ai-content-orchestrator.workflow"
+    },
+    "video_asset": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.video-asset"
+    },
+    "experiment": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.growth-experiment"
     },
     "source_run": {
       "type": "relation",

@@ -98,11 +98,21 @@ const siteAlive = ({ strapi }: { strapi: Strapi }) => {
     async listPublic(input?: {
       status?: HomepageRecommendationRecord['status'];
       limit?: number;
+      now?: Date;
     }): Promise<PublicHomepageRecommendation[]> {
       const filters: Record<string, unknown> = {};
       if (input?.status) {
         filters.status = input.status;
       }
+      const nowIso = (input?.now ?? new Date()).toISOString();
+      filters.$and = [
+        {
+          $or: [{ starts_at: { $null: true } }, { starts_at: { $lte: nowIso } }],
+        },
+        {
+          $or: [{ expires_at: { $null: true } }, { expires_at: { $gte: nowIso } }],
+        },
+      ];
 
       const recommendations = await entityService.findMany<HomepageRecommendationRecord>(
         HOMEPAGE_RECOMMENDATION_UID,

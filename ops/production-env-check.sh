@@ -110,6 +110,23 @@ require_false() {
   fi
 }
 
+require_true() {
+  key="$1"
+  value="$(get_env "$key")"
+  if ! is_true "$value"; then
+    fail "$key" "must be true for this production mode"
+  fi
+}
+
+require_not_value() {
+  key="$1"
+  forbidden="$2"
+  value="$(printf '%s' "$(get_env "$key")" | tr '[:upper:]' '[:lower:]')"
+  if [ "$value" = "$forbidden" ]; then
+    fail "$key" "must not be $forbidden in this release"
+  fi
+}
+
 require_any_value() {
   first_key="$1"
   second_key="$2"
@@ -250,8 +267,86 @@ fi
 
 if is_true "$(get_env AICO_ENABLE_WORKFLOWS)"; then
   require_secret "AICO_OPENROUTER_TOKEN"
+  require_secret "AICO_AUDIT_IP_HASH_SALT" 16
+  require_false "AICO_RUNTIME_LOCKS_DISABLED"
+  require_false "AICO_SOCIAL_CONTENT_SAFETY_DISABLED"
+  require_not_value "AICO_ADS_PROVIDER_MODE" "live"
+  require_not_value "AICO_VIDEO_PROVIDER_MODE" "live"
 fi
 require_false "AICO_ALLOW_MISSING_TOKEN"
+
+if is_true "$(get_env AICO_STRICT_AUDIT_REQUIRED)"; then
+  require_true "AICO_AUDIT_TRAIL_STRICT"
+fi
+
+if is_true "$(get_env AICO_FULL_AUTONOMY_REQUIRED)"; then
+  require_true "AICO_ENABLE_WORKFLOWS"
+  require_true "AICO_AUDIT_TRAIL_STRICT"
+  require_true "AICO_STRICT_AUDIT_REQUIRED"
+  require_true "AICO_AUTO_PUBLISH_ENABLED"
+  require_true "AICO_STRATEGY_AUTOPILOT_ENABLED"
+  require_true "AICO_STRATEGY_AUTO_APPROVE_PLAN"
+  require_true "AICO_MEDIA_GEN_REQUIRED"
+  require_true "AICO_SOCIAL_PUBLISH_REQUIRED"
+  require_true "AICO_CONTROLLED_LIVE_ENABLED"
+  require_true "AICO_ADMIN_RUN_NOW_ENABLED"
+  require_value "AICO_ADS_PROVIDER_MODE"
+  if [ "$(get_env AICO_ADS_PROVIDER_MODE)" != "controlled" ]; then
+    fail "AICO_ADS_PROVIDER_MODE" "must be controlled when full autonomy is required"
+  fi
+  require_true "AICO_ADS_TARGET_URL_PREFLIGHT_REQUIRED"
+  require_value "AICO_VIDEO_PROVIDER_MODE"
+  if [ "$(get_env AICO_VIDEO_PROVIDER_MODE)" != "replicate" ]; then
+    fail "AICO_VIDEO_PROVIDER_MODE" "must be replicate when full autonomy is required"
+  fi
+  require_value "GA4_PROPERTY_ID"
+
+  ga4_access_token="$(get_env AICO_GA4_ACCESS_TOKEN)"
+  ga4_service_account_json="$(get_env GA4_SERVICE_ACCOUNT_JSON)"
+  google_application_credentials="$(get_env GOOGLE_APPLICATION_CREDENTIALS)"
+  if has_placeholder "$ga4_access_token" &&
+    has_placeholder "$ga4_service_account_json" &&
+    has_placeholder "$google_application_credentials"; then
+    fail "GA4_CREDENTIALS" "set AICO_GA4_ACCESS_TOKEN, GA4_SERVICE_ACCOUNT_JSON, or GOOGLE_APPLICATION_CREDENTIALS when full autonomy is required"
+  fi
+fi
+
+if [ "$(get_env AICO_VIDEO_PROVIDER_MODE)" = "replicate" ]; then
+  require_value "AICO_VIDEO_GEN_MODEL"
+  video_token="$(get_env AICO_VIDEO_GEN_TOKEN)"
+  replicate_token="$(get_env REPLICATE_API_TOKEN)"
+  if has_placeholder "$video_token" && has_placeholder "$replicate_token"; then
+    fail "AICO_VIDEO_GEN_TOKEN" "set AICO_VIDEO_GEN_TOKEN or REPLICATE_API_TOKEN when AICO_VIDEO_PROVIDER_MODE=replicate"
+  fi
+fi
+
+if [ "$(get_env AICO_ADS_PROVIDER_MODE)" = "controlled" ]; then
+  require_secret "AICO_META_ADS_ACCESS_TOKEN"
+  require_value "AICO_META_AD_ACCOUNT_ID"
+  require_secret "AICO_GOOGLE_ADS_DEVELOPER_TOKEN"
+  require_value "AICO_GOOGLE_ADS_CLIENT_ID"
+  require_secret "AICO_GOOGLE_ADS_CLIENT_SECRET"
+  require_secret "AICO_GOOGLE_ADS_REFRESH_TOKEN"
+  require_value "AICO_GOOGLE_ADS_CUSTOMER_ID"
+fi
+
+if is_true "$(get_env AICO_MEDIA_GEN_REQUIRED)"; then
+  require_secret "AICO_IMAGE_GEN_TOKEN"
+  require_value "AICO_IMAGE_GEN_MODEL"
+fi
+
+if is_true "$(get_env AICO_SOCIAL_PUBLISH_REQUIRED)"; then
+  require_https_url "AICO_PUBLIC_FRONTEND_URL"
+  require_https_url "AICO_SOCIAL_DEFAULT_IMAGE_URL"
+  require_value "AICO_FACEBOOK_PAGE_ID"
+  require_secret "AICO_FACEBOOK_ACCESS_TOKEN"
+  require_value "AICO_INSTAGRAM_USER_ID"
+  require_secret "AICO_INSTAGRAM_ACCESS_TOKEN"
+  require_value "AICO_X_API_KEY"
+  require_secret "AICO_X_API_SECRET"
+  require_secret "AICO_X_ACCESS_TOKEN"
+  require_secret "AICO_X_ACCESS_TOKEN_SECRET"
+fi
 
 if is_true "$(get_env SENTRY_REQUIRED)"; then
   require_value "SENTRY_DSN"

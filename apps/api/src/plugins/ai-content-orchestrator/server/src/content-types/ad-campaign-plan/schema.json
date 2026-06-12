@@ -1,0 +1,53 @@
+{
+  "kind": "collectionType",
+  "collectionName": "aico_ad_campaign_plans",
+  "info": {
+    "singularName": "ad-campaign-plan",
+    "pluralName": "ad-campaign-plans",
+    "displayName": "AICO Ad Campaign Plan"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": false }
+  },
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "platform": {
+      "type": "enumeration",
+      "enum": ["meta", "google"],
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["draft", "ready", "active", "paused", "blocked", "failed", "completed"],
+      "default": "draft",
+      "required": true
+    },
+    "objective": { "type": "string", "default": "traffic" },
+    "target_url": { "type": "string", "required": true },
+    "utm_campaign": { "type": "string" },
+    "daily_budget_pln": { "type": "decimal", "default": 0 },
+    "provider_campaign_id": { "type": "string" },
+    "provider_adset_id": { "type": "string" },
+    "provider_ad_id": { "type": "string" },
+    "creative_payload": { "type": "json" },
+    "targeting_payload": { "type": "json", "private": true },
+    "stop_loss_state": { "type": "json" },
+    "last_error": { "type": "text" },
+    "blocked_reason": { "type": "string" },
+    "metadata": { "type": "json" },
+    "workflow": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.workflow"
+    },
+    "experiment": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.growth-experiment"
+    }
+  }
+}

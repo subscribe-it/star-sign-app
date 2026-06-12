@@ -16,4 +16,19 @@ export const PERMISSIONS = {
   ],
   manageHomepage: [{ action: 'plugin::ai-content-orchestrator.manage-homepage', subject: null }],
   viewAuditTrail: [{ action: 'plugin::ai-content-orchestrator.view-audit-trail', subject: null }],
+  manageAutonomy: [{ action: 'plugin::ai-content-orchestrator.manage-autonomy', subject: null }],
+  manageAds: [{ action: 'plugin::ai-content-orchestrator.manage-ads', subject: null }],
+  activateAds: [{ action: 'plugin::ai-content-orchestrator.activate-ads', subject: null }],
+  pauseAds: [{ action: 'plugin::ai-content-orchestrator.pause-ads', subject: null }],
+  manageVideo: [{ action: 'plugin::ai-content-orchestrator.manage-video', subject: null }],
+  renderVideo: [{ action: 'plugin::ai-content-orchestrator.render-video', subject: null }],
+  viewTraffic: [{ action: 'plugin::ai-content-orchestrator.view-traffic', subject: null }],
+  importTraffic: [{ action: 'plugin::ai-content-orchestrator.import-traffic', subject: null }],
+  manageExperiments: [{ action: 'plugin::ai-content-orchestrator.manage-experiments', subject: null }],
+  viewProviderStatus: [
+    { action: 'plugin::ai-content-orchestrator.view-provider-status', subject: null },
+  ],
+  testProviderReadiness: [
+    { action: 'plugin::ai-content-orchestrator.test-provider-readiness', subject: null },
+  ],
 };

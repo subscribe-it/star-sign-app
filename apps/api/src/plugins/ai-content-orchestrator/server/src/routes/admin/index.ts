@@ -333,5 +333,189 @@ export default () => ({
         policies: withPermission(RBAC_ACTIONS.viewMediaUsage),
       },
     },
+    {
+      method: 'GET',
+      path: '/autonomy/status',
+      handler: 'autonomy.status',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAutonomy),
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/autonomy/policy',
+      handler: 'autonomy.updatePolicy',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAutonomy),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/autonomy/tick/dry-run',
+      handler: 'autonomy.dryRunTick',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAutonomy),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/autonomy/tick/run-now',
+      handler: 'autonomy.runNow',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAutonomy),
+      },
+    },
+    {
+      method: 'GET',
+      path: '/autonomy/production-readiness',
+      handler: 'autonomy.productionReadiness',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAutonomy),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/autonomy/production-readiness',
+      handler: 'autonomy.productionReadiness',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAutonomy),
+      },
+    },
+    {
+      method: 'GET',
+      path: '/generation/jobs',
+      handler: 'generation.listJobs',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAutonomy),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/generation/jobs/:id/retry',
+      handler: 'generation.retryJob',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAutonomy),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/generation/jobs/:id/cancel',
+      handler: 'generation.cancelJob',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAutonomy),
+      },
+    },
+    {
+      method: 'GET',
+      path: '/traffic/snapshots',
+      handler: 'traffic.snapshots',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.viewTraffic),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/traffic/import',
+      handler: 'traffic.import',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.importTraffic),
+      },
+    },
+    {
+      method: 'GET',
+      path: '/video/assets',
+      handler: 'video.assets',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageVideo),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/video/jobs',
+      handler: 'video.createJob',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageVideo),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/video/assets/:id/render',
+      handler: 'video.render',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.renderVideo),
+      },
+    },
+    {
+      method: 'GET',
+      path: '/ads/campaign-plans',
+      handler: 'ads.campaignPlans',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAds),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/ads/campaign-plans',
+      handler: 'ads.createCampaignPlan',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageAds),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/ads/campaign-plans/stop-loss',
+      handler: 'ads.pauseActive',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.pauseAds),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/ads/campaign-plans/:id/activate',
+      handler: 'ads.activate',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.activateAds),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/ads/campaign-plans/:id/pause',
+      handler: 'ads.pause',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.pauseAds),
+      },
+    },
+    {
+      method: 'GET',
+      path: '/experiments',
+      handler: 'experiments.list',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageExperiments),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/experiments/:id/choose-winner',
+      handler: 'experiments.chooseWinner',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageExperiments),
+      },
+    },
+    {
+      method: 'GET',
+      path: '/providers/status',
+      handler: 'providers.status',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.viewProviderStatus),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/providers/test-readiness',
+      handler: 'providers.testReadiness',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.testProviderReadiness),
+      },
+    },
   ],
 });

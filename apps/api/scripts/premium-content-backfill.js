@@ -1,24 +1,12 @@
-const fs = require('node:fs');
-const path = require('node:path');
 const aicoContract = require('../src/bootstrap/aico-content-contract.json');
+const {
+  resolveSqliteDatabaseFilename,
+} = require('./audit-sqlite');
+const { loadReleaseEnvFiles } = require('./release-env');
 
 const REQUIRED_SECTIONS = aicoContract.premium.sections;
 
-const loadEnv = (filePath) => {
-  if (!fs.existsSync(filePath)) return;
-
-  for (const line of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
-    const [key, ...rest] = trimmed.split('=');
-    if (!process.env[key]) {
-      process.env[key] = rest.join('=').replace(/^['"]|['"]$/g, '');
-    }
-  }
-};
-
-loadEnv(path.resolve(process.cwd(), '../../.env'));
-loadEnv(path.resolve(process.cwd(), '.env'));
+loadReleaseEnvFiles();
 
 const premiumContent = (label) => `${label}: Pełna interpretacja Premium.
 
@@ -201,10 +189,7 @@ const backfillPostgres = async () => {
 
 const backfillSqlite = () => {
   const Database = require('better-sqlite3');
-  const filename = path.resolve(
-    process.cwd(),
-    process.env.DATABASE_FILENAME || '.tmp/data.db',
-  );
+  const filename = resolveSqliteDatabaseFilename();
   const db = new Database(filename);
   try {
     const columns = (tableName) =>

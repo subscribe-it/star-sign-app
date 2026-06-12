@@ -23,7 +23,12 @@
         "daily_card",
         "blog_article",
         "zodiac_profile",
-        "fallback_general"
+        "fallback_general",
+        "short_video_frame",
+        "social_story",
+        "ad_creative",
+        "youtube_short",
+        "tiktok_video"
       ],
       "default": "blog_article"
     },
@@ -41,7 +46,7 @@
     "use_count": { "type": "integer", "default": 0 },
     "mapping_source": {
       "type": "enumeration",
-      "enum": ["manual", "suggestion", "bulk_suggestion", "seed"]
+      "enum": ["manual", "suggestion", "bulk_suggestion", "seed", "autonomous_agent"]
     },
     "mapping_confidence": { "type": "float" },
     "mapping_reasons": { "type": "json" },

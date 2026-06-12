@@ -50,11 +50,13 @@ import {
   type PolishContentKind,
 } from '../utils/polish-content-quality';
 import { getAicoPromptTemplate, renderAicoPromptTemplate } from '../utils/aico-contract';
+import { recordSystemAuditEvent } from '../utils/audit-trail';
 import {
   sanitizeLlmTraceForStorage,
   shouldStoreRawLlmTrace,
 } from '../utils/diagnostic-redaction';
 import { getPluginService } from '../utils/plugin';
+import { buildPublicFrontendUrl } from '../utils/public-url';
 import { slugify } from '../utils/slug';
 import type { SeoGuardrailReport } from './seo-guardrails';
 
@@ -180,6 +182,32 @@ type RuntimeLocksService = {
     input: { ttlMs?: number; metadata?: Record<string, unknown>; now?: Date },
     runner: () => Promise<T>
   ) => Promise<T | undefined>;
+};
+
+type AutonomyPolicyRuntimeService = {
+  getPolicy: () => Promise<{ autonomy_mode?: string; global_kill_switch?: boolean }>;
+  evaluate: (input: {
+    action: 'content.publish';
+    requiresBrandSafety?: boolean;
+    requiresLegalDisclaimer?: boolean;
+  }) => Promise<{ allowed: boolean; reason: string }>;
+};
+
+type GlobalAutonomyRuntimeBlock =
+  | { blocked: false }
+  | {
+      blocked: true;
+      reason: 'global_kill_switch' | 'autonomy_off' | 'policy_unavailable';
+    };
+
+type AdsAgentRuntimeService = {
+  pauseActiveForKillSwitch: (input: { reason: string; limit?: number }) => Promise<{
+    attempted: number;
+    paused: number;
+    blocked: number;
+    failed: number;
+    results?: Array<Record<string, unknown>>;
+  }>;
 };
 
 type PolishRepairValidator<TPayload> = (payload: unknown) => TPayload;
@@ -337,6 +365,10 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
   const strategyPlannerService = (): any => getPluginService<any>(strapi, 'strategy-planner');
   const runtimeLocksService = (): Partial<RuntimeLocksService> | undefined =>
     getPluginService<Partial<RuntimeLocksService> | undefined>(strapi, 'runtime-locks');
+  const autonomyPolicyService = (): Partial<AutonomyPolicyRuntimeService> | undefined =>
+    getPluginService<Partial<AutonomyPolicyRuntimeService> | undefined>(strapi, 'autonomy-policy');
+  const adsAgentService = (): Partial<AdsAgentRuntimeService> | undefined =>
+    getPluginService<Partial<AdsAgentRuntimeService> | undefined>(strapi, 'ads-agent');
   const seoGuardrailsService = (): SeoGuardrailsService =>
     getPluginService<SeoGuardrailsService>(strapi, 'seo-guardrails');
 
@@ -344,6 +376,13 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
     async tick(): Promise<void> {
       const now = new Date();
       const executeTick = async (): Promise<void> => {
+        const runtimeBlock = await this.getGlobalAutonomyRuntimeBlock();
+        if (runtimeBlock.blocked) {
+          if (runtimeBlock.reason !== 'policy_unavailable') {
+            await this.enforceAdsStopLossForRuntimeBlock(runtimeBlock.reason);
+          }
+          return;
+        }
         await this.processStrategyAutomationTick(now);
         await this.processGenerationTick(now);
         await this.processPublicationTick(now);
@@ -367,6 +406,67 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       }
 
       await executeTick();
+    },
+
+    async isGlobalAutonomyRuntimeBlocked(): Promise<boolean> {
+      return (await this.getGlobalAutonomyRuntimeBlock()).blocked;
+    },
+
+    async getGlobalAutonomyRuntimeBlock(): Promise<GlobalAutonomyRuntimeBlock> {
+      const service = autonomyPolicyService();
+      if (typeof service?.getPolicy !== 'function') {
+        return { blocked: false };
+      }
+
+      try {
+        const policy = await service.getPolicy();
+        if (policy.global_kill_switch) {
+          strapi.log.warn('[AICO] Global autonomy policy blocked orchestrator tick.');
+          return { blocked: true, reason: 'global_kill_switch' };
+        }
+        if (policy.autonomy_mode === 'off') {
+          strapi.log.warn('[AICO] Autonomy mode=off blocked orchestrator tick.');
+          return { blocked: true, reason: 'autonomy_off' };
+        }
+        return { blocked: false };
+      } catch (error) {
+        strapi.log.warn(
+          `[AICO] Global autonomy policy unavailable; blocking orchestrator tick: ${toSafeErrorMessage(error)}`
+        );
+        return { blocked: true, reason: 'policy_unavailable' };
+      }
+    },
+
+    async enforceAdsStopLossForRuntimeBlock(
+      reason: 'global_kill_switch' | 'autonomy_off'
+    ): Promise<void> {
+      const ads = adsAgentService();
+      if (typeof ads?.pauseActiveForKillSwitch !== 'function') {
+        await recordSystemAuditEvent(strapi, {
+          action: 'ads.stop-loss-sweep.skipped',
+          outcome: 'skipped',
+          severity: 'warn',
+          metadata: {
+            reason,
+            blockedReason: 'ads_agent_stop_loss_sweep_missing',
+          },
+        });
+        return;
+      }
+
+      const result = await ads.pauseActiveForKillSwitch({ reason });
+      await recordSystemAuditEvent(strapi, {
+        action: 'ads.stop-loss-sweep.runtime-block',
+        outcome: result.failed > 0 || result.blocked > 0 ? 'skipped' : 'success',
+        severity: result.failed > 0 || result.blocked > 0 ? 'warn' : 'info',
+        metadata: {
+          reason,
+          attempted: result.attempted,
+          paused: result.paused,
+          blocked: result.blocked,
+          failed: result.failed,
+        },
+      });
     },
 
     async processStrategyAutomationTick(now: Date): Promise<void> {
@@ -816,6 +916,85 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       );
 
       try {
+        const policy = autonomyPolicyService();
+        if (typeof policy?.evaluate === 'function') {
+          const decision = await policy.evaluate({
+            action: 'content.publish',
+            requiresBrandSafety: true,
+            requiresLegalDisclaimer: true,
+          });
+
+          if (!decision.allowed) {
+            const message = `Autonomy policy blocked content publish: ${decision.reason}`;
+            await recordSystemAuditEvent(strapi, {
+              action: 'content.publish.skipped',
+              outcome: 'skipped',
+              severity: 'warn',
+              resourceUid: ticket.content_uid,
+              resourceId: ticket.content_entry_id,
+              metadata: {
+                reason: decision.reason,
+                ticketId: ticket.id,
+                workflowId,
+              },
+            });
+            await entityService.update(PUBLICATION_TICKET_UID, ticket.id, {
+              data: {
+                retries: Number(ticket.retries ?? 0) + 1,
+                status: TICKET_STATUS.failed,
+                last_error: message,
+              },
+            });
+
+            if (workflow) {
+              await workflowsService().setStatus(workflow.id, WORKFLOW_STATUS.failed, message);
+            }
+
+            return 'failed';
+          }
+        } else if (process.env.AICO_FULL_AUTONOMY_REQUIRED === 'true') {
+          const message = 'Autonomy policy service missing for content publish.';
+          await recordSystemAuditEvent(strapi, {
+            action: 'content.publish.skipped',
+            outcome: 'skipped',
+            severity: 'error',
+            resourceUid: ticket.content_uid,
+            resourceId: ticket.content_entry_id,
+            metadata: {
+              reason: 'autonomy_policy_service_missing',
+              ticketId: ticket.id,
+              workflowId,
+            },
+          });
+          await entityService.update(PUBLICATION_TICKET_UID, ticket.id, {
+            data: {
+              retries: Number(ticket.retries ?? 0) + 1,
+              status: TICKET_STATUS.failed,
+              last_error: message,
+            },
+          });
+
+          if (workflow) {
+            await workflowsService().setStatus(
+              workflow.id,
+              WORKFLOW_STATUS.failed,
+              'autonomy_policy_service_missing'
+            );
+          }
+
+          return 'failed';
+        }
+
+        await recordSystemAuditEvent(strapi, {
+          action: 'content.publish.attempt',
+          outcome: 'success',
+          resourceUid: ticket.content_uid,
+          resourceId: ticket.content_entry_id,
+          metadata: {
+            ticketId: ticket.id,
+            workflowId,
+          },
+        });
         const entry = await entityService.findOne(ticket.content_uid, ticket.content_entry_id);
 
         if (!entry) {
@@ -1404,7 +1583,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           contentId: workflow.id,
           contentTitle: `Nowe horoskopy ${config.horoscopePeriod.toLowerCase()}e są już dostępne! ✦`,
           contentExcerpt: `Zajrzyj w gwiazdy i dowiedz się, co przyniesie najbliższy czas. Horoskopy ${config.horoscopePeriod.toLowerCase()}e dla wszystkich znaków zodiaku już na Star Sign.`,
-          targetUrl: `https://star-sign.app/horoskopy`,
+          targetUrl: buildPublicFrontendUrl('/horoskopy'),
           publishAt,
         });
       }
@@ -1541,7 +1720,9 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           contentId: upsertResult.articleId,
           contentTitle: payload.title,
           contentExcerpt: payload.excerpt,
-          targetUrl: `https://star-sign.app/artykuly/${payload.slug || `karta-dnia-${targetDate}`}`,
+          targetUrl: buildPublicFrontendUrl(
+            `/artykuly/${payload.slug || `karta-dnia-${targetDate}`}`
+          ),
           publishAt,
         });
       }
@@ -1822,7 +2003,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
             contentId: upsertResult.articleId,
             contentTitle: payload.title,
             contentExcerpt: payload.excerpt,
-            targetUrl: `https://star-sign.app/artykuly/${payload.slug}`,
+            targetUrl: buildPublicFrontendUrl(`/artykuly/${payload.slug}`),
             publishAt,
           });
           await onStep?.('social_teaser', 'success', 'Zapowiedź social media gotowa.');

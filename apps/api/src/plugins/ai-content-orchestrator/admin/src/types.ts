@@ -3,7 +3,14 @@ export type Workflow = {
   name: string;
   enabled: boolean;
   status: 'idle' | 'running' | 'failed' | 'blocked_budget';
-  workflow_type: 'horoscope' | 'daily_card' | 'article';
+  workflow_type:
+    | 'horoscope'
+    | 'daily_card'
+    | 'article'
+    | 'video_short'
+    | 'ad_campaign'
+    | 'homepage_curation'
+    | 'traffic_analysis';
   generate_cron: string;
   publish_cron: string;
   timezone: string;
@@ -47,7 +54,139 @@ export type Workflow = {
   last_published_at?: string | null;
 };
 
-export type SocialPlatform = 'facebook' | 'instagram' | 'twitter' | 'tiktok';
+export type SocialPlatform = 'facebook' | 'instagram' | 'twitter' | 'tiktok' | 'youtube_shorts';
+export type ProviderKey =
+  | 'openrouter'
+  | 'replicate'
+  | 'openai'
+  | 'facebook'
+  | 'instagram'
+  | 'twitter'
+  | 'tiktok'
+  | 'youtube'
+  | 'meta_ads'
+  | 'google_ads'
+  | 'ga4';
+
+export type ProviderReadiness = {
+  provider: ProviderKey;
+  status: 'unknown' | 'ready' | 'missing_credentials' | 'blocked' | 'failed';
+  ready: boolean;
+  hasCredentials: boolean;
+  scopes: string[];
+  requiredScopes: string[];
+  missingScopes: string[];
+  requiredFor: string[];
+  stale: boolean;
+  blockedReason?: string | null;
+  lastTestedAt?: string | null;
+  lastError?: Record<string, unknown> | null;
+};
+
+export type ProviderCredentialStatus = {
+  id: number;
+  provider: ProviderKey;
+  status: 'unknown' | 'ready' | 'missing_credentials' | 'blocked' | 'failed';
+  has_credentials?: boolean;
+  scopes?: string[] | null;
+  last_tested_at?: string | null;
+  blocked_reason?: string | null;
+  last_error?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type ProviderProbeResult = {
+  provider: ProviderKey;
+  status: 'ready' | 'missing_credentials' | 'blocked' | 'failed';
+  hasCredentials: boolean;
+  scopes: string[];
+  blockedReason?: string | null;
+  connectivity: 'skipped' | 'passed' | 'failed';
+  liveEffects: false;
+};
+
+export type ProviderProbeRunResult = {
+  includeConnectivity: boolean;
+  liveEffects: false;
+  results: ProviderProbeResult[];
+};
+
+export type ProductionReadinessCheck = {
+  id: string;
+  area: string;
+  status: 'pass' | 'warn' | 'fail';
+  message: string;
+  details?: Record<string, unknown>;
+};
+
+export type ProductionReadinessReport = {
+  decision: 'GO' | 'GO_WITH_WARNINGS' | 'NO_GO';
+  generatedAt: string;
+  fullAutonomyRequired: boolean;
+  liveEffectsAllowed: false;
+  checks: ProductionReadinessCheck[];
+  blockers: ProductionReadinessCheck[];
+  warnings: ProductionReadinessCheck[];
+  requiredProviders: ProviderKey[];
+};
+
+export type AutonomyStatus = {
+  policy: Record<string, unknown>;
+  counts: Record<string, unknown>;
+  providerReadiness: ProviderReadiness[];
+  dryRunPreview: Record<string, unknown>;
+};
+
+export type GenerationJob = {
+  id: number;
+  job_type: string;
+  status: string;
+  priority_score?: number;
+  idempotency_key?: string | null;
+  blocked_reason?: string | null;
+  last_error?: string | null;
+};
+
+export type VideoAsset = {
+  id: number;
+  title: string;
+  status: string;
+  duration_seconds?: number | null;
+  blocked_reason?: string | null;
+  last_error?: string | null;
+};
+
+export type AdCampaignPlan = {
+  id: number;
+  name: string;
+  platform: 'meta' | 'google';
+  status: string;
+  target_url: string;
+  daily_budget_pln?: number;
+  blocked_reason?: string | null;
+};
+
+export type AdStopLossSweepResult = {
+  reason: string;
+  attempted: number;
+  paused: number;
+  blocked: number;
+  failed: number;
+  results: Array<{
+    id: number;
+    status: string;
+    blockedReason?: string | null;
+    errorMessage?: string;
+  }>;
+};
+
+export type GrowthExperiment = {
+  id: number;
+  name: string;
+  experiment_type: string;
+  status: string;
+  winner_variant_key?: string | null;
+};
 
 export type SocialTicket = {
   id: number;

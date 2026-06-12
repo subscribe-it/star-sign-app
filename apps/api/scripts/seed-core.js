@@ -1,7 +1,10 @@
+const path = require('node:path');
+
 const { compileStrapi, createStrapi } = require('@strapi/strapi');
 const aicoContract = require('../src/bootstrap/aico-content-contract.json');
 
 const WARSAW_TIMEZONE = 'Europe/Warsaw';
+const APP_DIR = path.resolve(__dirname, '..');
 
 const SUPPORTED_MODES = ['dev', 'stg', 'prod'];
 
@@ -841,6 +844,37 @@ const toBoolean = (value, fallback = false) => {
   return fallback;
 };
 
+const toOptionalBoolean = (value) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (['true', '1', 'yes'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no'].includes(normalized)) {
+    return false;
+  }
+
+  return null;
+};
+
+const toOptionalInteger = (value) => {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(value.trim(), 10);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const isRecord = (value) =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const firstNonEmpty = (values) =>
+  values.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim() || '';
+
 const isShopEnabled = () => toBoolean(process.env.SHOP_ENABLED, false);
 
 const upsertOne = async (strapi, uid, where, data) => {
@@ -1317,6 +1351,8 @@ const getModeDefaults = (mode) => {
   };
 };
 
+const getAppDir = () => APP_DIR;
+
 const resolveOpenRouterToken = (mode) => {
   const upper = mode.toUpperCase();
 
@@ -1342,6 +1378,212 @@ const resolveOpenRouterModel = (mode) => {
     process.env.OPENROUTER_MODEL ||
     'openai/gpt-4.1-mini'
   );
+};
+
+const resolveImageGenToken = (mode) => {
+  const upper = mode.toUpperCase();
+
+  return firstNonEmpty([
+    process.env[`AICO_IMAGE_GEN_TOKEN_${upper}`],
+    process.env[`REPLICATE_API_TOKEN_${upper}`],
+    process.env.AICO_IMAGE_GEN_TOKEN,
+    process.env.REPLICATE_API_TOKEN,
+  ]);
+};
+
+const resolveConfiguredImageGenModel = (mode) => {
+  const upper = mode.toUpperCase();
+
+  return firstNonEmpty([
+    process.env[`AICO_IMAGE_GEN_MODEL_${upper}`],
+    process.env.AICO_IMAGE_GEN_MODEL,
+  ]);
+};
+
+const resolveImageGenModel = (mode) =>
+  resolveConfiguredImageGenModel(mode) || 'openai/gpt-image-2';
+
+const encryptSeedSecret = (strapi, value) => {
+  if (!value) {
+    return null;
+  }
+
+  return strapi.service('admin::encryption').encrypt(value);
+};
+
+const resolveModeEnv = (mode, names) => {
+  const upper = mode.toUpperCase();
+  const candidates = names.flatMap((name) => [
+    process.env[`${name}_${upper}`],
+    process.env[name],
+  ]);
+
+  return firstNonEmpty(candidates);
+};
+
+const parseSocialChannels = (value) => {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+
+  const allowed = new Set(['facebook', 'instagram', 'twitter', 'tiktok']);
+  const channels = value
+    .split(',')
+    .map((channel) => channel.trim().toLowerCase())
+    .filter((channel) => allowed.has(channel));
+
+  return channels.length > 0 ? Array.from(new Set(channels)) : null;
+};
+
+const buildAicoSettingsValue = (strapi, mode, currentSettings = {}) => {
+  const current = isRecord(currentSettings) ? currentSettings : {};
+  const imageGenToken = resolveImageGenToken(mode);
+  const imageGenModel =
+    resolveConfiguredImageGenModel(mode) ||
+    current.image_gen_model ||
+    resolveImageGenModel(mode);
+  const autoPublishEnabled = toOptionalBoolean(process.env.AICO_AUTO_PUBLISH_ENABLED);
+  const strategyAutopilotEnabled = toOptionalBoolean(
+    process.env.AICO_STRATEGY_AUTOPILOT_ENABLED,
+  );
+
+  const value = {
+    ...current,
+    timezone: WARSAW_TIMEZONE,
+    locale: 'pl',
+    image_gen_model: imageGenModel,
+  };
+
+  if (imageGenToken) {
+    value.image_gen_api_token_encrypted = encryptSeedSecret(strapi, imageGenToken);
+  }
+
+  if (autoPublishEnabled !== null) {
+    value.aico_auto_publish_enabled = autoPublishEnabled;
+  }
+
+  if (strategyAutopilotEnabled !== null) {
+    value.aico_strategy_autopilot_enabled = strategyAutopilotEnabled;
+  }
+
+  return {
+    value,
+    summary: {
+      imageGenModel,
+      imageGenTokenPresent: Boolean(imageGenToken || current.image_gen_api_token_encrypted),
+      autoPublishEnabled:
+        value.aico_auto_publish_enabled === undefined
+          ? true
+          : value.aico_auto_publish_enabled !== false,
+      strategyAutopilotEnabled: value.aico_strategy_autopilot_enabled === true,
+    },
+  };
+};
+
+const buildSocialCredentialSeedFields = (strapi, mode, existing = {}) => {
+  const current = isRecord(existing) ? existing : {};
+  const fbPageId = resolveModeEnv(mode, ['AICO_FACEBOOK_PAGE_ID', 'AICO_FB_PAGE_ID']);
+  const fbAccessToken = resolveModeEnv(mode, [
+    'AICO_FACEBOOK_ACCESS_TOKEN',
+    'AICO_FB_ACCESS_TOKEN',
+  ]);
+  const igUserId = resolveModeEnv(mode, ['AICO_INSTAGRAM_USER_ID', 'AICO_IG_USER_ID']);
+  const igAccessToken = resolveModeEnv(mode, [
+    'AICO_INSTAGRAM_ACCESS_TOKEN',
+    'AICO_IG_ACCESS_TOKEN',
+  ]);
+  const xApiKey = resolveModeEnv(mode, ['AICO_X_API_KEY', 'AICO_TWITTER_API_KEY']);
+  const xApiSecret = resolveModeEnv(mode, ['AICO_X_API_SECRET', 'AICO_TWITTER_API_SECRET']);
+  const xAccessToken = resolveModeEnv(mode, [
+    'AICO_X_ACCESS_TOKEN',
+    'AICO_TWITTER_ACCESS_TOKEN',
+  ]);
+  const xAccessTokenSecret = resolveModeEnv(mode, [
+    'AICO_X_ACCESS_TOKEN_SECRET',
+    'AICO_TWITTER_ACCESS_TOKEN_SECRET',
+  ]);
+  const enabledChannels = parseSocialChannels(process.env.AICO_SOCIAL_CHANNELS);
+
+  return {
+    ...(enabledChannels ? { enabled_channels: enabledChannels } : {}),
+    fb_page_id: fbPageId || current.fb_page_id || null,
+    fb_access_token_encrypted: fbAccessToken
+      ? encryptSeedSecret(strapi, fbAccessToken)
+      : current.fb_access_token_encrypted || null,
+    ig_user_id: igUserId || current.ig_user_id || null,
+    ig_access_token_encrypted: igAccessToken
+      ? encryptSeedSecret(strapi, igAccessToken)
+      : current.ig_access_token_encrypted || null,
+    x_api_key: xApiKey || current.x_api_key || null,
+    x_api_secret_encrypted: xApiSecret
+      ? encryptSeedSecret(strapi, xApiSecret)
+      : current.x_api_secret_encrypted || null,
+    x_access_token_encrypted: xAccessToken
+      ? encryptSeedSecret(strapi, xAccessToken)
+      : current.x_access_token_encrypted || null,
+    x_access_token_secret_encrypted: xAccessTokenSecret
+      ? encryptSeedSecret(strapi, xAccessTokenSecret)
+      : current.x_access_token_secret_encrypted || null,
+  };
+};
+
+const buildWorkflowAutomationSeedFields = (definition, existing = {}) => {
+  const current = isRecord(existing) ? existing : {};
+  const isArticleWorkflow = definition.workflow_type === 'article';
+  const strategyAutopilotEnabled = toOptionalBoolean(
+    process.env.AICO_STRATEGY_AUTOPILOT_ENABLED,
+  );
+  const strategyAutoApprove = toOptionalBoolean(process.env.AICO_STRATEGY_AUTO_APPROVE_PLAN);
+  const minTopicBacklog = toOptionalInteger(process.env.AICO_STRATEGY_MIN_TOPIC_BACKLOG);
+  const maxPlanItemsPerTick = toOptionalInteger(
+    process.env.AICO_STRATEGY_MAX_PLAN_ITEMS_PER_TICK,
+  );
+
+  if (!isArticleWorkflow) {
+    return {
+      strategy_enabled:
+        typeof current.strategy_enabled === 'boolean' ? current.strategy_enabled : false,
+      auto_publish_guardrails: isRecord(current.auto_publish_guardrails)
+        ? current.auto_publish_guardrails
+        : null,
+    };
+  }
+
+  const strategyEnabled =
+    strategyAutopilotEnabled !== null
+      ? strategyAutopilotEnabled
+      : current.strategy_enabled === true;
+  const currentGuardrails = isRecord(current.auto_publish_guardrails)
+    ? current.auto_publish_guardrails
+    : {};
+  const currentStrategy = isRecord(currentGuardrails.strategy)
+    ? currentGuardrails.strategy
+    : {};
+  const strategy = {
+    ...currentStrategy,
+    enabled: strategyEnabled,
+  };
+
+  if (strategyAutopilotEnabled !== null) {
+    strategy.autopilot_enabled = strategyAutopilotEnabled;
+  }
+  if (strategyAutoApprove !== null) {
+    strategy.auto_approve_plan = strategyAutoApprove;
+  }
+  if (minTopicBacklog !== null) {
+    strategy.min_topic_backlog = minTopicBacklog;
+  }
+  if (maxPlanItemsPerTick !== null) {
+    strategy.max_plan_items_per_tick = maxPlanItemsPerTick;
+  }
+
+  return {
+    strategy_enabled: strategyEnabled,
+    auto_publish_guardrails: {
+      ...currentGuardrails,
+      strategy,
+    },
+  };
 };
 
 const buildWorkflowDefinitions = ({
@@ -1385,19 +1627,20 @@ const buildWorkflowDefinitions = ({
   }));
 };
 
-const seedAicoSettings = async (strapi) => {
+const seedAicoSettings = async (strapi, mode) => {
   const store = strapi.store({
     type: 'plugin',
     name: 'ai-content-orchestrator',
     key: 'settings',
   });
+  const current = await store.get();
+  const settings = buildAicoSettingsValue(strapi, mode, current);
 
   await store.set({
-    value: {
-      timezone: WARSAW_TIMEZONE,
-      locale: 'pl',
-    },
+    value: settings.value,
   });
+
+  return settings.summary;
 };
 
 const seedAicoWorkflows = async (strapi, mode, categoriesByName) => {
@@ -1459,6 +1702,8 @@ const seedAicoWorkflows = async (strapi, mode, categoriesByName) => {
       { name: definition.name },
       {
         ...definition,
+        ...buildWorkflowAutomationSeedFields(definition, existing),
+        ...buildSocialCredentialSeedFields(strapi, mode, existing),
         llm_api_token_encrypted: tokenToPersist,
         enabled: tokenToPersist ? definition.enabled : false,
       },
@@ -1605,7 +1850,7 @@ const seedWithMode = async (mode) => {
 
   const defaults = getModeDefaults(mode);
 
-  const appContext = await compileStrapi({ appDir: process.cwd() });
+  const appContext = await compileStrapi({ appDir: getAppDir() });
   const app = await createStrapi(appContext).load();
 
   try {
@@ -1631,7 +1876,7 @@ const seedWithMode = async (mode) => {
     }
 
     await ensureReadPermissions(app);
-    await seedAicoSettings(app);
+    const settingsSeed = await seedAicoSettings(app, mode);
 
     const workflowSeed = await seedAicoWorkflows(app, mode, categories);
     const mediaAssetsSeeded = await seedAicoMediaAssets(app);
@@ -1650,6 +1895,16 @@ const seedWithMode = async (mode) => {
     console.log(`🔧 AICO model: ${workflowSeed.model}`);
     console.log(
       `🔐 AICO token ustawiony: ${workflowSeed.tokenPresent ? 'tak' : 'nie'}`,
+    );
+    console.log(`🎨 AICO Media Gen model: ${settingsSeed.imageGenModel}`);
+    console.log(
+      `🎨 AICO Media Gen token ustawiony: ${settingsSeed.imageGenTokenPresent ? 'tak' : 'nie'}`,
+    );
+    console.log(
+      `🚦 AICO auto-publish globalnie: ${settingsSeed.autoPublishEnabled ? 'tak' : 'nie'}`,
+    );
+    console.log(
+      `🧭 AICO strategy autopilot: ${settingsSeed.strategyAutopilotEnabled ? 'tak' : 'nie'}`,
     );
     console.log(`⚙️ AICO workflow enabled: ${workflowSeed.enabledCount}`);
     console.log(`🖼️ AICO media assets (placeholders): ${mediaAssetsSeeded}`);
@@ -1674,5 +1929,11 @@ const seedWithMode = async (mode) => {
 };
 
 module.exports = {
+  buildAicoSettingsValue,
+  buildSocialCredentialSeedFields,
+  buildWorkflowAutomationSeedFields,
+  getAppDir,
+  resolveImageGenModel,
+  resolveImageGenToken,
   seedWithMode,
 };

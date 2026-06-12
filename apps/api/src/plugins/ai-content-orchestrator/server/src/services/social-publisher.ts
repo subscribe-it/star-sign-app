@@ -7,7 +7,7 @@ import {
   SOCIAL_CHANNELS,
   SOCIAL_POST_TICKET_UID,
 } from '../constants';
-import type { SocialPlatform, SocialPostTicketRecord, Strapi, WorkflowRecord } from '../types';
+import type { ProviderKey, SocialPlatform, SocialPostTicketRecord, Strapi, WorkflowRecord } from '../types';
 import { toSafeErrorMessage } from '../utils/json';
 import { getAicoPromptTemplate, renderAicoPromptTemplate } from '../utils/aico-contract';
 import {
@@ -15,6 +15,7 @@ import {
   sanitizeSocialTicketForAdmin,
 } from '../utils/diagnostic-redaction';
 import { getPluginService } from '../utils/plugin';
+import { buildPublicFrontendUrl, getSocialDefaultImageUrl } from '../utils/public-url';
 import {
   evaluatePolishContentQuality,
   formatPolishContentQualityIssues,
@@ -26,8 +27,7 @@ const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
 const X_UPLOAD_MEDIA_URL = 'https://upload.twitter.com/1.1/media/upload.json';
 const X_STATUS_UPDATE_URL = 'https://api.twitter.com/1.1/statuses/update.json';
 const X_VERIFY_URL = 'https://api.twitter.com/1.1/account/verify_credentials.json';
-const DEFAULT_SOCIAL_IMAGE_URL =
-  process.env.AICO_SOCIAL_DEFAULT_IMAGE_URL || 'https://star-sign.app/assets/og-default.jpg';
+const DEFAULT_SOCIAL_IMAGE_URL = getSocialDefaultImageUrl();
 const MAX_TICKET_BATCH = 50;
 const DEFAULT_AUTONOMOUS_MAX_POSTS_PER_RUN = 12;
 const DEFAULT_PLATFORM_DAILY_CAPS: Record<SocialPlatform, number> = {
@@ -35,12 +35,14 @@ const DEFAULT_PLATFORM_DAILY_CAPS: Record<SocialPlatform, number> = {
   instagram: 4,
   twitter: 24,
   tiktok: 0,
+  youtube_shorts: 0,
 };
 const DEFAULT_PLATFORM_COOLDOWN_MINUTES: Record<SocialPlatform, number> = {
   facebook: 90,
   instagram: 180,
   twitter: 20,
   tiktok: 0,
+  youtube_shorts: 0,
 };
 const DEFAULT_CONTENT_SAFETY_BLOCKED_PHRASES = [
   'gwarantowany zysk',
@@ -55,9 +57,10 @@ const DEFAULT_CAPTION_LIMITS: Record<SocialPlatform, number> = {
   instagram: 2200,
   twitter: 280,
   tiktok: 0,
+  youtube_shorts: 0,
 };
 const DEFAULT_RUNTIME_SOCIAL_CHANNELS = SOCIAL_CHANNELS.filter(
-  (channel) => channel !== 'tiktok'
+  (channel) => channel !== 'tiktok' && channel !== 'youtube_shorts'
 ) as SocialPlatform[];
 
 type OpenRouterService = {
@@ -112,6 +115,37 @@ type ContentSafetyPolicy = {
   maxCaptionLengthByPlatform: Record<SocialPlatform, number>;
 };
 
+type SocialAutonomyPolicyService = {
+  evaluate: (input: {
+    action: 'social.publish';
+    requiresBrandSafety?: boolean;
+    requiresLegalDisclaimer?: boolean;
+  }) => Promise<{ allowed: boolean; reason: string }>;
+};
+
+type SocialProviderStatusService = {
+  checkProviders?: (input: {
+    action: 'social.publish';
+    providers?: ProviderKey[];
+  }) => Promise<{
+    ready: boolean;
+    requiredProviders: ProviderKey[];
+    blockedProviders: Array<{
+      provider: ProviderKey;
+      status: string;
+      blockedReason?: string | null;
+    }>;
+  }>;
+  upsert?: (input: {
+    provider: ProviderKey;
+    status: 'unknown' | 'ready' | 'missing_credentials' | 'blocked' | 'failed';
+    hasCredentials?: boolean;
+    scopes?: string[];
+    blockedReason?: string;
+    workflowId?: number;
+  }) => Promise<unknown>;
+};
+
 type AutonomousPublishRunState = {
   publishAttempts: number;
   publishedByPlatform: Map<SocialPlatform, number>;
@@ -138,6 +172,20 @@ class PublishGuardrailError extends Error {
 }
 
 const PLATFORM_SET = new Set<SocialPlatform>(SOCIAL_CHANNELS);
+const SOCIAL_PLATFORM_PROVIDER: Partial<Record<SocialPlatform, ProviderKey>> = {
+  facebook: 'facebook',
+  instagram: 'instagram',
+  twitter: 'twitter',
+  tiktok: 'tiktok',
+  youtube_shorts: 'youtube',
+};
+const SOCIAL_PROVIDER_SCOPES: Partial<Record<SocialPlatform, string[]>> = {
+  facebook: ['pages_manage_posts'],
+  instagram: ['instagram_content_publish'],
+  twitter: ['tweet.write'],
+  tiktok: ['video.publish'],
+  youtube_shorts: ['youtube.upload'],
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -1214,7 +1262,9 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
       const results: ChannelStatus[] = [];
 
       for (const channel of channels) {
-        results.push(await this.testChannelConnection(channel, workflow));
+        const result = await this.testChannelConnection(channel, workflow);
+        results.push(result);
+        await this.recordProviderConnectionStatus(channel, workflow.id, result);
       }
 
       const overall = results.some((item) => item.status === 'blocked')
@@ -1230,6 +1280,39 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
         overall,
         channels: results,
       };
+    },
+
+    async recordProviderConnectionStatus(
+      platform: SocialPlatform,
+      workflowId: number,
+      result: ChannelStatus
+    ): Promise<void> {
+      const provider = SOCIAL_PLATFORM_PROVIDER[platform];
+      const providerStatus = getPluginService<Partial<SocialProviderStatusService> | undefined>(
+        strapi,
+        'provider-status'
+      );
+      if (!provider || typeof providerStatus?.upsert !== 'function') {
+        return;
+      }
+
+      const status =
+        result.status === 'ready'
+          ? 'ready'
+          : result.status === 'needs_action'
+            ? 'missing_credentials'
+            : result.status === 'degraded'
+              ? 'blocked'
+              : 'failed';
+
+      await providerStatus.upsert({
+        provider,
+        status,
+        hasCredentials: result.status !== 'needs_action',
+        scopes: result.status === 'ready' ? SOCIAL_PROVIDER_SCOPES[platform] ?? [] : [],
+        blockedReason: result.status === 'ready' ? undefined : result.message,
+        workflowId,
+      });
     },
 
     async dryRunPublish(input: {
@@ -1251,7 +1334,7 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
       const channels = normalizeChannels(input.channels ?? workflow.enabled_channels);
 
       const baseCaption = String(input.caption ?? 'Przykładowy autopost Star Sign').trim();
-      const targetUrl = input.targetUrl?.trim() || 'https://star-sign.app';
+      const targetUrl = input.targetUrl?.trim() || buildPublicFrontendUrl('/');
       const mediaUrl = input.mediaUrl?.trim() || DEFAULT_SOCIAL_IMAGE_URL;
 
       const channelResults: Array<ChannelStatus & { renderedCaption: string }> = [];
@@ -1331,6 +1414,8 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
             blockedReason: 'unsupported_platform',
           });
         }
+
+        await this.assertRuntimePolicyAndProviderReadiness(platform);
 
         const mediaUrl = await this.resolveMediaUrlForTicket(ticket, workflow);
         const caption = composeCaptionForPlatform(
@@ -1416,6 +1501,79 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
         });
 
         return 'failed';
+      }
+    },
+
+    async assertRuntimePolicyAndProviderReadiness(platform: SocialPlatform): Promise<void> {
+      const policy = getPluginService<Partial<SocialAutonomyPolicyService> | undefined>(
+        strapi,
+        'autonomy-policy'
+      );
+      if (typeof policy?.evaluate === 'function') {
+        const decision = await policy.evaluate({
+          action: 'social.publish',
+          requiresBrandSafety: true,
+          requiresLegalDisclaimer: true,
+        });
+
+        if (!decision.allowed) {
+          throw new PublishGuardrailError('Autonomy policy zablokowała publikację social.', {
+            retryable: false,
+            blockedReason: decision.reason,
+            providerPayload: {
+              autonomyPolicy: {
+                decision: 'blocked',
+                reason: decision.reason,
+              },
+            },
+          });
+        }
+      }
+
+      const provider = SOCIAL_PLATFORM_PROVIDER[platform];
+      const providerStatus = getPluginService<Partial<SocialProviderStatusService> | undefined>(
+        strapi,
+        'provider-status'
+      );
+      if (!provider) {
+        return;
+      }
+
+      if (typeof providerStatus?.checkProviders !== 'function') {
+        if (process.env.AICO_FULL_AUTONOMY_REQUIRED === 'true') {
+          throw new PublishGuardrailError('Provider readiness service is unavailable.', {
+            retryable: false,
+            blockedReason: 'provider_readiness_service_missing',
+            providerPayload: {
+              providerReadiness: {
+                decision: 'blocked',
+                reason: 'provider_readiness_service_missing',
+                requiredProviders: [provider],
+              },
+            },
+          });
+        }
+
+        return;
+      }
+
+      const readiness = await providerStatus.checkProviders({
+        action: 'social.publish',
+        providers: [provider],
+      });
+
+      if (!readiness.ready) {
+        throw new PublishGuardrailError('Provider readiness zablokował publikację social.', {
+          retryable: false,
+          blockedReason: 'provider_readiness_blocked',
+          providerPayload: {
+            providerReadiness: {
+              decision: 'blocked',
+              requiredProviders: readiness.requiredProviders,
+              blockedProviders: readiness.blockedProviders,
+            },
+          },
+        });
       }
     },
 

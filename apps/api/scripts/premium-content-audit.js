@@ -1,9 +1,8 @@
-const fs = require('node:fs');
-const path = require('node:path');
 const aicoContract = require('../src/bootstrap/aico-content-contract.json');
 const {
   resolveSqliteDatabaseFilename,
 } = require('./audit-sqlite');
+const { loadReleaseEnvFiles } = require('./release-env');
 
 const REQUIRED_SECTIONS = aicoContract.premium.sections;
 
@@ -13,21 +12,7 @@ const MINIMUMS = {
   article: 350,
 };
 
-const loadEnv = (filePath) => {
-  if (!fs.existsSync(filePath)) return;
-
-  for (const line of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
-    const [key, ...rest] = trimmed.split('=');
-    if (!process.env[key]) {
-      process.env[key] = rest.join('=').replace(/^['"]|['"]$/g, '');
-    }
-  }
-};
-
-loadEnv(path.resolve(process.cwd(), '../../.env'));
-loadEnv(path.resolve(process.cwd(), '.env'));
+loadReleaseEnvFiles();
 
 const stripMarkup = (value) =>
   String(value || '')

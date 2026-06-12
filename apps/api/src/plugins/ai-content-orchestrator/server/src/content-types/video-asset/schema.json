@@ -1,0 +1,58 @@
+{
+  "kind": "collectionType",
+  "collectionName": "aico_video_assets",
+  "info": {
+    "singularName": "video-asset",
+    "pluralName": "video-assets",
+    "displayName": "AICO Video Asset"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": { "visible": true },
+    "content-type-builder": { "visible": true }
+  },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "status": {
+      "type": "enumeration",
+      "enum": ["queued", "storyboard", "rendering", "qc_passed", "uploaded", "scheduled", "failed", "canceled"],
+      "default": "queued",
+      "required": true
+    },
+    "script": { "type": "text" },
+    "storyboard": { "type": "json" },
+    "text_overlay": { "type": "json" },
+    "subtitles": { "type": "text" },
+    "provider": { "type": "string" },
+    "provider_job_id": { "type": "string" },
+    "provider_payload": { "type": "json", "private": true },
+    "aspect_ratio": { "type": "string", "default": "9:16" },
+    "duration_seconds": { "type": "integer", "default": 30 },
+    "platform_variants": { "type": "json" },
+    "blocked_reason": { "type": "string" },
+    "last_error": { "type": "text" },
+    "metadata": { "type": "json" },
+    "asset": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["videos"]
+    },
+    "cover_asset": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "workflow": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.workflow"
+    },
+    "generation_job": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.generation-job"
+    }
+  }
+}

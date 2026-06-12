@@ -16,6 +16,8 @@
     "premium-content-backfill": "node scripts/premium-content-backfill.js",
     "premium-content-audit": "node scripts/premium-content-audit.js",
     "aico-contract-audit": "node scripts/aico-contract-audit.js",
+    "aico-openrouter-smoke": "node scripts/aico-openrouter-smoke.js",
+    "aico-post-seed-preflight": "node scripts/aico-post-seed-preflight.js",
     "start": "strapi start",
     "strapi": "strapi",
     "upgrade": "npx @strapi/upgrade latest",

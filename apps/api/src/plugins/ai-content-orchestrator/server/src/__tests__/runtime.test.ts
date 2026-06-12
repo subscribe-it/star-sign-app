@@ -1,12 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   PLUGIN_ID,
   PUBLICATION_TICKET_UID,
   RUN_LOG_UID,
   RUN_STATUS,
+  TICKET_STATUS,
   TOPIC_QUEUE_UID,
   WORKFLOW_UID,
+  WORKFLOW_STATUS,
   HOROSCOPE_PERIODS,
   CONTENT_PLAN_ITEM_UID,
   CONTENT_PERFORMANCE_SNAPSHOT_UID,
@@ -14,23 +20,39 @@ import {
   SOCIAL_POST_TICKET_UID,
   AUDIT_EVENT_UID,
   RUNTIME_LOCK_UID,
+  AUTONOMY_POLICY_UID,
+  AD_CAMPAIGN_PLAN_UID,
+  GENERATION_JOB_UID,
+  VIDEO_ASSET_UID,
+  PROVIDER_CREDENTIAL_STATUS_UID,
+  TRAFFIC_SNAPSHOT_UID,
 } from '../constants';
 import orchestrator from '../services/orchestrator';
+import adsAgent from '../services/ads-agent';
+import adsProviderAdapter from '../services/ads-provider-adapter';
 import auditTrail from '../services/audit-trail';
+import autopilot from '../services/autopilot';
+import autonomyPolicy from '../services/autonomy-policy';
 import performanceFeedback from '../services/performance-feedback';
 import runtimeLocks from '../services/runtime-locks';
 import runsService from '../services/runs';
 import mediaAssets from '../services/media-assets';
+import generationJobs from '../services/generation-jobs';
+import videoAgent from '../services/video-agent';
 import seoGuardrails from '../services/seo-guardrails';
 import siteAlive from '../services/site-alive';
 import socialPublisher from '../services/social-publisher';
 import strategyPlanner from '../services/strategy-planner';
+import trafficIngestor from '../services/traffic-ingestor';
 import topics from '../services/topics';
+import videoProviderAdapter from '../services/video-provider-adapter';
 import workflows from '../services/workflows';
 import audit from '../services/audit';
 import dashboard from '../services/dashboard';
 import type { Strapi } from '../types';
 import socialPostTicketSchema from '../content-types/social-post-ticket/schema.json';
+import adCampaignPlanSchema from '../content-types/ad-campaign-plan/schema.json';
+import providerCredentialStatusSchema from '../content-types/provider-credential-status/schema.json';
 import { formatDateInZone } from '../utils/date-time';
 import {
   redactProviderPayload,
@@ -38,8 +60,16 @@ import {
 } from '../utils/diagnostic-redaction';
 import { suggestMediaMapping } from '../utils/media-mapping';
 import { PREMIUM_CONTENT_RETRY_MAX } from '../utils/premium-quality';
-import { getAicoPromptTemplate } from '../utils/aico-contract';
+import {
+  getAicoPromptTemplate,
+  resolveAicoContentContractPath,
+} from '../utils/aico-contract';
 import { evaluatePolishContentQuality } from '../utils/polish-content-quality';
+import {
+  buildPublicFrontendUrl,
+  getPublicFrontendUrl,
+  getSocialDefaultImageUrl,
+} from '../utils/public-url';
 import { slugify } from '../utils/slug';
 import adminRoutesFactory from '../routes/admin';
 import settingsController from '../controllers/settings';
@@ -48,7 +78,14 @@ import strategyController from '../controllers/strategy';
 import mediaAssetsController from '../controllers/media-assets';
 import runsController from '../controllers/runs';
 import homepageController from '../controllers/homepage';
+import adsController from '../controllers/ads';
+import autonomyController from '../controllers/autonomy';
+import trafficController from '../controllers/traffic';
+import providersController from '../controllers/providers';
 import openRouter from '../services/open-router';
+import providerProbe from '../services/provider-probe';
+import providerStatus from '../services/provider-status';
+import productionReadiness from '../services/production-readiness';
 import bootstrap, { resolveEditorRolePermissionActions, syncEditorRolePermissions } from '../bootstrap';
 
 const createStrapi = (
@@ -119,6 +156,27 @@ const createCtx = (input: {
   }) as any;
 
 describe('ai-content-orchestrator runtime', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('resolves the runtime AICO contract independently from current working directory', () => {
+    const originalCwd = process.cwd();
+    const directory = mkdtempSync(join(tmpdir(), 'aico-runtime-contract-cwd-'));
+
+    try {
+      process.chdir(directory);
+
+      const contractPath = resolveAicoContentContractPath();
+
+      expect(contractPath).toMatch(/apps\/api\/src\/bootstrap\/aico-content-contract\.json$/);
+      expect(getAicoPromptTemplate('socialTeaser')).toContain('valid JSON');
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('uses the shared AICO contract for yearly horoscope and helper prompts', () => {
     expect(HOROSCOPE_PERIODS).toContain('Roczny');
     expect(getAicoPromptTemplate('socialTeaser')).toContain('valid JSON');
@@ -189,6 +247,40 @@ describe('ai-content-orchestrator runtime', () => {
     });
 
     expect(report).toEqual({ valid: true, issues: [] });
+  });
+
+  it('builds canonical production social URLs by default', () => {
+    vi.stubEnv('AICO_PUBLIC_FRONTEND_URL', '');
+    vi.stubEnv('FRONTEND_URL', '');
+    vi.stubEnv('PUBLIC_FRONTEND_URL', '');
+    vi.stubEnv('AICO_SOCIAL_DEFAULT_IMAGE_URL', '');
+
+    expect(getPublicFrontendUrl()).toBe('https://star-sign.pl');
+    expect(buildPublicFrontendUrl('/horoskopy')).toBe('https://star-sign.pl/horoskopy');
+    expect(getSocialDefaultImageUrl()).toBe('https://star-sign.pl/assets/og-default.png');
+  });
+
+  it('uses explicit public frontend and social image URL overrides', () => {
+    vi.stubEnv('FRONTEND_URL', 'https://example.com/');
+    vi.stubEnv('AICO_SOCIAL_DEFAULT_IMAGE_URL', 'https://cdn.example.com/og.jpg');
+
+    expect(getPublicFrontendUrl()).toBe('https://example.com');
+    expect(buildPublicFrontendUrl('artykuly/test')).toBe('https://example.com/artykuly/test');
+    expect(getSocialDefaultImageUrl()).toBe('https://cdn.example.com/og.jpg');
+  });
+
+  it('prefers AICO public frontend URL and falls back from invalid values', () => {
+    vi.stubEnv('AICO_PUBLIC_FRONTEND_URL', 'https://star-sign.pl/');
+    vi.stubEnv('FRONTEND_URL', 'https://example.com');
+
+    expect(getPublicFrontendUrl()).toBe('https://star-sign.pl');
+
+    vi.stubEnv('AICO_PUBLIC_FRONTEND_URL', 'ftp://invalid.example.com');
+    vi.stubEnv('FRONTEND_URL', '');
+    vi.stubEnv('PUBLIC_FRONTEND_URL', '');
+
+    expect(getPublicFrontendUrl()).toBe('https://star-sign.pl');
+    expect(buildPublicFrontendUrl('/horoskopy')).not.toContain('star-sign.app');
   });
 
   it('repairs article payloads before the Polish style gate fails the run', async () => {
@@ -437,13 +529,30 @@ describe('ai-content-orchestrator runtime', () => {
       ]),
     };
     const service = siteAlive({ strapi: createStrapi({}, entityService) });
+    const now = new Date('2026-05-05T12:00:00.000Z');
 
-    const result = await service.listPublic({ status: 'active', limit: 50 });
+    const result = await service.listPublic({ status: 'active', limit: 50, now });
 
     expect(entityService.findMany).toHaveBeenCalledWith(
       'plugin::ai-content-orchestrator.homepage-recommendation',
       expect.objectContaining({
-        filters: { status: 'active' },
+        filters: {
+          status: 'active',
+          $and: [
+            {
+              $or: [
+                { starts_at: { $null: true } },
+                { starts_at: { $lte: now.toISOString() } },
+              ],
+            },
+            {
+              $or: [
+                { expires_at: { $null: true } },
+                { expires_at: { $gte: now.toISOString() } },
+              ],
+            },
+          ],
+        },
         fields: [
           'slot',
           'title',
@@ -602,6 +711,164 @@ describe('ai-content-orchestrator runtime', () => {
           },
         }),
       ])
+    );
+  });
+
+  it('admin traffic import and provider probe routes require write/probe permissions', () => {
+    const routes = adminRoutesFactory().routes;
+    const trafficSnapshots = routes.find((route) => route.method === 'GET' && route.path === '/traffic/snapshots');
+    const trafficImport = routes.find((route) => route.method === 'POST' && route.path === '/traffic/import');
+    const providerStatus = routes.find((route) => route.method === 'GET' && route.path === '/providers/status');
+    const providerProbeRoute = routes.find(
+      (route) => route.method === 'POST' && route.path === '/providers/test-readiness'
+    );
+    const videoRenderRoute = routes.find(
+      (route) => route.method === 'POST' && route.path === '/video/assets/:id/render'
+    );
+    const adsActivateRoute = routes.find(
+      (route) => route.method === 'POST' && route.path === '/ads/campaign-plans/:id/activate'
+    );
+    const adsStopLossRoute = routes.find(
+      (route) => route.method === 'POST' && route.path === '/ads/campaign-plans/stop-loss'
+    );
+    const adsPauseRoute = routes.find(
+      (route) => route.method === 'POST' && route.path === '/ads/campaign-plans/:id/pause'
+    );
+
+    expect(trafficSnapshots?.config?.policies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          config: { actions: ['plugin::ai-content-orchestrator.view-traffic'] },
+        }),
+      ])
+    );
+    expect(trafficImport?.config?.policies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          config: { actions: ['plugin::ai-content-orchestrator.import-traffic'] },
+        }),
+      ])
+    );
+    expect(providerStatus?.config?.policies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          config: { actions: ['plugin::ai-content-orchestrator.view-provider-status'] },
+        }),
+      ])
+    );
+    expect(providerProbeRoute?.config?.policies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          config: { actions: ['plugin::ai-content-orchestrator.test-provider-readiness'] },
+        }),
+      ])
+    );
+    expect(videoRenderRoute?.config?.policies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          config: { actions: ['plugin::ai-content-orchestrator.render-video'] },
+        }),
+      ])
+    );
+    expect(adsActivateRoute?.config?.policies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          config: { actions: ['plugin::ai-content-orchestrator.activate-ads'] },
+        }),
+      ])
+    );
+    expect(adsPauseRoute?.config?.policies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          config: { actions: ['plugin::ai-content-orchestrator.pause-ads'] },
+        }),
+      ])
+    );
+    expect(adsStopLossRoute?.config?.policies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          config: { actions: ['plugin::ai-content-orchestrator.pause-ads'] },
+        }),
+      ])
+    );
+  });
+
+  it('hides ads plans and provider readiness records from direct Content Manager editing', () => {
+    expect(adCampaignPlanSchema.pluginOptions).toMatchObject({
+      'content-manager': { visible: false },
+      'content-type-builder': { visible: false },
+    });
+    expect(providerCredentialStatusSchema.pluginOptions).toMatchObject({
+      'content-manager': { visible: false },
+      'content-type-builder': { visible: false },
+    });
+  });
+
+  it('manual ads stop-loss controller requires confirmation and audits the sweep', async () => {
+    const pauseActiveForKillSwitch = vi.fn(async () => ({
+      reason: 'manual_admin_stop_loss',
+      attempted: 2,
+      paused: 1,
+      blocked: 1,
+      failed: 0,
+      results: [],
+    }));
+    const auditService = { recordFromContext: vi.fn(async () => ({ id: 1 })) };
+    const service = adsController({
+      strapi: createStrapi(
+        {
+          'ads-agent': { pauseActiveForKillSwitch },
+          'audit-trail': auditService,
+        },
+        {}
+      ),
+    });
+
+    const blockedCtx = createCtx({ body: { confirmation: 'WRONG' } });
+    await service.pauseActive(blockedCtx);
+
+    expect(blockedCtx.badRequest).toHaveBeenCalledWith('Wymagane potwierdzenie PAUSE_ACTIVE_ADS.');
+    expect(pauseActiveForKillSwitch).not.toHaveBeenCalled();
+    expect(auditService.recordFromContext).toHaveBeenCalledWith(
+      blockedCtx,
+      expect.objectContaining({
+        action: 'ads.campaign-plan.stop-loss',
+        outcome: 'skipped',
+        severity: 'warn',
+        metadata: expect.objectContaining({
+          reason: 'confirmation_required',
+          requiredConfirmation: 'PAUSE_ACTIVE_ADS',
+        }),
+      })
+    );
+
+    const confirmedCtx = createCtx({ body: { confirmation: 'PAUSE_ACTIVE_ADS' } });
+    await service.pauseActive(confirmedCtx);
+
+    expect(pauseActiveForKillSwitch).toHaveBeenCalledWith({
+      reason: 'manual_admin_stop_loss',
+    });
+    expect(confirmedCtx.body.data).toMatchObject({
+      reason: 'manual_admin_stop_loss',
+      attempted: 2,
+      paused: 1,
+      blocked: 1,
+      failed: 0,
+    });
+    expect(auditService.recordFromContext).toHaveBeenCalledWith(
+      confirmedCtx,
+      expect.objectContaining({
+        action: 'ads.campaign-plan.stop-loss',
+        outcome: 'skipped',
+        severity: 'warn',
+        metadata: expect.objectContaining({
+          reason: 'manual_admin_stop_loss',
+          attempted: 2,
+          paused: 1,
+          blocked: 1,
+          failed: 0,
+        }),
+      })
     );
   });
 
@@ -1149,6 +1416,95 @@ describe('ai-content-orchestrator runtime', () => {
         status: RUN_STATUS.failed,
         details: expect.objectContaining({ published: 0, rescheduled: 1, failed: 0, tickets: 1 }),
       })
+    );
+  });
+
+  it('blocks content publication through autonomy policy before mutating the target entry', async () => {
+    const now = new Date('2026-04-28T10:00:00.000Z');
+    const updates: Array<{ uid: string; id: number; payload: unknown }> = [];
+    const setStatus = vi.fn();
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 404,
+        publishedAt: null,
+      })),
+      update: vi.fn(async (uid: string, id: number, payload: unknown) => {
+        updates.push({ uid, id, payload });
+        return {};
+      }),
+    };
+    const policy = {
+      evaluate: vi.fn(async () => ({
+        allowed: false,
+        reason: 'auto_publish_daily_cap_reached',
+      })),
+    };
+    const auditRecord = vi.fn(async () => ({ id: 1 }));
+    const strapi = createStrapi(
+      {
+        workflows: {
+          getById: vi.fn(async () => ({ id: 7, retry_max: 3, retry_backoff_seconds: 15 })),
+          markPublishSlot: vi.fn(),
+          setStatus,
+        },
+        'autonomy-policy': policy,
+        'audit-trail': { record: auditRecord },
+      },
+      entityService
+    );
+
+    const result = await orchestrator({ strapi }).publishTicket(
+      {
+        id: 1,
+        status: 'scheduled',
+        business_key: 'article:404:publish',
+        content_uid: 'api::article.article',
+        content_entry_id: 404,
+        target_publish_at: now.toISOString(),
+        retries: 0,
+        workflow: { id: 7 },
+      },
+      now
+    );
+
+    expect(result).toBe('failed');
+    expect(policy.evaluate).toHaveBeenCalledWith({
+      action: 'content.publish',
+      requiresBrandSafety: true,
+      requiresLegalDisclaimer: true,
+    });
+    expect(auditRecord).toHaveBeenCalledWith({
+      action: 'content.publish.skipped',
+      outcome: 'skipped',
+      severity: 'warn',
+      actor: { actorType: 'system' },
+      resourceUid: 'api::article.article',
+      resourceId: 404,
+      metadata: {
+        reason: 'auto_publish_daily_cap_reached',
+        ticketId: 1,
+        workflowId: 7,
+      },
+    });
+    expect(entityService.findOne).not.toHaveBeenCalled();
+    expect(updates).toEqual([
+      {
+        uid: PUBLICATION_TICKET_UID,
+        id: 1,
+        payload: {
+          data: {
+            retries: 1,
+            status: TICKET_STATUS.failed,
+            last_error:
+              'Autonomy policy blocked content publish: auto_publish_daily_cap_reached',
+          },
+        },
+      },
+    ]);
+    expect(setStatus).toHaveBeenCalledWith(
+      7,
+      WORKFLOW_STATUS.failed,
+      'Autonomy policy blocked content publish: auto_publish_daily_cap_reached'
     );
   });
 
@@ -2044,6 +2400,57 @@ describe('ai-content-orchestrator runtime', () => {
     expect(runAutopilot).not.toHaveBeenCalled();
   });
 
+  it('orchestrator tick stops generation, publication and social when global autonomy kill switch is enabled', async () => {
+    const calls: string[] = [];
+    const runAutopilot = vi.fn(async () => {
+      calls.push('strategy');
+    });
+    const publishPending = vi.fn(async () => {
+      calls.push('social');
+    });
+    const pauseActiveForKillSwitch = vi.fn(async () => ({
+      attempted: 2,
+      paused: 2,
+      blocked: 0,
+      failed: 0,
+    }));
+    const strapi = createStrapi(
+      {
+        'autonomy-policy': {
+          getPolicy: vi.fn(async () => ({
+            autonomy_mode: 'full',
+            global_kill_switch: true,
+          })),
+        },
+        'ads-agent': { pauseActiveForKillSwitch },
+        'strategy-planner': { runAutopilot },
+        'social-publisher': { publishPending },
+      },
+      {}
+    );
+    (strapi as any).store = vi.fn(() => ({
+      get: vi.fn(async () => ({
+        aico_auto_publish_enabled: true,
+        aico_strategy_autopilot_enabled: true,
+      })),
+    }));
+
+    const api = orchestrator({ strapi });
+    api.processGenerationTick = vi.fn(async () => {
+      calls.push('generation');
+    });
+    api.processPublicationTick = vi.fn(async () => {
+      calls.push('publication');
+    });
+
+    await api.tick();
+
+    expect(calls).toEqual([]);
+    expect(pauseActiveForKillSwitch).toHaveBeenCalledWith({ reason: 'global_kill_switch' });
+    expect(runAutopilot).not.toHaveBeenCalled();
+    expect(publishPending).not.toHaveBeenCalled();
+  });
+
   it('orchestrator tick uses runtime lock when the service is available', async () => {
     const calls: string[] = [];
     const withLock = vi.fn(async (_key: string, _input: unknown, runner: () => Promise<void>) => {
@@ -2463,5 +2870,3255 @@ describe('ai-content-orchestrator runtime', () => {
       sign_slug: 'baran',
       asset_key: 'zodiac-profile-baran-01',
     });
+  });
+
+  it('blocks all autonomy actions when the global kill switch is enabled', async () => {
+    const entityService = {
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === AUTONOMY_POLICY_UID) {
+          return [
+            {
+              id: 1,
+              policy_key: 'global',
+              autonomy_mode: 'full',
+              global_kill_switch: true,
+              daily_ads_budget_pln: 25,
+            },
+          ];
+        }
+        return [];
+      }),
+      count: vi.fn(async () => 0),
+      create: vi.fn(),
+    };
+
+    const service = autonomyPolicy({ strapi: createStrapi({}, entityService) });
+    const decision = await service.evaluate({
+      action: 'ads.mutate',
+      platform: 'meta',
+      estimatedCostPln: 10,
+      requiresBrandSafety: true,
+      requiresLegalDisclaimer: true,
+    });
+
+    expect(decision).toMatchObject({
+      allowed: false,
+      reason: 'global_kill_switch_or_off_mode',
+      mode: 'full',
+    });
+  });
+
+  it('blocks ad campaign plans that would exceed the 25 PLN daily cap', async () => {
+    const entityService = {
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === AUTONOMY_POLICY_UID) {
+          return [
+            {
+              id: 1,
+              policy_key: 'global',
+              autonomy_mode: 'full',
+              global_kill_switch: false,
+              daily_ads_budget_pln: 25,
+              daily_meta_ads_budget_pln: 15,
+              daily_google_ads_budget_pln: 10,
+              max_ads_mutations_per_day: 10,
+            },
+          ];
+        }
+        if (uid === AD_CAMPAIGN_PLAN_UID) {
+          return [{ daily_budget_pln: 20 }];
+        }
+        return [];
+      }),
+      count: vi.fn(async () => 0),
+      create: vi.fn(),
+    };
+    const strapi = createStrapi({}, entityService);
+    const policy = autonomyPolicy({ strapi });
+
+    const result = await adsAgent({
+      strapi: createStrapi({ 'autonomy-policy': policy }, entityService),
+    }).createPlan({
+      name: 'Meta test',
+      platform: 'meta',
+      targetUrl: 'https://star-sign.pl/premium',
+      dailyBudgetPln: 15,
+    });
+
+    expect(result).toMatchObject({
+      allowed: false,
+      reason: 'ads_budget_cap_exceeded',
+    });
+    expect(entityService.create).not.toHaveBeenCalledWith(
+      AD_CAMPAIGN_PLAN_UID,
+      expect.anything()
+    );
+  });
+
+  it('enforces declared daily autonomy limits for llm, media, video and auto-publish actions', async () => {
+    const entityService = {
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === AUTONOMY_POLICY_UID) {
+          return [
+            {
+              id: 1,
+              policy_key: 'global',
+              autonomy_mode: 'full',
+              global_kill_switch: false,
+              daily_llm_request_limit: 2,
+              daily_media_job_limit: 1,
+              daily_video_job_limit: 1,
+              max_auto_publish_per_day: 1,
+            },
+          ];
+        }
+        return [];
+      }),
+      count: vi.fn(async (uid: string, query?: { filters?: Record<string, unknown> }) => {
+        if (uid === GENERATION_JOB_UID) {
+          const jobType = query?.filters?.job_type;
+          if (typeof jobType === 'object' && jobType && '$in' in jobType) return 2;
+          if (jobType === 'image') return 1;
+          if (jobType === 'video') return 1;
+          return 4;
+        }
+        if (uid === PUBLICATION_TICKET_UID) return 1;
+        return 0;
+      }),
+      create: vi.fn(),
+    };
+    const service = autonomyPolicy({ strapi: createStrapi({}, entityService) });
+
+    await expect(
+      service.evaluate({
+        action: 'llm.generate',
+        requiresBrandSafety: true,
+        requiresLegalDisclaimer: true,
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'llm_daily_cap_reached' });
+    await expect(
+      service.evaluate({ action: 'media.generate', requiresBrandSafety: true })
+    ).resolves.toMatchObject({ allowed: false, reason: 'media_daily_cap_reached' });
+    await expect(
+      service.evaluate({
+        action: 'video.generate',
+        requiresBrandSafety: true,
+        requiresLegalDisclaimer: true,
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'video_daily_cap_reached' });
+    await expect(
+      service.evaluate({
+        action: 'content.publish',
+        requiresBrandSafety: true,
+        requiresLegalDisclaimer: true,
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'auto_publish_daily_cap_reached' });
+  });
+
+  it('records a redacted admin audit event when creating an ad campaign plan', async () => {
+    const entityService = {
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === AUTONOMY_POLICY_UID) {
+          return [
+            {
+              id: 1,
+              policy_key: 'global',
+              autonomy_mode: 'full',
+              global_kill_switch: false,
+              daily_ads_budget_pln: 25,
+              daily_meta_ads_budget_pln: 15,
+              max_ads_mutations_per_day: 10,
+            },
+          ];
+        }
+        return [];
+      }),
+      count: vi.fn(async () => 0),
+      create: vi.fn(async (uid: string, input: { data: Record<string, unknown> }) => {
+        if (uid === AD_CAMPAIGN_PLAN_UID) {
+          return {
+            id: 77,
+            ...input.data,
+          };
+        }
+        return { id: 1, ...input.data };
+      }),
+    };
+    const strapi = createStrapi({}, entityService);
+    const policy = autonomyPolicy({ strapi });
+    const auditService = { recordFromContext: vi.fn(async () => ({ id: 1 })) };
+    const ctx = createCtx({
+      body: {
+        name: 'Meta smoke',
+        platform: 'meta',
+        targetUrl: 'https://star-sign.pl/premium?utm_source=aico-test',
+        dailyBudgetPln: 10,
+      },
+    });
+
+    await adsController({
+      strapi: createStrapi(
+        {
+          'ads-agent': adsAgent({
+            strapi: createStrapi({ 'autonomy-policy': policy }, entityService),
+          }),
+          'audit-trail': auditService,
+        },
+        entityService
+      ),
+    }).createCampaignPlan(ctx);
+
+    expect(ctx.badRequest).not.toHaveBeenCalled();
+    expect(ctx.body.data.plan.id).toBe(77);
+    expect(auditService.recordFromContext).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({
+        action: 'ads.campaign-plan.create',
+        outcome: 'success',
+        resourceId: 77,
+        metadata: expect.objectContaining({
+          platform: 'meta',
+          requestedBudgetPln: 10,
+          allowed: true,
+        }),
+      })
+    );
+    const auditCalls = auditService.recordFromContext.mock.calls as unknown as Array<
+      [unknown, { metadata?: Record<string, unknown> }]
+    >;
+    const auditInput = auditCalls[0]?.[1];
+    expect(auditInput).toBeDefined();
+    expect(JSON.stringify(auditInput?.metadata)).not.toContain('secret-provider-token');
+  });
+
+  it('exposes provider readiness in autonomy status and blocks dry-run steps for missing providers', async () => {
+    const recentProviderTestedAt = new Date().toISOString();
+    const entityService = {
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === AUTONOMY_POLICY_UID) {
+          return [
+            {
+              id: 1,
+              policy_key: 'global',
+              autonomy_mode: 'full',
+              global_kill_switch: false,
+              daily_ads_budget_pln: 25,
+              daily_meta_ads_budget_pln: 15,
+              daily_google_ads_budget_pln: 10,
+            },
+          ];
+        }
+        if (uid === PROVIDER_CREDENTIAL_STATUS_UID) {
+          return [
+            {
+              id: 11,
+              provider: 'meta_ads',
+              status: 'failed',
+              has_credentials: true,
+              blocked_reason: 'policy_review_required',
+              last_error: 'Bearer secret-provider-token was rejected',
+              last_tested_at: recentProviderTestedAt,
+              scopes: ['ads_management'],
+            },
+            {
+              id: 10,
+              provider: 'openrouter',
+              status: 'ready',
+              has_credentials: true,
+              last_tested_at: recentProviderTestedAt,
+              scopes: ['chat.completions'],
+            },
+          ];
+        }
+        return [];
+      }),
+      count: vi.fn(async () => 0),
+      create: vi.fn(),
+    };
+    const strapi = createStrapi({}, entityService);
+    const providers = providerStatus({ strapi });
+    const policy = autonomyPolicy({ strapi });
+    const traffic = trafficIngestor({ strapi });
+    const auditService = { record: vi.fn() };
+    const services = {
+      'autonomy-policy': policy,
+      'traffic-ingestor': traffic,
+      'strategy-planner': {},
+      'provider-status': providers,
+      'audit-trail': auditService,
+    };
+    const ctx = createCtx();
+
+    await autonomyController({
+      strapi: createStrapi(
+        {
+          ...services,
+          autopilot: autopilot({ strapi: createStrapi(services, entityService) }),
+        },
+        entityService
+      ),
+    }).status(ctx);
+
+    expect(ctx.badRequest).not.toHaveBeenCalled();
+    expect(ctx.body.data.providerReadiness).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ provider: 'openrouter', ready: true }),
+        expect.objectContaining({
+          provider: 'replicate',
+          ready: false,
+          status: 'missing_credentials',
+        }),
+        expect.objectContaining({
+          provider: 'meta_ads',
+          ready: false,
+          blockedReason: 'policy_review_required',
+          lastError: expect.objectContaining({ lastError: '[REDACTED]' }),
+        }),
+      ])
+    );
+
+    const creativeStep = ctx.body.data.dryRunPreview.steps.find(
+      (step: { id: string }) => step.id === 'creative-agent'
+    );
+    const metaAdsStep = ctx.body.data.dryRunPreview.steps.find(
+      (step: { id: string }) => step.id === 'ads-agent-meta'
+    );
+
+    expect(creativeStep).toMatchObject({
+      status: 'blocked',
+      reason: 'provider_readiness_blocked',
+      output: {
+        requiredProviders: ['replicate'],
+        blockedProviders: [expect.objectContaining({ provider: 'replicate' })],
+      },
+    });
+    expect(metaAdsStep).toMatchObject({
+      status: 'blocked',
+      reason: 'provider_readiness_blocked',
+      output: {
+        requiredProviders: ['meta_ads'],
+        blockedProviders: [expect.objectContaining({ provider: 'meta_ads' })],
+      },
+    });
+    expect(JSON.stringify(ctx.body)).not.toContain('secret-provider-token');
+  });
+
+  it('blocks provider readiness for stale tests or missing scopes and maps ad platforms', async () => {
+    vi.stubEnv('AICO_PROVIDER_READINESS_MAX_AGE_HOURS', '1');
+    const recentProviderTestedAt = new Date().toISOString();
+    const staleProviderTestedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const entityService = {
+      findMany: vi.fn(async (uid: string) => {
+        if (uid !== PROVIDER_CREDENTIAL_STATUS_UID) return [];
+
+        return [
+          {
+            id: 1,
+            provider: 'openrouter',
+            status: 'ready',
+            has_credentials: true,
+            last_tested_at: recentProviderTestedAt,
+            scopes: [],
+          },
+          {
+            id: 2,
+            provider: 'facebook',
+            status: 'ready',
+            has_credentials: true,
+            last_tested_at: staleProviderTestedAt,
+            scopes: ['pages_manage_posts'],
+          },
+          {
+            id: 3,
+            provider: 'meta_ads',
+            status: 'ready',
+            has_credentials: true,
+            last_tested_at: recentProviderTestedAt,
+            scopes: ['ads_management'],
+          },
+        ];
+      }),
+    };
+    const service = providerStatus({ strapi: createStrapi({}, entityService) });
+
+    const matrix = await service.getReadinessMatrix();
+    expect(matrix).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: 'openrouter',
+          ready: false,
+          missingScopes: ['chat.completions'],
+          blockedReason: 'missing_provider_scopes',
+        }),
+        expect.objectContaining({
+          provider: 'facebook',
+          ready: false,
+          stale: true,
+          blockedReason: 'provider_readiness_stale',
+        }),
+      ])
+    );
+    await expect(service.checkProviders({ action: 'ads.mutate', platform: 'meta' })).resolves.toMatchObject({
+      ready: true,
+      requiredProviders: ['meta_ads'],
+      blockedProviders: [],
+    });
+    await expect(service.checkProviders({ action: 'ads.mutate', platform: 'google' })).resolves.toMatchObject({
+      ready: false,
+      requiredProviders: ['google_ads'],
+      blockedProviders: [expect.objectContaining({ provider: 'google_ads' })],
+    });
+  });
+
+  it('runs provider preflight probes and upserts readiness without exposing secrets', async () => {
+    vi.stubEnv('AICO_OPENROUTER_TOKEN', 'secret-openrouter-token');
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+    const service = providerProbe({
+      strapi: createStrapi(
+        {
+          'provider-status': { upsert },
+        },
+        {}
+      ),
+    });
+
+    const result = await service.testProviders({
+      providers: ['openrouter', 'google_ads'],
+      includeConnectivity: false,
+    });
+
+    expect(result).toMatchObject({
+      includeConnectivity: false,
+      liveEffects: false,
+      results: [
+        {
+          provider: 'openrouter',
+          status: 'blocked',
+          hasCredentials: true,
+          scopes: ['chat.completions'],
+          blockedReason: 'connectivity_probe_required',
+          connectivity: 'skipped',
+          liveEffects: false,
+        },
+        {
+          provider: 'google_ads',
+          status: 'missing_credentials',
+          hasCredentials: false,
+          scopes: [],
+          blockedReason: 'missing_credentials',
+          connectivity: 'skipped',
+          liveEffects: false,
+        },
+      ],
+    });
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'openrouter',
+        status: 'blocked',
+        hasCredentials: true,
+        scopes: ['chat.completions'],
+        blockedReason: 'connectivity_probe_required',
+      })
+    );
+    expect(JSON.stringify(result)).not.toContain('secret-openrouter-token');
+    expect(JSON.stringify(upsert.mock.calls)).not.toContain('secret-openrouter-token');
+  });
+
+  it('marks configured ad providers ready only for controlled no-spend preflight', async () => {
+    vi.stubEnv('AICO_META_ADS_ACCESS_TOKEN', 'secret-meta-ads-token');
+    vi.stubEnv('AICO_META_AD_ACCOUNT_ID', 'act_123456789');
+    vi.stubEnv('AICO_GOOGLE_ADS_DEVELOPER_TOKEN', 'secret-google-developer-token');
+    vi.stubEnv('AICO_GOOGLE_ADS_CLIENT_ID', 'secret-google-client-id');
+    vi.stubEnv('AICO_GOOGLE_ADS_CLIENT_SECRET', 'secret-google-client-secret');
+    vi.stubEnv('AICO_GOOGLE_ADS_REFRESH_TOKEN', 'secret-google-refresh-token');
+    vi.stubEnv('AICO_GOOGLE_ADS_CUSTOMER_ID', '1234567890');
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'controlled');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', 'true');
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+    const service = providerProbe({
+      strapi: createStrapi(
+        {
+          'provider-status': { upsert },
+        },
+        {}
+      ),
+    });
+
+    const result = await service.testProviders({
+      providers: ['meta_ads', 'google_ads'],
+      includeConnectivity: false,
+    });
+
+    expect(result).toMatchObject({
+      includeConnectivity: false,
+      liveEffects: false,
+      results: [
+        {
+          provider: 'meta_ads',
+          status: 'ready',
+          hasCredentials: true,
+          scopes: ['ads_management'],
+          connectivity: 'skipped',
+          liveEffects: false,
+          metadata: {
+            providerMode: 'controlled',
+            controlledLiveEnabled: true,
+            controlledExternalMutation: false,
+            liveSpendEnabled: false,
+            liveEffects: false,
+          },
+        },
+        {
+          provider: 'google_ads',
+          status: 'ready',
+          hasCredentials: true,
+          scopes: ['adwords'],
+          connectivity: 'skipped',
+          liveEffects: false,
+          metadata: {
+            providerMode: 'controlled',
+            controlledLiveEnabled: true,
+            controlledExternalMutation: false,
+            liveSpendEnabled: false,
+            liveEffects: false,
+          },
+        },
+      ],
+    });
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'meta_ads',
+        status: 'ready',
+        blockedReason: undefined,
+        metadata: expect.objectContaining({
+          providerMode: 'controlled',
+          controlledExternalMutation: false,
+          liveSpendEnabled: false,
+        }),
+      })
+    );
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'google_ads',
+        status: 'ready',
+        blockedReason: undefined,
+        metadata: expect.objectContaining({
+          providerMode: 'controlled',
+          controlledExternalMutation: false,
+          liveSpendEnabled: false,
+        }),
+      })
+    );
+    expect(JSON.stringify(result)).not.toContain('secret-meta-ads-token');
+    expect(JSON.stringify(upsert.mock.calls)).not.toContain('secret-google-refresh-token');
+
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'live');
+    const liveResult = await service.testProvider('meta_ads', { includeConnectivity: false });
+
+    expect(liveResult).toMatchObject({
+      provider: 'meta_ads',
+      status: 'blocked',
+      hasCredentials: true,
+      scopes: ['ads_management'],
+      blockedReason: 'meta_ads_sandbox_or_live_smoke_required',
+      connectivity: 'skipped',
+      liveEffects: false,
+    });
+  });
+
+  it('recognizes GA4 credential modes consistently in provider readiness probes', async () => {
+    vi.stubEnv('GA4_PROPERTY_ID', '123456');
+    vi.stubEnv(
+      'GA4_SERVICE_ACCOUNT_JSON',
+      '{"client_email":"ga4-reader@example.iam.gserviceaccount.com","private_key":"secret-private-key"}'
+    );
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+
+    const result = await providerProbe({
+      strapi: createStrapi(
+        {
+          'provider-status': { upsert },
+        },
+        {}
+      ),
+    }).testProvider('ga4', { includeConnectivity: false });
+
+    expect(result).toMatchObject({
+      provider: 'ga4',
+      status: 'blocked',
+      hasCredentials: true,
+      scopes: ['analytics.readonly'],
+      blockedReason: 'ga4_data_api_probe_required',
+      connectivity: 'skipped',
+      liveEffects: false,
+    });
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'ga4',
+        status: 'blocked',
+        hasCredentials: true,
+        scopes: ['analytics.readonly'],
+      })
+    );
+    expect(JSON.stringify(result)).not.toContain('secret-private-key');
+    expect(JSON.stringify(upsert.mock.calls)).not.toContain('secret-private-key');
+  });
+
+  it('marks read-only provider connectivity probes as ready only after a successful response', async () => {
+    vi.stubEnv('AICO_OPENROUTER_TOKEN', 'secret-openrouter-token');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+      }))
+    );
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+
+    try {
+      const result = await providerProbe({
+        strapi: createStrapi(
+          {
+            'provider-status': { upsert },
+          },
+          {}
+        ),
+      }).testProvider('openrouter', { includeConnectivity: true });
+
+      expect(fetch).toHaveBeenCalledWith(
+        'https://openrouter.ai/api/v1/models',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer secret-openrouter-token',
+          }),
+        })
+      );
+      expect(result).toMatchObject({
+        provider: 'openrouter',
+        status: 'ready',
+        hasCredentials: true,
+        scopes: ['chat.completions'],
+        connectivity: 'passed',
+        liveEffects: false,
+      });
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'openrouter',
+          status: 'ready',
+          blockedReason: undefined,
+          lastError: undefined,
+        })
+      );
+      expect(JSON.stringify(result)).not.toContain('secret-openrouter-token');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('imports GA4 traffic in dry-run mode without database writes or secret exposure', async () => {
+    vi.stubEnv('GA4_PROPERTY_ID', '123456');
+    vi.stubEnv('AICO_GA4_ACCESS_TOKEN', 'secret-ga4-access-token');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          rowCount: 1,
+          totals: [
+            {
+              metricValues: [
+                { value: '42' },
+                { value: '21' },
+                { value: '90' },
+                { value: '3' },
+                { value: '12.5' },
+              ],
+            },
+          ],
+          rows: [
+            {
+              dimensionValues: [{ value: '/horoskop/dzienny' }],
+              metricValues: [
+                { value: '30' },
+                { value: '15' },
+                { value: '60' },
+                { value: '2' },
+                { value: '10' },
+              ],
+            },
+          ],
+        }),
+      }))
+    );
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+    const entityService = {
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      count: vi.fn(),
+    };
+
+    try {
+      const result = await trafficIngestor({
+        strapi: createStrapi({ 'provider-status': { upsert } }, entityService),
+      }).importGa4({ day: '2026-06-06', dryRun: true });
+
+      expect(fetch).toHaveBeenCalledWith(
+        'https://analyticsdata.googleapis.com/v1beta/properties/123456:runReport',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer secret-ga4-access-token',
+          }),
+          body: expect.stringContaining('screenPageViews'),
+        })
+      );
+      expect(result).toMatchObject({
+        dryRun: true,
+        uniqueKey: 'ga4:123456:2026-06-06',
+        metrics: {
+          views: 42,
+          sessions: 21,
+          ad_conversions: 3,
+          revenue_or_value: 12.5,
+        },
+        provider: {
+          source: 'ga4',
+          propertyId: '123456',
+          credentialType: 'access_token',
+          liveEffects: false,
+        },
+      });
+      expect(result.topContent).toMatchObject({
+        source: 'ga4',
+        rows: [expect.objectContaining({ path: '/horoskop/dzienny', views: 30 })],
+      });
+      expect(entityService.create).not.toHaveBeenCalled();
+      expect(entityService.update).not.toHaveBeenCalled();
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'ga4',
+          status: 'ready',
+          hasCredentials: true,
+          scopes: ['analytics.readonly'],
+        })
+      );
+      expect(JSON.stringify(result)).not.toContain('secret-ga4-access-token');
+      expect(JSON.stringify(upsert.mock.calls)).not.toContain('secret-ga4-access-token');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('persists GA4 traffic snapshots with top content and idempotent unique keys', async () => {
+    vi.stubEnv('GA4_PROPERTY_ID', '123456');
+    vi.stubEnv('AICO_GA4_ACCESS_TOKEN', 'secret-ga4-access-token');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          rows: [
+            {
+              dimensionValues: [{ value: '/blog/merkury' }],
+              metricValues: [
+                { value: '8' },
+                { value: '4' },
+                { value: '12' },
+                { value: '1' },
+                { value: '0' },
+              ],
+            },
+          ],
+        }),
+      }))
+    );
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+    const entityService = {
+      findMany: vi.fn(async () => []),
+      create: vi.fn(async (_uid: string, input: { data: Record<string, unknown> }) => ({
+        id: 50,
+        ...input.data,
+      })),
+    };
+
+    try {
+      const result = await trafficIngestor({
+        strapi: createStrapi({ 'provider-status': { upsert } }, entityService),
+      }).importGa4({ day: '2026-06-06' });
+
+      expect(result.dryRun).toBe(false);
+      expect(entityService.findMany).toHaveBeenCalledWith(
+        TRAFFIC_SNAPSHOT_UID,
+        expect.objectContaining({
+          filters: { unique_key: 'ga4:123456:2026-06-06' },
+        })
+      );
+      expect(entityService.create).toHaveBeenCalledWith(
+        TRAFFIC_SNAPSHOT_UID,
+        expect.objectContaining({
+          data: expect.objectContaining({
+            unique_key: 'ga4:123456:2026-06-06',
+            snapshot_day: '2026-06-06',
+            source: 'ga4',
+            views: 8,
+            sessions: 4,
+            ad_conversions: 1,
+            top_content: expect.objectContaining({
+              rows: [expect.objectContaining({ path: '/blog/merkury' })],
+            }),
+            metadata: expect.objectContaining({
+              importedBy: 'traffic-ingestor',
+              provider: expect.objectContaining({
+                credentialType: 'access_token',
+                liveEffects: false,
+              }),
+            }),
+          }),
+        })
+      );
+      expect(JSON.stringify(result)).not.toContain('secret-ga4-access-token');
+      expect(JSON.stringify(entityService.create.mock.calls)).not.toContain('secret-ga4-access-token');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('updates existing GA4 traffic snapshots instead of creating duplicates', async () => {
+    vi.stubEnv('GA4_PROPERTY_ID', '123456');
+    vi.stubEnv('AICO_GA4_ACCESS_TOKEN', 'secret-ga4-access-token');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          totals: [
+            {
+              metricValues: [
+                { value: '9' },
+                { value: '5' },
+                { value: '20' },
+                { value: '2' },
+                { value: '1.5' },
+              ],
+            },
+          ],
+          rows: [
+            {
+              dimensionValues: [{ value: '/weekly' }],
+              metricValues: [
+                { value: '9' },
+                { value: '5' },
+                { value: '20' },
+                { value: '2' },
+                { value: '1.5' },
+              ],
+            },
+          ],
+        }),
+      }))
+    );
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+    const entityService = {
+      findMany: vi.fn(async () => [{ id: 77, unique_key: 'ga4:123456:2026-06-06' }]),
+      update: vi.fn(async (_uid: string, id: number, input: { data: Record<string, unknown> }) => ({
+        id,
+        ...input.data,
+      })),
+      create: vi.fn(),
+    };
+
+    try {
+      const result = await trafficIngestor({
+        strapi: createStrapi({ 'provider-status': { upsert } }, entityService),
+      }).importGa4({ day: '2026-06-06' });
+
+      expect(entityService.update).toHaveBeenCalledWith(
+        TRAFFIC_SNAPSHOT_UID,
+        77,
+        expect.objectContaining({
+          data: expect.objectContaining({
+            unique_key: 'ga4:123456:2026-06-06',
+            views: 9,
+            sessions: 5,
+            ad_conversions: 2,
+            top_content: expect.objectContaining({
+              rows: [expect.objectContaining({ path: '/weekly', views: 9 })],
+            }),
+          }),
+        })
+      );
+      expect(entityService.create).not.toHaveBeenCalled();
+      expect(result.snapshot).toMatchObject({ id: 77, views: 9 });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('marks GA4 readiness as missing credentials when import cannot authenticate', async () => {
+    vi.stubEnv('GA4_PROPERTY_ID', '123456');
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+
+    await expect(
+      trafficIngestor({
+        strapi: createStrapi({ 'provider-status': { upsert } }, {}),
+      }).importGa4({ day: '2026-06-06', dryRun: true })
+    ).rejects.toThrow('ga4_missing_credentials');
+
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'ga4',
+        status: 'missing_credentials',
+        hasCredentials: false,
+        blockedReason: 'ga4_missing_credentials',
+        lastError: 'ga4_missing_credentials',
+      })
+    );
+  });
+
+  it('marks GA4 readiness as missing credentials when property id is absent', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+
+    try {
+      await expect(
+        trafficIngestor({
+          strapi: createStrapi({ 'provider-status': { upsert } }, {}),
+        }).importGa4({ day: '2026-06-06', dryRun: true })
+      ).rejects.toThrow('ga4_missing_property_id');
+
+      expect(fetch).not.toHaveBeenCalled();
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'ga4',
+          status: 'missing_credentials',
+          hasCredentials: false,
+          blockedReason: 'ga4_missing_property_id',
+          lastError: 'ga4_missing_property_id',
+        })
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects invalid GA4 property ids and snapshot days before external calls', async () => {
+    vi.stubEnv('GA4_PROPERTY_ID', 'properties/123456');
+    vi.stubEnv('AICO_GA4_ACCESS_TOKEN', 'secret-ga4-access-token');
+    vi.stubGlobal('fetch', vi.fn());
+
+    try {
+      await expect(
+        trafficIngestor({
+          strapi: createStrapi({ 'provider-status': { upsert: vi.fn() } }, {}),
+        }).importGa4({ day: '2026-06-06', dryRun: true })
+      ).rejects.toThrow('ga4_invalid_property_id');
+      expect(fetch).not.toHaveBeenCalled();
+
+      vi.stubEnv('GA4_PROPERTY_ID', '123456');
+      await expect(
+        trafficIngestor({
+          strapi: createStrapi({ 'provider-status': { upsert: vi.fn() } }, {}),
+        }).importGa4({ day: 'not-a-day', dryRun: true })
+      ).rejects.toThrow('invalid_traffic_snapshot_day');
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('marks GA4 readiness as failed when the Data API rejects the report request', async () => {
+    vi.stubEnv('GA4_PROPERTY_ID', '123456');
+    vi.stubEnv('AICO_GA4_ACCESS_TOKEN', 'secret-ga4-access-token');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 403,
+        json: async () => ({ error: { status: 'PERMISSION_DENIED' } }),
+      }))
+    );
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+    const entityService = {
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    };
+
+    try {
+      await expect(
+        trafficIngestor({
+          strapi: createStrapi({ 'provider-status': { upsert } }, entityService),
+        }).importGa4({ day: '2026-06-06' })
+      ).rejects.toThrow('ga4_run_report_http_403');
+
+      expect(entityService.findMany).not.toHaveBeenCalled();
+      expect(entityService.create).not.toHaveBeenCalled();
+      expect(entityService.update).not.toHaveBeenCalled();
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'ga4',
+          status: 'failed',
+          hasCredentials: true,
+          blockedReason: 'ga4_run_report_http_403',
+          lastError: 'ga4_run_report_http_403',
+        })
+      );
+      expect(JSON.stringify(upsert.mock.calls)).not.toContain('secret-ga4-access-token');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('routes traffic import controller to GA4 when requested', async () => {
+    const auditService = { recordFromContext: vi.fn(async () => ({ id: 1 })) };
+    const importGa4 = vi.fn(async () => ({
+      dryRun: true,
+      uniqueKey: 'ga4:123456:2026-06-06',
+      operation: 'dry_run',
+      metrics: { views: 1 },
+      topContent: { rows: [] },
+      provider: { source: 'ga4', propertyId: '123456', credentialType: 'access_token', liveEffects: false },
+    }));
+    const importFirstParty = vi.fn();
+    const ctx = createCtx({
+      body: {
+        source: 'ga4',
+        day: '2026-06-06',
+        dryRun: true,
+      },
+    });
+
+    await trafficController({
+      strapi: createStrapi(
+        {
+          'traffic-ingestor': { importGa4, importFirstParty },
+          'audit-trail': auditService,
+        },
+        {}
+      ),
+    }).import(ctx);
+
+    expect(importGa4).toHaveBeenCalledWith({ day: '2026-06-06', dryRun: true });
+    expect(importFirstParty).not.toHaveBeenCalled();
+    expect(ctx.body.data).toMatchObject({ uniqueKey: 'ga4:123456:2026-06-06' });
+    expect(auditService.recordFromContext).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({
+        action: 'traffic.import',
+        outcome: 'skipped',
+        metadata: expect.objectContaining({
+          source: 'ga4',
+          day: '2026-06-06',
+          dryRun: true,
+          operation: 'dry_run',
+        }),
+      })
+    );
+  });
+
+  it('audits provider readiness probes because they update provider status', async () => {
+    const auditService = { recordFromContext: vi.fn(async () => ({ id: 1 })) };
+    const testProviders = vi.fn(async () => ({
+      includeConnectivity: false,
+      liveEffects: false,
+      results: [{ provider: 'ga4', status: 'blocked' }],
+    }));
+    const ctx = createCtx({
+      body: {
+        providers: ['ga4'],
+        includeConnectivity: false,
+      },
+    });
+
+    await providersController({
+      strapi: createStrapi(
+        {
+          'provider-probe': { testProviders },
+          'audit-trail': auditService,
+        },
+        {}
+      ),
+    }).testReadiness(ctx);
+
+    expect(testProviders).toHaveBeenCalledWith({
+      providers: ['ga4'],
+      includeConnectivity: false,
+    });
+    expect(ctx.body.data).toMatchObject({ liveEffects: false });
+    expect(auditService.recordFromContext).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({
+        action: 'providers.test-readiness',
+        outcome: 'success',
+        metadata: expect.objectContaining({
+          providers: ['ga4'],
+          includeConnectivity: false,
+          liveEffects: false,
+          resultCount: 1,
+        }),
+      })
+    );
+  });
+
+  it('includes strict audit by default in admin production readiness when full autonomy is required', async () => {
+    vi.stubEnv('AICO_FULL_AUTONOMY_REQUIRED', 'true');
+    vi.stubEnv('AICO_STRICT_AUDIT_REQUIRED', 'false');
+    const evaluate = vi.fn(async (input: { includeStrictAudit?: boolean }) => ({
+      decision: 'GO',
+      includeStrictAudit: input.includeStrictAudit,
+    }));
+    const ctx = createCtx();
+
+    await autonomyController({
+      strapi: createStrapi(
+        {
+          'production-readiness': { evaluate },
+        },
+        {}
+      ),
+    }).productionReadiness(ctx);
+
+    expect(ctx.badRequest).not.toHaveBeenCalled();
+    expect(evaluate).toHaveBeenCalledWith({ includeStrictAudit: true });
+    expect(ctx.body.data).toMatchObject({ includeStrictAudit: true });
+  });
+
+  it('returns a production NO-GO report when policy or provider readiness blocks full autonomy', async () => {
+    vi.stubEnv('AICO_FULL_AUTONOMY_REQUIRED', 'true');
+    vi.stubEnv('AICO_STRICT_AUDIT_REQUIRED', 'true');
+    vi.stubEnv('AICO_AUDIT_TRAIL_STRICT', 'true');
+    const service = productionReadiness({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': {
+            getPolicy: vi.fn(async () => ({
+              id: 1,
+              autonomy_mode: 'guarded',
+              global_kill_switch: true,
+              daily_ads_budget_pln: 25,
+              brand_safety_required: true,
+              legal_disclaimer_required: true,
+              no_sensitive_targeting: true,
+            })),
+          },
+          'provider-status': {
+            getReadinessMatrix: vi.fn(async () => [
+              { provider: 'openrouter', ready: true, status: 'ready' },
+              { provider: 'replicate', ready: false, status: 'missing_credentials', blockedReason: 'missing_credentials' },
+              { provider: 'facebook', ready: true, status: 'ready' },
+              { provider: 'instagram', ready: true, status: 'ready' },
+              { provider: 'twitter', ready: true, status: 'ready' },
+              { provider: 'meta_ads', ready: false, status: 'blocked', blockedReason: 'sandbox_required' },
+              { provider: 'google_ads', ready: false, status: 'blocked', blockedReason: 'sandbox_required' },
+              { provider: 'ga4', ready: false, status: 'missing_credentials', blockedReason: 'missing_credentials' },
+            ]),
+          },
+        },
+        {}
+      ),
+    });
+
+    const result = await service.evaluate();
+
+    expect(result.decision).toBe('NO_GO');
+    expect(result.liveEffectsAllowed).toBe(false);
+    expect(result.blockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'policy.mode' }),
+        expect.objectContaining({ id: 'policy.kill-switch' }),
+        expect.objectContaining({ id: 'providers.required-ready' }),
+      ])
+    );
+    expect(JSON.stringify(result)).not.toContain('secret');
+  });
+
+  it('keeps production NO-GO for live adapter modes until controlled live smoke exists', async () => {
+    vi.stubEnv('AICO_FULL_AUTONOMY_REQUIRED', 'true');
+    vi.stubEnv('AICO_STRICT_AUDIT_REQUIRED', 'true');
+    vi.stubEnv('AICO_AUDIT_TRAIL_STRICT', 'true');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', 'true');
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'live');
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'live');
+    vi.stubEnv('AICO_RUNTIME_LOCKS_DISABLED', 'false');
+    vi.stubEnv('AICO_SOCIAL_CONTENT_SAFETY_DISABLED', 'false');
+    const readyProviders = [
+      'openrouter',
+      'replicate',
+      'facebook',
+      'instagram',
+      'twitter',
+      'meta_ads',
+      'google_ads',
+      'ga4',
+    ].map((provider) => ({ provider, ready: true, status: 'ready' }));
+    const service = productionReadiness({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': {
+            getPolicy: vi.fn(async () => ({
+              id: 1,
+              autonomy_mode: 'full',
+              global_kill_switch: false,
+              daily_ads_budget_pln: 25,
+              brand_safety_required: true,
+              legal_disclaimer_required: true,
+              no_sensitive_targeting: true,
+            })),
+          },
+          'provider-status': {
+            getReadinessMatrix: vi.fn(async () => readyProviders),
+          },
+          audit: {
+            preflight: vi.fn(async () => ({ decision: 'GO', strict: true, summary: {} })),
+          },
+        },
+        {}
+      ),
+    });
+
+    const result = await service.evaluate({ includeStrictAudit: true });
+
+    expect(result.decision).toBe('NO_GO');
+    expect(result.liveEffectsAllowed).toBe(false);
+    expect(result.blockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'live.ads-adapter' }),
+        expect.objectContaining({ id: 'live.video-adapter' }),
+      ])
+    );
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'audit.strict-go', status: 'pass' }),
+        expect.objectContaining({ id: 'providers.required-ready', status: 'pass' }),
+      ])
+    );
+  });
+
+  it('returns production GO for a fully green controlled autonomy profile', async () => {
+    vi.stubEnv('AICO_FULL_AUTONOMY_REQUIRED', 'true');
+    vi.stubEnv('AICO_STRICT_AUDIT_REQUIRED', 'true');
+    vi.stubEnv('AICO_AUDIT_TRAIL_STRICT', 'true');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', 'true');
+    vi.stubEnv('AICO_ADMIN_RUN_NOW_ENABLED', 'true');
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'controlled');
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'replicate');
+    vi.stubEnv('AICO_RUNTIME_LOCKS_DISABLED', 'false');
+    vi.stubEnv('AICO_SOCIAL_CONTENT_SAFETY_DISABLED', 'false');
+    const readyProviders = [
+      'openrouter',
+      'replicate',
+      'facebook',
+      'instagram',
+      'twitter',
+      'meta_ads',
+      'google_ads',
+      'ga4',
+    ].map((provider) => ({ provider, ready: true, status: 'ready' }));
+    const service = productionReadiness({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': {
+            getPolicy: vi.fn(async () => ({
+              id: 1,
+              autonomy_mode: 'full',
+              global_kill_switch: false,
+              daily_ads_budget_pln: 25,
+              brand_safety_required: true,
+              legal_disclaimer_required: true,
+              no_sensitive_targeting: true,
+            })),
+          },
+          'provider-status': {
+            getReadinessMatrix: vi.fn(async () => readyProviders),
+          },
+          audit: {
+            preflight: vi.fn(async () => ({ decision: 'GO', strict: true, summary: {} })),
+          },
+        },
+        {}
+      ),
+    });
+
+    const result = await service.evaluate({ includeStrictAudit: true });
+
+    expect(result.decision).toBe('GO');
+    expect(result.blockers).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(result.liveEffectsAllowed).toBe(false);
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'audit.strict-go', status: 'pass' }),
+        expect.objectContaining({ id: 'providers.required-ready', status: 'pass' }),
+        expect.objectContaining({ id: 'live.ads-adapter', status: 'pass' }),
+        expect.objectContaining({ id: 'live.video-adapter', status: 'pass' }),
+        expect.objectContaining({ id: 'live.controlled-live-enabled', status: 'pass' }),
+        expect.objectContaining({ id: 'runtime.admin-run-now-enabled', status: 'pass' }),
+      ])
+    );
+  });
+
+  it('allows controlled ad provider probe statuses to satisfy production readiness', async () => {
+    vi.stubEnv('AICO_FULL_AUTONOMY_REQUIRED', 'true');
+    vi.stubEnv('AICO_STRICT_AUDIT_REQUIRED', 'true');
+    vi.stubEnv('AICO_AUDIT_TRAIL_STRICT', 'true');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', 'true');
+    vi.stubEnv('AICO_ADMIN_RUN_NOW_ENABLED', 'true');
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'controlled');
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'replicate');
+    vi.stubEnv('AICO_RUNTIME_LOCKS_DISABLED', 'false');
+    vi.stubEnv('AICO_SOCIAL_CONTENT_SAFETY_DISABLED', 'false');
+    vi.stubEnv('AICO_META_ADS_ACCESS_TOKEN', 'secret-meta-ads-token');
+    vi.stubEnv('AICO_META_AD_ACCOUNT_ID', 'act_123456789');
+    vi.stubEnv('AICO_GOOGLE_ADS_DEVELOPER_TOKEN', 'secret-google-developer-token');
+    vi.stubEnv('AICO_GOOGLE_ADS_CLIENT_ID', 'secret-google-client-id');
+    vi.stubEnv('AICO_GOOGLE_ADS_CLIENT_SECRET', 'secret-google-client-secret');
+    vi.stubEnv('AICO_GOOGLE_ADS_REFRESH_TOKEN', 'secret-google-refresh-token');
+    vi.stubEnv('AICO_GOOGLE_ADS_CUSTOMER_ID', '1234567890');
+    type ProviderStatusTestRecord = Record<string, unknown> & {
+      id: number;
+      provider?: string;
+      workflow?: number;
+    };
+    const providerRecords: ProviderStatusTestRecord[] = [];
+    const entityService = {
+      findMany: vi.fn(
+        async (
+          uid: string,
+          params: { filters?: { provider?: string; workflow?: number } } = {}
+        ) => {
+          if (uid !== PROVIDER_CREDENTIAL_STATUS_UID) return [];
+          const filters = params.filters ?? {};
+
+          return providerRecords.filter(
+            (record) =>
+              (!filters.provider || record.provider === filters.provider) &&
+              (!Object.prototype.hasOwnProperty.call(filters, 'workflow') ||
+                record.workflow === filters.workflow)
+          );
+        }
+      ),
+      create: vi.fn(async (uid: string, input: { data: Record<string, unknown> }) => {
+        if (uid !== PROVIDER_CREDENTIAL_STATUS_UID) throw new Error(`Unexpected uid ${uid}`);
+        const record: ProviderStatusTestRecord = {
+          id: providerRecords.length + 1,
+          updatedAt: new Date().toISOString(),
+          ...input.data,
+        };
+        providerRecords.unshift(record);
+
+        return record;
+      }),
+      update: vi.fn(
+        async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+          if (uid !== PROVIDER_CREDENTIAL_STATUS_UID) throw new Error(`Unexpected uid ${uid}`);
+          const index = providerRecords.findIndex((record) => record.id === id);
+          const record: ProviderStatusTestRecord = {
+            ...(providerRecords[index] ?? { id }),
+            updatedAt: new Date().toISOString(),
+            ...input.data,
+          };
+          providerRecords[index] = record;
+
+          return record;
+        }
+      ),
+    };
+    const statusService = providerStatus({ strapi: createStrapi({}, entityService) });
+    const services = {
+      'provider-status': statusService,
+      'autonomy-policy': {
+        getPolicy: vi.fn(async () => ({
+          id: 1,
+          autonomy_mode: 'full',
+          global_kill_switch: false,
+          daily_ads_budget_pln: 25,
+          brand_safety_required: true,
+          legal_disclaimer_required: true,
+          no_sensitive_targeting: true,
+        })),
+      },
+      audit: {
+        preflight: vi.fn(async () => ({ decision: 'GO', strict: true, summary: {} })),
+      },
+    };
+
+    for (const seed of [
+      { provider: 'openrouter', scopes: ['chat.completions'] },
+      { provider: 'replicate', scopes: ['predictions.write'] },
+      { provider: 'facebook', scopes: ['pages_manage_posts'] },
+      { provider: 'instagram', scopes: ['instagram_content_publish'] },
+      { provider: 'twitter', scopes: ['tweet.write'] },
+      { provider: 'ga4', scopes: ['analytics.readonly'] },
+    ] as const) {
+      await statusService.upsert({
+        provider: seed.provider,
+        status: 'ready',
+        hasCredentials: true,
+        scopes: [...seed.scopes],
+      });
+    }
+
+    const adsProbeResult = await providerProbe({
+      strapi: createStrapi(services, entityService),
+    }).testProviders({ providers: ['meta_ads', 'google_ads'], includeConnectivity: false });
+
+    const result = await productionReadiness({
+      strapi: createStrapi(services, entityService),
+    }).evaluate({ includeStrictAudit: true });
+
+    expect(adsProbeResult.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: 'meta_ads',
+          status: 'ready',
+          metadata: expect.objectContaining({
+            providerMode: 'controlled',
+            controlledExternalMutation: false,
+            liveSpendEnabled: false,
+          }),
+        }),
+        expect.objectContaining({
+          provider: 'google_ads',
+          status: 'ready',
+          metadata: expect.objectContaining({
+            providerMode: 'controlled',
+            controlledExternalMutation: false,
+            liveSpendEnabled: false,
+          }),
+        }),
+      ])
+    );
+    expect(result.decision).toBe('GO');
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'providers.required-ready', status: 'pass' }),
+        expect.objectContaining({ id: 'live.controlled-live-enabled', status: 'pass' }),
+      ])
+    );
+    expect(result.liveEffectsAllowed).toBe(false);
+    expect(JSON.stringify(providerRecords)).not.toContain('secret-google-refresh-token');
+  });
+
+  it('checks social readiness only for configured runtime channels in autopilot dry-run', async () => {
+    vi.stubEnv('AICO_SOCIAL_CHANNELS', 'facebook,instagram,twitter');
+    const recentProviderTestedAt = new Date().toISOString();
+    const entityService = {
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === AUTONOMY_POLICY_UID) {
+          return [
+            {
+              id: 1,
+              policy_key: 'global',
+              autonomy_mode: 'full',
+              global_kill_switch: false,
+              daily_ads_budget_pln: 25,
+              daily_meta_ads_budget_pln: 15,
+              daily_google_ads_budget_pln: 10,
+            },
+          ];
+        }
+        if (uid === PROVIDER_CREDENTIAL_STATUS_UID) {
+          return [
+            {
+              id: 10,
+              provider: 'openrouter',
+              status: 'ready',
+              has_credentials: true,
+              last_tested_at: recentProviderTestedAt,
+              scopes: ['chat.completions'],
+            },
+            {
+              id: 11,
+              provider: 'facebook',
+              status: 'ready',
+              has_credentials: true,
+              last_tested_at: recentProviderTestedAt,
+              scopes: ['pages_manage_posts'],
+            },
+            {
+              id: 12,
+              provider: 'instagram',
+              status: 'ready',
+              has_credentials: true,
+              last_tested_at: recentProviderTestedAt,
+              scopes: ['instagram_content_publish'],
+            },
+            {
+              id: 13,
+              provider: 'twitter',
+              status: 'ready',
+              has_credentials: true,
+              last_tested_at: recentProviderTestedAt,
+              scopes: ['tweet.write'],
+            },
+          ];
+        }
+        return [];
+      }),
+      count: vi.fn(async () => 0),
+    };
+    const strapi = createStrapi({}, entityService);
+    const policy = autonomyPolicy({ strapi });
+    const traffic = trafficIngestor({ strapi });
+    const providers = providerStatus({ strapi });
+    const result = await autopilot({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': policy,
+          'traffic-ingestor': traffic,
+          'strategy-planner': {},
+          'provider-status': providers,
+          'audit-trail': { record: vi.fn() },
+        },
+        entityService
+      ),
+    }).dryRunTick();
+
+    const socialStep = result.steps.find((step) => step.id === 'social-agent');
+    expect(socialStep).toMatchObject({
+      status: 'allowed',
+      output: {
+        requiredProviders: ['facebook', 'instagram', 'twitter'],
+        blockedProviders: [],
+      },
+    });
+    expect(JSON.stringify(socialStep)).not.toContain('tiktok');
+    expect(JSON.stringify(socialStep)).not.toContain('youtube');
+  });
+
+  it('reuses existing generation and video jobs for the same idempotency key', async () => {
+    const existingGenerationJob = {
+      id: 501,
+      job_type: 'video',
+      status: 'queued',
+      idempotency_key: 'video:daily-aries',
+    };
+    const existingVideo = {
+      id: 601,
+      title: 'Baran short',
+      status: 'queued',
+      generation_job: { id: 501 },
+    };
+    const entityService = {
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === GENERATION_JOB_UID) return [existingGenerationJob];
+        if (uid === VIDEO_ASSET_UID) return [existingVideo];
+        return [];
+      }),
+      create: vi.fn(),
+      update: vi.fn(),
+    };
+
+    const generationResult = await generationJobs({
+      strapi: createStrapi({}, entityService),
+    }).create({
+      jobType: 'video',
+      idempotencyKey: 'video:daily-aries',
+      inputSummary: { title: 'Baran short' },
+    });
+    const videoResult = await videoAgent({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': {
+            evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed' })),
+          },
+        },
+        entityService
+      ),
+    }).createJob({
+      title: 'Baran short',
+      idempotencyKey: 'video:daily-aries',
+    });
+
+    expect(generationResult).toMatchObject({ id: 501 });
+    expect(videoResult.video).toMatchObject({ id: 601 });
+    expect(entityService.create).not.toHaveBeenCalled();
+  });
+
+  it('blocks unsafe ad campaign input before policy evaluation or persistence', async () => {
+    const entityService = {
+      findMany: vi.fn(async () => []),
+      count: vi.fn(async () => 0),
+      create: vi.fn(),
+    };
+    const policy = {
+      evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed', budgetImpactPln: 1 })),
+    };
+    const service = adsAgent({
+      strapi: createStrapi({ 'autonomy-policy': policy }, entityService),
+    });
+
+    await expect(
+      service.createPlan({
+        name: 'Bad budget',
+        platform: 'meta',
+        targetUrl: 'https://star-sign.pl/premium',
+        dailyBudgetPln: 0,
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'invalid_ads_budget' });
+    await expect(
+      service.createPlan({
+        name: 'Bad target',
+        platform: 'google',
+        targetUrl: 'http://localhost:1337/admin',
+        dailyBudgetPln: 1,
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'target_url_must_be_https' });
+    await expect(
+      service.createPlan({
+        name: 'External target',
+        platform: 'meta',
+        targetUrl: 'https://evil.example/premium',
+        dailyBudgetPln: 1,
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'target_url_not_allowed' });
+    await expect(
+      service.createPlan({
+        name: 'Sensitive query target',
+        platform: 'meta',
+        targetUrl: 'https://star-sign.pl/premium?token=secret',
+        dailyBudgetPln: 1,
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'target_url_sensitive_query_not_allowed' });
+    await expect(
+      service.createPlan({
+        name: 'Bad path target',
+        platform: 'meta',
+        targetUrl: 'https://star-sign.pl/admin',
+        dailyBudgetPln: 1,
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'target_url_path_not_allowed' });
+    await expect(
+      service.createPlan({
+        name: 'Gwarantowany zysk i pewna przyszłość',
+        platform: 'google',
+        targetUrl: 'https://star-sign.pl/premium',
+        dailyBudgetPln: 1,
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'unsafe_ad_claims' });
+    await expect(
+      service.createPlan({
+        name: 'Sensitive targeting',
+        platform: 'meta',
+        targetUrl: 'https://star-sign.pl/premium',
+        dailyBudgetPln: 1,
+        targetingPayload: { custom_audiences: ['audience-1'] },
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'unsafe_ads_targeting' });
+    await expect(
+      service.createPlan({
+        name: 'Unsafe creative',
+        platform: 'google',
+        targetUrl: 'https://star-sign.pl/premium',
+        dailyBudgetPln: 1,
+        creativePayload: { headline: 'Ten rytuał wyleczy każdy problem' },
+      })
+    ).resolves.toMatchObject({ allowed: false, reason: 'unsafe_ad_claims' });
+
+    expect(policy.evaluate).not.toHaveBeenCalled();
+    expect(entityService.create).not.toHaveBeenCalled();
+  });
+
+  it('activates ad campaign plans only through sandbox adapter without live spend', async () => {
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'sandbox');
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 33,
+        name: 'Sandbox Meta',
+        platform: 'meta',
+        status: 'ready',
+        target_url: 'https://star-sign.pl/premium',
+        daily_budget_pln: 10,
+      })),
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === AUTONOMY_POLICY_UID) {
+          return [
+            {
+              id: 1,
+              policy_key: 'global',
+              autonomy_mode: 'full',
+              daily_ads_budget_pln: 25,
+              daily_meta_ads_budget_pln: 15,
+              max_ads_mutations_per_day: 10,
+            },
+          ];
+        }
+        return [];
+      }),
+      count: vi.fn(async () => 0),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const strapi = createStrapi({}, entityService);
+    const policy = autonomyPolicy({ strapi });
+    const adsBudgetLedgerService = {
+      reserveActivation: vi.fn(async () => ({
+        allowed: true,
+        reason: 'reserved',
+        ledger: { id: 77 },
+        totals: { requestedPln: 10 },
+      })),
+      markApplied: vi.fn(async () => ({ id: 77, status: 'applied' })),
+      release: vi.fn(),
+    };
+    const service = adsAgent({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': policy,
+          'ads-provider-adapter': adsProviderAdapter({ strapi }),
+          'ads-budget-ledger': adsBudgetLedgerService,
+        },
+        entityService
+      ),
+    });
+
+    const result = await service.activate(33);
+
+    expect(result).toMatchObject({
+      status: 'active',
+      provider_campaign_id: 'sandbox_campaign_meta_33',
+      provider_adset_id: 'sandbox_adset_meta_33',
+      provider_ad_id: 'sandbox_creative_meta_33',
+    });
+    expect(updates[0]).toMatchObject({
+      uid: AD_CAMPAIGN_PLAN_UID,
+      id: 33,
+      data: {
+        status: 'active',
+        blocked_reason: null,
+        stop_loss_state: expect.objectContaining({
+          providerMode: 'sandbox',
+          liveSpendEnabled: false,
+          sandbox: true,
+          adsLedger: expect.objectContaining({ ledgerId: 77 }),
+        }),
+      },
+    });
+    expect(adsBudgetLedgerService.reserveActivation).toHaveBeenCalledWith({
+      plan: expect.objectContaining({ id: 33, platform: 'meta' }),
+      providerMode: 'sandbox',
+    });
+    expect(adsBudgetLedgerService.markApplied).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 77 }),
+      expect.objectContaining({
+        providerDecision: 'sandbox_campaign_created',
+        providerCampaignId: 'sandbox_campaign_meta_33',
+      })
+    );
+  });
+
+  it('passes controlled ads preflight without live spend when provider readiness and target URL are green', async () => {
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'controlled');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', 'true');
+    vi.stubEnv('AICO_ADS_TARGET_URL_PREFLIGHT_REQUIRED', 'true');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        status: 200,
+      }))
+    );
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 34,
+        name: 'Controlled Meta',
+        platform: 'meta',
+        status: 'ready',
+        target_url: 'https://star-sign.pl/premium',
+        daily_budget_pln: 10,
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const policy = {
+      evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed', budgetImpactPln: 10 })),
+    };
+    const providerStatusService = {
+      checkProviders: vi.fn(async () => ({
+        ready: true,
+        requiredProviders: ['meta_ads'],
+        blockedProviders: [],
+      })),
+    };
+    const adsBudgetLedgerService = {
+      reserveActivation: vi.fn(async () => ({
+        allowed: true,
+        reason: 'reserved',
+        ledger: { id: 78 },
+        totals: { requestedPln: 10 },
+      })),
+      markApplied: vi.fn(async () => ({ id: 78, status: 'applied' })),
+      release: vi.fn(),
+    };
+    const strapi = createStrapi({}, entityService);
+
+    try {
+      const result = await adsAgent({
+        strapi: createStrapi(
+          {
+            'autonomy-policy': policy,
+            'provider-status': providerStatusService,
+            'ads-provider-adapter': adsProviderAdapter({ strapi }),
+            'ads-budget-ledger': adsBudgetLedgerService,
+          },
+          entityService
+        ),
+      }).activate(34);
+
+      expect(providerStatusService.checkProviders).toHaveBeenCalledWith({
+        action: 'ads.mutate',
+        platform: 'meta',
+      });
+      expect(fetch).toHaveBeenCalledWith('https://star-sign.pl/premium', {
+        method: 'HEAD',
+        redirect: 'manual',
+      });
+      expect(result).toMatchObject({
+        status: 'ready',
+        blocked_reason: null,
+        provider_campaign_id: 'controlled_meta_campaign_34',
+      });
+      expect(updates[0]).toMatchObject({
+        uid: AD_CAMPAIGN_PLAN_UID,
+        id: 34,
+        data: {
+          status: 'ready',
+          blocked_reason: null,
+          stop_loss_state: expect.objectContaining({
+            providerMode: 'controlled',
+            providerCallsEnabled: false,
+            liveSpendEnabled: false,
+            plannedProviderStatus: 'PAUSED',
+            noSensitiveTargeting: true,
+            adsLedger: expect.objectContaining({ ledgerId: 78 }),
+          }),
+        },
+      });
+      expect(adsBudgetLedgerService.reserveActivation).toHaveBeenCalledWith({
+        plan: expect.objectContaining({ id: 34, platform: 'meta' }),
+        providerMode: 'controlled',
+      });
+      expect(adsBudgetLedgerService.markApplied).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 78 }),
+        expect.objectContaining({
+          providerDecision: 'controlled_ads_preflight_passed',
+          providerCampaignId: 'controlled_meta_campaign_34',
+        })
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('blocks ads activation before provider adapter when budget ledger reservation fails', async () => {
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'sandbox');
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 35,
+        name: 'Over budget Meta',
+        platform: 'meta',
+        status: 'ready',
+        target_url: 'https://star-sign.pl/premium',
+        daily_budget_pln: 20,
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const providerAdapterService = {
+      createOrUpdateCampaign: vi.fn(),
+    };
+
+    const result = await adsAgent({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': {
+            evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed', budgetImpactPln: 20 })),
+          },
+          'ads-provider-adapter': providerAdapterService,
+          'ads-budget-ledger': {
+            reserveActivation: vi.fn(async () => ({
+              allowed: false,
+              reason: 'ads_ledger_budget_cap_exceeded',
+              totals: { globalReservedPln: 10, requestedPln: 20, globalCapPln: 25 },
+            })),
+          },
+        },
+        entityService
+      ),
+    }).activate(35);
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      blocked_reason: 'ads_ledger_budget_cap_exceeded',
+    });
+    expect(providerAdapterService.createOrUpdateCampaign).not.toHaveBeenCalled();
+    expect(updates[0]).toMatchObject({
+      uid: AD_CAMPAIGN_PLAN_UID,
+      id: 35,
+      data: {
+        status: 'blocked',
+        blocked_reason: 'ads_ledger_budget_cap_exceeded',
+        stop_loss_state: expect.objectContaining({
+          providerMode: 'sandbox',
+          adsLedger: expect.objectContaining({
+            reason: 'ads_ledger_budget_cap_exceeded',
+          }),
+        }),
+      },
+    });
+  });
+
+  it('blocks controlled ads activation when target URL preflight redirects', async () => {
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'controlled');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', 'true');
+    vi.stubEnv('AICO_ADS_TARGET_URL_PREFLIGHT_REQUIRED', 'true');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        status: 302,
+      }))
+    );
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 35,
+        name: 'Redirecting Meta',
+        platform: 'meta',
+        status: 'ready',
+        target_url: 'https://star-sign.pl/premium',
+        daily_budget_pln: 10,
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const policy = {
+      evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed', budgetImpactPln: 10 })),
+    };
+    const providerStatusService = {
+      checkProviders: vi.fn(async () => ({
+        ready: true,
+        requiredProviders: ['meta_ads'],
+        blockedProviders: [],
+      })),
+    };
+    const strapi = createStrapi({}, entityService);
+
+    try {
+      const result = await adsAgent({
+        strapi: createStrapi(
+          {
+            'autonomy-policy': policy,
+            'provider-status': providerStatusService,
+            'ads-provider-adapter': adsProviderAdapter({ strapi }),
+          },
+          entityService
+        ),
+      }).activate(35);
+
+      expect(result).toMatchObject({
+        status: 'blocked',
+        blocked_reason: 'target_url_preflight_http_302',
+      });
+      expect(updates[0]).toMatchObject({
+        uid: AD_CAMPAIGN_PLAN_UID,
+        id: 35,
+        data: {
+          status: 'blocked',
+          blocked_reason: 'target_url_preflight_http_302',
+        },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('blocks controlled ads activation before provider calls when readiness is not ready', async () => {
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'controlled');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', 'true');
+    vi.stubGlobal('fetch', vi.fn());
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 35,
+        name: 'Blocked Google',
+        platform: 'google',
+        status: 'ready',
+        target_url: 'https://star-sign.pl/premium',
+        daily_budget_pln: 10,
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+
+    try {
+      const result = await adsAgent({
+        strapi: createStrapi(
+          {
+            'autonomy-policy': {
+              evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed', budgetImpactPln: 10 })),
+            },
+            'provider-status': {
+              checkProviders: vi.fn(async () => ({
+                ready: false,
+                requiredProviders: ['google_ads'],
+                blockedProviders: [{ provider: 'google_ads', blockedReason: 'missing_credentials' }],
+              })),
+            },
+            'ads-provider-adapter': adsProviderAdapter({ strapi: createStrapi({}, {}) }),
+          },
+          entityService
+        ),
+      }).activate(35);
+
+      expect(result).toMatchObject({
+        status: 'blocked',
+        blocked_reason: 'provider_readiness_blocked',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+      expect(updates[0]).toMatchObject({
+        uid: AD_CAMPAIGN_PLAN_UID,
+        id: 35,
+        data: {
+          status: 'blocked',
+          blocked_reason: 'provider_readiness_blocked',
+          stop_loss_state: expect.objectContaining({
+            providerReadiness: expect.objectContaining({
+              requiredProviders: ['google_ads'],
+            }),
+          }),
+        },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('blocks controlled ads adapter mode when controlled live gate is not enabled', async () => {
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'controlled');
+    const result = await adsProviderAdapter({ strapi: createStrapi({}, {}) }).createOrUpdateCampaign({
+      id: 36,
+      name: 'Controlled blocked',
+      platform: 'meta',
+      status: 'ready',
+      target_url: 'https://star-sign.pl/premium',
+      daily_budget_pln: 5,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      mode: 'controlled',
+      status: 'blocked',
+      reason: 'controlled_live_not_enabled',
+    });
+  });
+
+  it('blocks live ads adapter mode until a real provider adapter exists', async () => {
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'live');
+    const result = await adsProviderAdapter({ strapi: createStrapi({}, {}) }).createOrUpdateCampaign({
+      id: 44,
+      name: 'Live blocked',
+      platform: 'google',
+      status: 'ready',
+      target_url: 'https://star-sign.pl/premium',
+      daily_budget_pln: 5,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      mode: 'live',
+      status: 'blocked',
+      reason: 'provider_adapter_live_not_implemented',
+    });
+  });
+
+  it('blocks ads activation through the service when adapter mode is disabled or live', async () => {
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 45,
+        name: 'Blocked Meta',
+        platform: 'meta',
+        status: 'ready',
+        target_url: 'https://star-sign.pl/premium',
+        daily_budget_pln: 10,
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const policy = {
+      evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed', budgetImpactPln: 10 })),
+    };
+    const strapi = createStrapi({}, entityService);
+    const service = adsAgent({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': policy,
+          'ads-provider-adapter': adsProviderAdapter({ strapi }),
+        },
+        entityService
+      ),
+    });
+
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'disabled');
+    await expect(service.activate(45)).resolves.toMatchObject({
+      status: 'blocked',
+      blocked_reason: 'provider_adapter_not_enabled',
+      provider_campaign_id: undefined,
+    });
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'live');
+    await expect(service.activate(45)).resolves.toMatchObject({
+      status: 'blocked',
+      blocked_reason: 'provider_readiness_service_missing',
+    });
+
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'blocked',
+            stop_loss_state: expect.objectContaining({
+              providerMode: 'disabled',
+              providerCallsEnabled: false,
+              liveSpendEnabled: false,
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'blocked',
+            blocked_reason: 'provider_readiness_service_missing',
+          }),
+        }),
+      ])
+    );
+  });
+
+  it('pauses controlled ads through provider adapter and records pause ledger', async () => {
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'controlled');
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 46,
+        name: 'Controlled Meta',
+        platform: 'meta',
+        status: 'ready',
+        target_url: 'https://star-sign.pl/premium',
+        daily_budget_pln: 10,
+        provider_campaign_id: 'controlled_meta_campaign_46',
+        provider_adset_id: 'controlled_meta_adset_46',
+        provider_ad_id: 'controlled_meta_creative_46',
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const strapi = createStrapi({}, entityService);
+    const adsBudgetLedgerService = {
+      recordPause: vi.fn(async () => ({ id: 88, status: 'applied' })),
+    };
+
+    const result = await adsAgent({
+      strapi: createStrapi(
+        {
+          'ads-provider-adapter': adsProviderAdapter({ strapi }),
+          'ads-budget-ledger': adsBudgetLedgerService,
+        },
+        entityService
+      ),
+    }).pause(46);
+
+    expect(result).toMatchObject({
+      status: 'paused',
+      blocked_reason: null,
+      provider_campaign_id: 'controlled_meta_campaign_46',
+      provider_adset_id: 'controlled_meta_adset_46',
+      provider_ad_id: 'controlled_meta_creative_46',
+    });
+    expect(adsBudgetLedgerService.recordPause).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 46,
+        provider_campaign_id: 'controlled_meta_campaign_46',
+        provider_ad_id: 'controlled_meta_creative_46',
+      }),
+      {
+        providerMode: 'controlled',
+        providerDecision: 'controlled_ads_pause_noop',
+        ok: true,
+      }
+    );
+    expect(updates[0]).toMatchObject({
+      uid: AD_CAMPAIGN_PLAN_UID,
+      id: 46,
+      data: {
+        status: 'paused',
+        blocked_reason: null,
+        stop_loss_state: expect.objectContaining({
+          providerMode: 'controlled',
+          providerDecision: 'controlled_ads_pause_noop',
+          providerPaused: true,
+          liveSpendEnabled: false,
+          adsLedger: expect.objectContaining({
+            operation: 'pause',
+            ledgerId: 88,
+          }),
+        }),
+      },
+    });
+  });
+
+  it('does not mark live ads paused when provider pause adapter is not implemented', async () => {
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'live');
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 47,
+        name: 'Live Meta',
+        platform: 'meta',
+        status: 'active',
+        target_url: 'https://star-sign.pl/premium',
+        daily_budget_pln: 10,
+        provider_campaign_id: 'live-campaign-47',
+        provider_adset_id: 'live-adset-47',
+        provider_ad_id: 'live-creative-47',
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const strapi = createStrapi({}, entityService);
+    const adsBudgetLedgerService = {
+      recordPause: vi.fn(async () => ({ id: 89, status: 'failed' })),
+    };
+
+    const result = await adsAgent({
+      strapi: createStrapi(
+        {
+          'ads-provider-adapter': adsProviderAdapter({ strapi }),
+          'ads-budget-ledger': adsBudgetLedgerService,
+        },
+        entityService
+      ),
+    }).pause(47);
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      blocked_reason: 'provider_pause_live_not_implemented',
+      provider_campaign_id: 'live-campaign-47',
+      provider_adset_id: 'live-adset-47',
+      provider_ad_id: 'live-creative-47',
+    });
+    expect(adsBudgetLedgerService.recordPause).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 47,
+        provider_campaign_id: 'live-campaign-47',
+        provider_ad_id: 'live-creative-47',
+      }),
+      {
+        providerMode: 'live',
+        providerDecision: 'provider_pause_live_not_implemented',
+        ok: false,
+      }
+    );
+    expect(updates[0]).toMatchObject({
+      uid: AD_CAMPAIGN_PLAN_UID,
+      id: 47,
+      data: {
+        status: 'blocked',
+        blocked_reason: 'provider_pause_live_not_implemented',
+        stop_loss_state: expect.objectContaining({
+          providerMode: 'live',
+          providerDecision: 'provider_pause_live_not_implemented',
+          providerPaused: false,
+          liveSpendEnabled: false,
+          adsLedger: expect.objectContaining({
+            operation: 'pause',
+            ledgerId: 89,
+            status: 'failed',
+          }),
+        }),
+      },
+    });
+  });
+
+  it('pause sweep for global kill switch pauses ready and active ads through provider path', async () => {
+    vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'controlled');
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === AD_CAMPAIGN_PLAN_UID) {
+          return [{ id: 48 }, { id: 49 }];
+        }
+        return [];
+      }),
+      findOne: vi.fn(async (_uid: string, id: number) => ({
+        id,
+        name: `Controlled ${id}`,
+        platform: id === 48 ? 'meta' : 'google',
+        status: id === 48 ? 'active' : 'ready',
+        target_url: 'https://star-sign.pl/premium',
+        daily_budget_pln: 10,
+        provider_campaign_id: `controlled_campaign_${id}`,
+        provider_adset_id: `controlled_adset_${id}`,
+        provider_ad_id: `controlled_creative_${id}`,
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const strapi = createStrapi({}, entityService);
+    const adsBudgetLedgerService = {
+      recordPause: vi.fn(async (plan: { id: number }, input: { ok: boolean }) => ({
+        id: 900 + plan.id,
+        status: input.ok ? 'applied' : 'failed',
+      })),
+    };
+
+    const result = await adsAgent({
+      strapi: createStrapi(
+        {
+          'ads-provider-adapter': adsProviderAdapter({ strapi }),
+          'ads-budget-ledger': adsBudgetLedgerService,
+        },
+        entityService
+      ),
+    }).pauseActiveForKillSwitch({ reason: 'global_kill_switch' });
+
+    expect(entityService.findMany).toHaveBeenCalledWith(
+      AD_CAMPAIGN_PLAN_UID,
+      expect.objectContaining({
+        filters: { status: { $in: ['ready', 'active'] } },
+        fields: ['id'],
+      })
+    );
+    expect(result).toMatchObject({
+      reason: 'global_kill_switch',
+      attempted: 2,
+      paused: 2,
+      blocked: 0,
+      failed: 0,
+    });
+    expect(adsBudgetLedgerService.recordPause).toHaveBeenCalledTimes(2);
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 48,
+          data: expect.objectContaining({
+            status: 'paused',
+            provider_ad_id: 'controlled_creative_48',
+            stop_loss_state: expect.objectContaining({
+              providerDecision: 'controlled_ads_pause_noop',
+              adsLedger: expect.objectContaining({ ledgerId: 948 }),
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          id: 49,
+          data: expect.objectContaining({
+            status: 'paused',
+            provider_ad_id: 'controlled_creative_49',
+            stop_loss_state: expect.objectContaining({
+              providerDecision: 'controlled_ads_pause_noop',
+              adsLedger: expect.objectContaining({ ledgerId: 949 }),
+            }),
+          }),
+        }),
+      ])
+    );
+  });
+
+  it('renders video assets through sandbox adapter without live provider calls', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'sandbox');
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 88,
+        title: 'Sandbox video',
+        status: 'queued',
+        aspect_ratio: '9:16',
+        duration_seconds: 30,
+        metadata: {},
+      })),
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === AUTONOMY_POLICY_UID) {
+          return [
+            {
+              id: 1,
+              policy_key: 'global',
+              autonomy_mode: 'full',
+              daily_video_job_limit: 10,
+            },
+          ];
+        }
+        return [];
+      }),
+      count: vi.fn(async () => 0),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const strapi = createStrapi({}, entityService);
+    const policy = autonomyPolicy({ strapi });
+    const result = await videoAgent({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': policy,
+          'video-provider-adapter': videoProviderAdapter({ strapi }),
+        },
+        entityService
+      ),
+    }).render(88);
+
+    expect(result).toMatchObject({
+      status: 'qc_passed',
+      provider: 'sandbox-video-provider',
+      provider_job_id: 'sandbox_video_88',
+    });
+    expect(updates[0]).toMatchObject({
+      uid: VIDEO_ASSET_UID,
+      id: 88,
+      data: {
+        status: 'qc_passed',
+        blocked_reason: null,
+        metadata: expect.objectContaining({
+          providerMode: 'sandbox',
+          liveProviderCalls: false,
+          sandbox: true,
+        }),
+      },
+    });
+  });
+
+  it('starts Replicate-compatible video predictions as controlled external render jobs', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'replicate');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', 'true');
+    vi.stubEnv('AICO_VIDEO_GEN_TOKEN', 'secret-video-token');
+    vi.stubEnv('AICO_VIDEO_GEN_MODEL', 'owner/video-model:1234567890abcdef');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 201,
+        json: async () => ({
+          id: 'pred_video_123',
+          status: 'starting',
+          created_at: '2026-06-07T18:00:00.000Z',
+          urls: {
+            get: 'https://api.replicate.com/v1/predictions/pred_video_123',
+          },
+        }),
+      }))
+    );
+    const upsert = vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input }));
+
+    try {
+      const result = await videoProviderAdapter({
+        strapi: createStrapi({ 'provider-status': { upsert } }, {}),
+      }).render({
+        id: 90,
+        title: 'Replicate video',
+        status: 'queued',
+        script: 'Astrologiczny short 9:16 o energii dnia.',
+        aspect_ratio: '9:16',
+        duration_seconds: 30,
+      });
+
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.replicate.com/v1/predictions',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer secret-video-token',
+            'Cancel-After': '15m',
+          }),
+          body: expect.stringContaining('Astrologiczny short 9:16'),
+        })
+      );
+      expect(result).toMatchObject({
+        ok: true,
+        mode: 'replicate',
+        status: 'rendering',
+        reason: 'replicate_video_prediction_created',
+        provider: 'replicate',
+        providerJobId: 'pred_video_123',
+        providerPayload: expect.objectContaining({
+          providerCallsEnabled: true,
+          liveRenderEnabled: true,
+          liveSocialPublishEnabled: false,
+          controlledExternalRender: true,
+          asyncJobOnly: true,
+        }),
+      });
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'replicate',
+          status: 'ready',
+          hasCredentials: true,
+          scopes: ['predictions.write'],
+        })
+      );
+      expect(JSON.stringify(result)).not.toContain('secret-video-token');
+      expect(JSON.stringify(result)).not.toContain('owner/video-model');
+      expect(JSON.stringify(result)).not.toContain('https://api.replicate.com/v1/predictions/pred_video_123');
+      expect(JSON.stringify(upsert.mock.calls)).not.toContain('secret-video-token');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('renders video assets through Replicate mode when provider readiness is green', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'replicate');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', 'true');
+    vi.stubEnv('AICO_VIDEO_GEN_TOKEN', 'secret-video-token');
+    vi.stubEnv('AICO_VIDEO_GEN_MODEL', 'owner/video-model:1234567890abcdef');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 201,
+        json: async () => ({
+          id: 'pred_video_456',
+          status: 'processing',
+          urls: {
+            get: 'https://api.replicate.com/v1/predictions/pred_video_456',
+          },
+        }),
+      }))
+    );
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 91,
+        title: 'Replicate render',
+        status: 'queued',
+        script: 'Horoskop video',
+        aspect_ratio: '9:16',
+        duration_seconds: 30,
+        metadata: {},
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const policy = {
+      evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed' })),
+    };
+    const providerStatusService = {
+      checkProviders: vi.fn(async () => ({
+        ready: true,
+        requiredProviders: ['replicate'],
+        blockedProviders: [],
+      })),
+      upsert: vi.fn(async (input: Record<string, unknown>) => ({ id: 1, ...input })),
+    };
+    const strapi = createStrapi({ 'provider-status': providerStatusService }, entityService);
+
+    try {
+      const result = await videoAgent({
+        strapi: createStrapi(
+          {
+            'autonomy-policy': policy,
+            'provider-status': providerStatusService,
+            'video-provider-adapter': videoProviderAdapter({ strapi }),
+          },
+          entityService
+        ),
+      }).render(91);
+
+      expect(providerStatusService.checkProviders).toHaveBeenCalledWith({ action: 'video.generate' });
+      expect(result).toMatchObject({
+        status: 'rendering',
+        provider: 'replicate',
+        provider_job_id: 'pred_video_456',
+      });
+      expect(updates[0]).toMatchObject({
+        uid: VIDEO_ASSET_UID,
+        id: 91,
+        data: {
+          status: 'rendering',
+          blocked_reason: null,
+          metadata: expect.objectContaining({
+            providerMode: 'replicate',
+            liveProviderCalls: true,
+            liveSocialPublishEnabled: false,
+            controlledExternalRender: true,
+          }),
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain('secret-video-token');
+      expect(JSON.stringify(result)).not.toContain('owner/video-model');
+      expect(JSON.stringify(updates)).not.toContain('https://api.replicate.com/v1/predictions/pred_video_456');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('blocks Replicate video rendering when the controlled live gate is not enabled', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'replicate');
+    vi.stubEnv('AICO_VIDEO_GEN_TOKEN', 'secret-video-token');
+    vi.stubEnv('AICO_VIDEO_GEN_MODEL', 'owner/video-model:1234567890abcdef');
+    vi.stubGlobal('fetch', vi.fn());
+
+    try {
+      const result = await videoProviderAdapter({
+        strapi: createStrapi({ 'provider-status': { upsert: vi.fn() } }, {}),
+      }).render({
+        id: 93,
+        title: 'Controlled live disabled',
+        status: 'queued',
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        mode: 'replicate',
+        status: 'failed',
+        reason: 'controlled_live_not_enabled',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toContain('secret-video-token');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('blocks video rendering before provider calls when Replicate readiness is not ready', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'replicate');
+    vi.stubGlobal('fetch', vi.fn());
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 92,
+        title: 'Readiness blocked render',
+        status: 'queued',
+        metadata: {},
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+
+    try {
+      const result = await videoAgent({
+        strapi: createStrapi(
+          {
+            'autonomy-policy': { evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed' })) },
+            'provider-status': {
+              checkProviders: vi.fn(async () => ({
+                ready: false,
+                requiredProviders: ['replicate'],
+                blockedProviders: [{ provider: 'replicate', blockedReason: 'missing_credentials' }],
+              })),
+            },
+            'video-provider-adapter': videoProviderAdapter({ strapi: createStrapi({}, {}) }),
+          },
+          entityService
+        ),
+      }).render(92);
+
+      expect(result).toMatchObject({
+        status: 'failed',
+        blocked_reason: 'provider_readiness_blocked',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+      expect(updates[0]).toMatchObject({
+        uid: VIDEO_ASSET_UID,
+        id: 92,
+        data: {
+          status: 'failed',
+          blocked_reason: 'provider_readiness_blocked',
+          metadata: expect.objectContaining({
+            providerReadiness: expect.objectContaining({
+              requiredProviders: ['replicate'],
+            }),
+          }),
+        },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('fails closed for Replicate video rendering when provider readiness service is unavailable', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'replicate');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', 'true');
+    vi.stubGlobal('fetch', vi.fn());
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 94,
+        title: 'Missing readiness service',
+        status: 'queued',
+        metadata: {},
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+
+    try {
+      const result = await videoAgent({
+        strapi: createStrapi(
+          {
+            'autonomy-policy': { evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed' })) },
+            'video-provider-adapter': videoProviderAdapter({ strapi: createStrapi({}, {}) }),
+          },
+          entityService
+        ),
+      }).render(94);
+
+      expect(result).toMatchObject({
+        status: 'failed',
+        blocked_reason: 'provider_readiness_service_missing',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+      expect(updates[0]).toMatchObject({
+        uid: VIDEO_ASSET_UID,
+        id: 94,
+        data: {
+          status: 'failed',
+          blocked_reason: 'provider_readiness_service_missing',
+        },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('blocks video rendering through the service when adapter mode is disabled or live', async () => {
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      findOne: vi.fn(async () => ({
+        id: 89,
+        title: 'Blocked video',
+        status: 'queued',
+        aspect_ratio: '9:16',
+        duration_seconds: 30,
+        metadata: {},
+      })),
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const policy = {
+      evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed' })),
+    };
+    const strapi = createStrapi({}, entityService);
+    const service = videoAgent({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': policy,
+          'video-provider-adapter': videoProviderAdapter({ strapi }),
+        },
+        entityService
+      ),
+    });
+
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'disabled');
+    await expect(service.render(89)).resolves.toMatchObject({
+      status: 'failed',
+      blocked_reason: 'provider_adapter_not_enabled',
+      provider_job_id: undefined,
+    });
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'live');
+    await expect(service.render(89)).resolves.toMatchObject({
+      status: 'failed',
+      blocked_reason: 'provider_adapter_live_not_implemented',
+      provider_job_id: undefined,
+    });
+
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'failed',
+            metadata: expect.objectContaining({
+              providerMode: 'disabled',
+              liveProviderCalls: false,
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'failed',
+            metadata: expect.objectContaining({
+              providerMode: 'live',
+              liveProviderCalls: false,
+            }),
+          }),
+        }),
+      ])
+    );
+  });
+
+  it('blocks live video adapter mode until a real provider adapter exists', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'live');
+    const result = await videoProviderAdapter({ strapi: createStrapi({}, {}) }).render({
+      id: 99,
+      title: 'Live blocked',
+      status: 'queued',
+      aspect_ratio: '9:16',
+      duration_seconds: 30,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      mode: 'live',
+      status: 'failed',
+      reason: 'provider_adapter_live_not_implemented',
+    });
+  });
+
+  it('blocks real social publishing when provider readiness is not ready', async () => {
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const policy = {
+      evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed' })),
+    };
+    const providers = {
+      checkProviders: vi.fn(async () => ({
+        ready: false,
+        requiredProviders: ['facebook'],
+        blockedProviders: [
+          {
+            provider: 'facebook',
+            status: 'missing_credentials',
+            blockedReason: 'missing_credentials',
+          },
+        ],
+      })),
+    };
+    const api = socialPublisher({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': policy,
+          'provider-status': providers,
+        },
+        entityService
+      ),
+    }) as any;
+    api.publishToProvider = vi.fn(async () => ({ providerPostId: 'should-not-run' }));
+
+    const result = await api.publishTicket(
+      {
+        id: 101,
+        platform: 'facebook',
+        status: 'scheduled',
+        caption: 'Horoskop dnia',
+        media_url: 'https://star-sign.pl/assets/og-default.png',
+        target_url: 'https://star-sign.pl/horoskopy',
+        scheduled_at: '2026-06-07T10:00:00.000Z',
+      } as any,
+      new Date('2026-06-07T10:00:00.000Z'),
+      {
+        id: 1,
+        enabled_channels: ['facebook'],
+        retry_max: 1,
+      } as any
+    );
+
+    expect(result).toBe('failed');
+    expect(providers.checkProviders).toHaveBeenCalledWith({
+      action: 'social.publish',
+      providers: ['facebook'],
+    });
+    expect(api.publishToProvider).not.toHaveBeenCalled();
+    expect(updates[0]).toMatchObject({
+      uid: SOCIAL_POST_TICKET_UID,
+      id: 101,
+      data: {
+        status: 'failed',
+        blocked_reason: 'provider_readiness_blocked',
+      },
+    });
+  });
+
+  it('records social test-connection results into provider readiness status', async () => {
+    const upsert = vi.fn(async () => ({ id: 1 }));
+    const api = socialPublisher({
+      strapi: createStrapi(
+        {
+          'provider-status': { upsert },
+        },
+        {}
+      ),
+    }) as any;
+
+    await api.recordProviderConnectionStatus('facebook', 7, {
+      platform: 'facebook',
+      status: 'ready',
+      message: 'Połączenie Facebook OK.',
+    });
+    await api.recordProviderConnectionStatus('instagram', 7, {
+      platform: 'instagram',
+      status: 'needs_action',
+      message: 'Brak ig_user_id lub tokena Instagram.',
+    });
+
+    expect(upsert).toHaveBeenCalledWith({
+      provider: 'facebook',
+      status: 'ready',
+      hasCredentials: true,
+      scopes: ['pages_manage_posts'],
+      blockedReason: undefined,
+      workflowId: 7,
+    });
+    expect(upsert).toHaveBeenCalledWith({
+      provider: 'instagram',
+      status: 'missing_credentials',
+      hasCredentials: false,
+      scopes: [],
+      blockedReason: 'Brak ig_user_id lub tokena Instagram.',
+      workflowId: 7,
+    });
+  });
+
+  it('blocks real social publishing on autonomy policy deny before provider or platform calls', async () => {
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const policy = {
+      evaluate: vi.fn(async () => ({ allowed: false, reason: 'daily_social_post_limit_exceeded' })),
+    };
+    const providers = {
+      checkProviders: vi.fn(async () => ({ ready: true, requiredProviders: [], blockedProviders: [] })),
+    };
+    const api = socialPublisher({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': policy,
+          'provider-status': providers,
+        },
+        entityService
+      ),
+    }) as any;
+    api.publishToProvider = vi.fn(async () => ({ providerPostId: 'should-not-run' }));
+
+    const result = await api.publishTicket(
+      {
+        id: 102,
+        platform: 'facebook',
+        status: 'scheduled',
+        caption: 'Horoskop dnia',
+        media_url: 'https://star-sign.pl/assets/og-default.png',
+        target_url: 'https://star-sign.pl/horoskopy',
+        scheduled_at: '2026-06-07T10:00:00.000Z',
+      } as any,
+      new Date('2026-06-07T10:00:00.000Z'),
+      {
+        id: 1,
+        enabled_channels: ['facebook'],
+        retry_max: 1,
+      } as any
+    );
+
+    expect(result).toBe('failed');
+    expect(providers.checkProviders).not.toHaveBeenCalled();
+    expect(api.publishToProvider).not.toHaveBeenCalled();
+    expect(updates[0]).toMatchObject({
+      uid: SOCIAL_POST_TICKET_UID,
+      id: 102,
+      data: {
+        status: 'failed',
+        blocked_reason: 'daily_social_post_limit_exceeded',
+      },
+    });
+  });
+
+  it('fails closed when full autonomy requires provider readiness but the service is unavailable', async () => {
+    vi.stubEnv('AICO_FULL_AUTONOMY_REQUIRED', 'true');
+    const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
+    const entityService = {
+      update: vi.fn(async (uid: string, id: number, input: { data: Record<string, unknown> }) => {
+        updates.push({ uid, id, data: input.data });
+        return { id, ...input.data };
+      }),
+    };
+    const policy = {
+      evaluate: vi.fn(async () => ({ allowed: true, reason: 'allowed' })),
+    };
+    const api = socialPublisher({
+      strapi: createStrapi({ 'autonomy-policy': policy }, entityService),
+    }) as any;
+    api.publishToProvider = vi.fn(async () => ({ providerPostId: 'should-not-run' }));
+
+    const result = await api.publishTicket(
+      {
+        id: 103,
+        platform: 'facebook',
+        status: 'scheduled',
+        caption: 'Horoskop dnia',
+        media_url: 'https://star-sign.pl/assets/og-default.png',
+        target_url: 'https://star-sign.pl/horoskopy',
+        scheduled_at: '2026-06-07T10:00:00.000Z',
+      } as any,
+      new Date('2026-06-07T10:00:00.000Z'),
+      {
+        id: 1,
+        enabled_channels: ['facebook'],
+        retry_max: 1,
+      } as any
+    );
+
+    expect(result).toBe('failed');
+    expect(api.publishToProvider).not.toHaveBeenCalled();
+    expect(updates[0]).toMatchObject({
+      uid: SOCIAL_POST_TICKET_UID,
+      id: 103,
+      data: {
+        status: 'failed',
+        blocked_reason: 'provider_readiness_service_missing',
+      },
+    });
+  });
+
+  it('keeps autonomy run-now in controlled dry-run mode and audits the skipped live tick', async () => {
+    const auditService = { recordFromContext: vi.fn(async () => ({ id: 1 })) };
+    const readiness = { evaluate: vi.fn() };
+    const orchestratorTick = vi.fn();
+    const ctx = createCtx();
+
+    await autonomyController({
+      strapi: createStrapi(
+        {
+          autopilot: {
+            dryRunTick: vi.fn(async () => ({
+              dryRun: true,
+              liveEffects: false,
+              steps: [],
+            })),
+          },
+          'production-readiness': readiness,
+          orchestrator: { tick: orchestratorTick },
+          'audit-trail': auditService,
+        },
+        {}
+      ),
+    }).runNow(ctx);
+
+    expect(ctx.badRequest).not.toHaveBeenCalled();
+    expect(ctx.body.data).toMatchObject({
+      dryRun: true,
+      liveEffects: false,
+      runNowMode: 'dry_run_only',
+    });
+    expect(auditService.recordFromContext).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({
+        action: 'autonomy.tick.run-now',
+        outcome: 'skipped',
+        metadata: expect.objectContaining({
+          reason: 'live_confirmation_required',
+          requiredConfirmation: 'RUN_AICO_CONTROLLED_TICK',
+          dryRun: true,
+        }),
+      })
+    );
+    expect(readiness.evaluate).not.toHaveBeenCalled();
+    expect(orchestratorTick).not.toHaveBeenCalled();
+  });
+
+  it('runs controlled live admin run-now only after production readiness GO and confirmation', async () => {
+    vi.stubEnv('AICO_ADMIN_RUN_NOW_ENABLED', 'true');
+    const auditService = { recordFromContext: vi.fn(async () => ({ id: 1 })) };
+    const readinessReport = { decision: 'GO', blockers: [], warnings: [] };
+    const readiness = { evaluate: vi.fn(async () => readinessReport) };
+    const orchestratorTick = vi.fn(async () => undefined);
+    const autopilotDryRun = vi.fn();
+    const ctx = createCtx({
+      body: {
+        live: true,
+        confirmation: 'RUN_AICO_CONTROLLED_TICK',
+      },
+    });
+
+    await autonomyController({
+      strapi: createStrapi(
+        {
+          autopilot: { dryRunTick: autopilotDryRun },
+          'production-readiness': readiness,
+          orchestrator: { tick: orchestratorTick },
+          'audit-trail': auditService,
+        },
+        {}
+      ),
+    }).runNow(ctx);
+
+    expect(ctx.badRequest).not.toHaveBeenCalled();
+    expect(autopilotDryRun).not.toHaveBeenCalled();
+    expect(readiness.evaluate).toHaveBeenCalledWith({ includeStrictAudit: true });
+    expect(orchestratorTick).toHaveBeenCalledTimes(1);
+    expect(ctx.body.data).toMatchObject({
+      dryRun: false,
+      liveEffects: true,
+      runNowMode: 'controlled_live',
+      readiness: readinessReport,
+    });
+    expect(auditService.recordFromContext).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({
+        action: 'autonomy.tick.run-now.attempt',
+        outcome: 'success',
+        metadata: expect.objectContaining({
+          mode: 'controlled_live',
+          readinessDecision: 'GO',
+          confirmationAccepted: true,
+        }),
+      })
+    );
+    expect(auditService.recordFromContext).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({
+        action: 'autonomy.tick.run-now',
+        outcome: 'success',
+        metadata: expect.objectContaining({
+          mode: 'controlled_live',
+          readinessDecision: 'GO',
+          liveEffects: true,
+        }),
+      })
+    );
+  });
+
+  it('blocks controlled live admin run-now when production readiness is not GO', async () => {
+    vi.stubEnv('AICO_ADMIN_RUN_NOW_ENABLED', 'true');
+    const auditService = { recordFromContext: vi.fn(async () => ({ id: 1 })) };
+    const readiness = {
+      evaluate: vi.fn(async () => ({
+        decision: 'GO_WITH_WARNINGS',
+        blockers: [],
+        warnings: [{ id: 'audit.strict-go' }],
+      })),
+    };
+    const orchestratorTick = vi.fn();
+    const ctx = createCtx({
+      body: {
+        mode: 'controlled_live',
+        confirmation: 'RUN_AICO_CONTROLLED_TICK',
+      },
+    });
+
+    await autonomyController({
+      strapi: createStrapi(
+        {
+          'production-readiness': readiness,
+          orchestrator: { tick: orchestratorTick },
+          'audit-trail': auditService,
+        },
+        {}
+      ),
+    }).runNow(ctx);
+
+    expect(readiness.evaluate).toHaveBeenCalledWith({ includeStrictAudit: true });
+    expect(orchestratorTick).not.toHaveBeenCalled();
+    expect(ctx.badRequest).toHaveBeenCalledWith(
+      'Production readiness is GO_WITH_WARNINGS; live run-now blocked.'
+    );
+    expect(auditService.recordFromContext).toHaveBeenCalledWith(
+      ctx,
+      expect.objectContaining({
+        action: 'autonomy.tick.run-now',
+        outcome: 'skipped',
+        severity: 'warn',
+        metadata: expect.objectContaining({
+          reason: 'production_readiness_not_go',
+          decision: 'GO_WITH_WARNINGS',
+          warnings: 1,
+          dryRun: true,
+        }),
+      })
+    );
+  });
+
+  it('returns an autopilot dry-run tick without creating live jobs or ad plans', async () => {
+    const entityService = {
+      findMany: vi.fn(async (uid: string) => {
+        if (uid === AUTONOMY_POLICY_UID) {
+          return [
+            {
+              id: 1,
+              policy_key: 'global',
+              autonomy_mode: 'full',
+              global_kill_switch: false,
+              daily_ads_budget_pln: 25,
+              daily_meta_ads_budget_pln: 15,
+              daily_google_ads_budget_pln: 10,
+            },
+          ];
+        }
+        return [];
+      }),
+      count: vi.fn(async () => 0),
+      create: vi.fn(),
+    };
+    const strapi = createStrapi({}, entityService);
+    const policy = autonomyPolicy({ strapi });
+    const traffic = trafficIngestor({ strapi });
+    const auditService = { record: vi.fn() };
+    const api = autopilot({
+      strapi: createStrapi(
+        {
+          'autonomy-policy': policy,
+          'traffic-ingestor': traffic,
+          'strategy-planner': {},
+          'audit-trail': auditService,
+        },
+        entityService
+      ),
+    });
+
+    const result = await api.dryRunTick();
+
+    expect(result).toMatchObject({
+      dryRun: true,
+      liveEffects: false,
+      policy: {
+        dailyAdsBudgetPln: 25,
+        mode: 'full',
+      },
+    });
+    expect(result.steps.map((step) => step.id)).toContain('ads-agent-meta');
+    expect(entityService.create).not.toHaveBeenCalledWith(
+      GENERATION_JOB_UID,
+      expect.anything()
+    );
+    expect(entityService.create).not.toHaveBeenCalledWith(
+      AD_CAMPAIGN_PLAN_UID,
+      expect.anything()
+    );
   });
 });

@@ -2,10 +2,15 @@ import type { FetchClient } from '@strapi/strapi/admin';
 
 import type {
   ApiEnvelope,
+  AdCampaignPlan,
+  AdStopLossSweepResult,
+  AutonomyStatus,
   ContentPerformanceSnapshot,
   ContentPlanItem,
   DashboardSummary,
   DiagnosticsSummary,
+  GenerationJob,
+  GrowthExperiment,
   HomepageRecommendation,
   HomepageRecommendationsRunResult,
   MediaAsset,
@@ -22,9 +27,14 @@ import type {
   SettingsPayload,
   SocialPlatform,
   PerformanceAggregateResult,
+  ProviderCredentialStatus,
+  ProviderProbeRunResult,
+  ProviderReadiness,
+  ProductionReadinessReport,
   StrategyApprovePlanResult,
   StrategyGeneratePlanResult,
   Topic,
+  VideoAsset,
   Workflow,
 } from './types';
 
@@ -447,6 +457,261 @@ export const api = {
   async getMediaUsage(client: FetchClient, limit = 200): Promise<MediaUsage[]> {
     const { data } = await client.get<ApiEnvelope<MediaUsage[]>>(
       `${BASE}/media-usage?limit=${limit}`
+    );
+    return data.data;
+  },
+
+  async getAutonomyStatus(client: FetchClient): Promise<AutonomyStatus> {
+    const { data } = await client.get<ApiEnvelope<AutonomyStatus>>(`${BASE}/autonomy/status`);
+    return data.data;
+  },
+
+  async updateAutonomyPolicy(
+    client: FetchClient,
+    payload: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const { data } = await client.put<ApiEnvelope<Record<string, unknown>>, typeof payload>(
+      `${BASE}/autonomy/policy`,
+      payload
+    );
+    return data.data;
+  },
+
+  async dryRunAutonomyTick(client: FetchClient): Promise<Record<string, unknown>> {
+    const { data } = await client.post<ApiEnvelope<Record<string, unknown>>>(
+      `${BASE}/autonomy/tick/dry-run`
+    );
+    return data.data;
+  },
+
+  async runAutonomyTickNow(
+    client: FetchClient,
+    payload?: { live?: boolean; mode?: 'controlled_live'; confirmation?: string }
+  ): Promise<Record<string, unknown>> {
+    const { data } = await client.post<
+      ApiEnvelope<Record<string, unknown>>,
+      typeof payload
+    >(
+      `${BASE}/autonomy/tick/run-now`,
+      payload
+    );
+    return data.data;
+  },
+
+  async getProductionReadiness(
+    client: FetchClient,
+    params?: { includeStrictAudit?: boolean }
+  ): Promise<ProductionReadinessReport> {
+    const query = new URLSearchParams();
+    if (params?.includeStrictAudit) query.set('includeStrictAudit', 'true');
+    const queryString = query.toString();
+    const { data } = await client.get<ApiEnvelope<ProductionReadinessReport>>(
+      `${BASE}/autonomy/production-readiness${queryString ? `?${queryString}` : ''}`
+    );
+    return data.data;
+  },
+
+  async getGenerationJobs(
+    client: FetchClient,
+    params?: { status?: string; jobType?: string; limit?: number }
+  ): Promise<GenerationJob[]> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.jobType) query.set('jobType', params.jobType);
+    if (params?.limit) query.set('limit', String(params.limit));
+
+    const queryString = query.toString();
+    const { data } = await client.get<ApiEnvelope<GenerationJob[]>>(
+      `${BASE}/generation/jobs${queryString ? `?${queryString}` : ''}`
+    );
+    return data.data;
+  },
+
+  async retryGenerationJob(client: FetchClient, id: number): Promise<GenerationJob> {
+    const { data } = await client.post<ApiEnvelope<GenerationJob>>(
+      `${BASE}/generation/jobs/${id}/retry`
+    );
+    return data.data;
+  },
+
+  async cancelGenerationJob(client: FetchClient, id: number): Promise<GenerationJob> {
+    const { data } = await client.post<ApiEnvelope<GenerationJob>>(
+      `${BASE}/generation/jobs/${id}/cancel`
+    );
+    return data.data;
+  },
+
+  async getTrafficSnapshots(
+    client: FetchClient,
+    params?: { source?: string; limit?: number }
+  ): Promise<Record<string, unknown>[]> {
+    const query = new URLSearchParams();
+    if (params?.source) query.set('source', params.source);
+    if (params?.limit) query.set('limit', String(params.limit));
+
+    const queryString = query.toString();
+    const { data } = await client.get<ApiEnvelope<Record<string, unknown>[]>>(
+      `${BASE}/traffic/snapshots${queryString ? `?${queryString}` : ''}`
+    );
+    return data.data;
+  },
+
+  async importTraffic(
+    client: FetchClient,
+    payload?: { day?: string; dryRun?: boolean; source?: 'first_party' | 'ga4' }
+  ): Promise<Record<string, unknown>> {
+    const { data } = await client.post<ApiEnvelope<Record<string, unknown>>, typeof payload>(
+      `${BASE}/traffic/import`,
+      payload
+    );
+    return data.data;
+  },
+
+  async getVideoAssets(client: FetchClient, params?: { status?: string; limit?: number }): Promise<VideoAsset[]> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.limit) query.set('limit', String(params.limit));
+
+    const queryString = query.toString();
+    const { data } = await client.get<ApiEnvelope<VideoAsset[]>>(
+      `${BASE}/video/assets${queryString ? `?${queryString}` : ''}`
+    );
+    return data.data;
+  },
+
+  async createVideoJob(
+    client: FetchClient,
+    payload: {
+      title: string;
+      script?: string;
+      workflowId?: number;
+      idempotencyKey?: string;
+      durationSeconds?: number;
+      dryRun?: boolean;
+    }
+  ): Promise<Record<string, unknown>> {
+    const { data } = await client.post<ApiEnvelope<Record<string, unknown>>, typeof payload>(
+      `${BASE}/video/jobs`,
+      payload
+    );
+    return data.data;
+  },
+
+  async renderVideoAsset(client: FetchClient, id: number): Promise<VideoAsset> {
+    const { data } = await client.post<ApiEnvelope<VideoAsset>>(`${BASE}/video/assets/${id}/render`);
+    return data.data;
+  },
+
+  async getAdCampaignPlans(
+    client: FetchClient,
+    params?: { status?: string; platform?: string; limit?: number }
+  ): Promise<AdCampaignPlan[]> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.platform) query.set('platform', params.platform);
+    if (params?.limit) query.set('limit', String(params.limit));
+
+    const queryString = query.toString();
+    const { data } = await client.get<ApiEnvelope<AdCampaignPlan[]>>(
+      `${BASE}/ads/campaign-plans${queryString ? `?${queryString}` : ''}`
+    );
+    return data.data;
+  },
+
+  async createAdCampaignPlan(
+    client: FetchClient,
+    payload: {
+      name: string;
+      platform: 'meta' | 'google';
+      targetUrl: string;
+      dailyBudgetPln?: number;
+      objective?: string;
+      creativePayload?: Record<string, unknown>;
+      targetingPayload?: Record<string, unknown>;
+      dryRun?: boolean;
+    }
+  ): Promise<Record<string, unknown>> {
+    const { data } = await client.post<ApiEnvelope<Record<string, unknown>>, typeof payload>(
+      `${BASE}/ads/campaign-plans`,
+      payload
+    );
+    return data.data;
+  },
+
+  async activateAdCampaignPlan(client: FetchClient, id: number): Promise<AdCampaignPlan> {
+    const { data } = await client.post<ApiEnvelope<AdCampaignPlan>>(
+      `${BASE}/ads/campaign-plans/${id}/activate`
+    );
+    return data.data;
+  },
+
+  async pauseAdCampaignPlan(client: FetchClient, id: number): Promise<AdCampaignPlan> {
+    const { data } = await client.post<ApiEnvelope<AdCampaignPlan>>(
+      `${BASE}/ads/campaign-plans/${id}/pause`
+    );
+    return data.data;
+  },
+
+  async pauseActiveAdCampaignPlans(
+    client: FetchClient,
+    payload: { confirmation: string }
+  ): Promise<AdStopLossSweepResult> {
+    const { data } = await client.post<ApiEnvelope<AdStopLossSweepResult>, typeof payload>(
+      `${BASE}/ads/campaign-plans/stop-loss`,
+      payload
+    );
+    return data.data;
+  },
+
+  async getGrowthExperiments(
+    client: FetchClient,
+    params?: { status?: string; limit?: number }
+  ): Promise<GrowthExperiment[]> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.limit) query.set('limit', String(params.limit));
+
+    const queryString = query.toString();
+    const { data } = await client.get<ApiEnvelope<GrowthExperiment[]>>(
+      `${BASE}/experiments${queryString ? `?${queryString}` : ''}`
+    );
+    return data.data;
+  },
+
+  async chooseGrowthExperimentWinner(
+    client: FetchClient,
+    id: number,
+    payload: { winnerVariantKey: string }
+  ): Promise<GrowthExperiment> {
+    const { data } = await client.post<ApiEnvelope<GrowthExperiment>, typeof payload>(
+      `${BASE}/experiments/${id}/choose-winner`,
+      payload
+    );
+    return data.data;
+  },
+
+  async getProviderStatus(
+    client: FetchClient,
+    params?: { provider?: string; limit?: number }
+  ): Promise<ProviderCredentialStatus[]> {
+    const query = new URLSearchParams();
+    if (params?.provider) query.set('provider', params.provider);
+    if (params?.limit) query.set('limit', String(params.limit));
+
+    const queryString = query.toString();
+    const { data } = await client.get<ApiEnvelope<ProviderCredentialStatus[]>>(
+      `${BASE}/providers/status${queryString ? `?${queryString}` : ''}`
+    );
+    return data.data;
+  },
+
+  async testProviderReadiness(
+    client: FetchClient,
+    payload?: { providers?: string[]; includeConnectivity?: boolean }
+  ): Promise<ProviderProbeRunResult> {
+    const { data } = await client.post<ApiEnvelope<ProviderProbeRunResult>, typeof payload>(
+      `${BASE}/providers/test-readiness`,
+      payload ?? {}
     );
     return data.data;
   },

@@ -12,6 +12,14 @@ import editorialMemory from './editorial-memory/schema.json';
 import homepageRecommendation from './homepage-recommendation/schema.json';
 import auditEvent from './audit-event/schema.json';
 import runtimeLock from './runtime-lock/schema.json';
+import autonomyPolicy from './autonomy-policy/schema.json';
+import generationJob from './generation-job/schema.json';
+import videoAsset from './video-asset/schema.json';
+import trafficSnapshot from './traffic-snapshot/schema.json';
+import adCampaignPlan from './ad-campaign-plan/schema.json';
+import adsMutationLedger from './ads-mutation-ledger/schema.json';
+import growthExperiment from './growth-experiment/schema.json';
+import providerCredentialStatus from './provider-credential-status/schema.json';
 
 export default {
   workflow: { schema: workflow },
@@ -28,4 +36,12 @@ export default {
   'homepage-recommendation': { schema: homepageRecommendation },
   'audit-event': { schema: auditEvent },
   'runtime-lock': { schema: runtimeLock },
+  'autonomy-policy': { schema: autonomyPolicy },
+  'generation-job': { schema: generationJob },
+  'video-asset': { schema: videoAsset },
+  'traffic-snapshot': { schema: trafficSnapshot },
+  'ad-campaign-plan': { schema: adCampaignPlan },
+  'ads-mutation-ledger': { schema: adsMutationLedger },
+  'growth-experiment': { schema: growthExperiment },
+  'provider-credential-status': { schema: providerCredentialStatus },
 };

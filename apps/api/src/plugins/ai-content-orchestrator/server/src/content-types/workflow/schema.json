@@ -23,7 +23,15 @@
     },
     "workflow_type": {
       "type": "enumeration",
-      "enum": ["horoscope", "daily_card", "article"],
+      "enum": [
+        "horoscope",
+        "daily_card",
+        "article",
+        "video_short",
+        "ad_campaign",
+        "homepage_curation",
+        "traffic_analysis"
+      ],
       "required": true
     },
     "generate_cron": { "type": "string", "required": true },

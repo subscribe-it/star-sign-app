@@ -7,18 +7,27 @@ type AicoContentContract = {
 
 let cachedContract: AicoContentContract | null = null;
 
-const contractCandidates = () => [
-  path.resolve(process.cwd(), 'src/bootstrap/aico-content-contract.json'),
-  path.resolve(process.cwd(), 'apps/api/src/bootstrap/aico-content-contract.json'),
-  path.resolve(process.cwd(), '../../bootstrap/aico-content-contract.json'),
-  path.resolve(process.cwd(), '../../../bootstrap/aico-content-contract.json'),
-  path.resolve(process.cwd(), 'dist/src/bootstrap/aico-content-contract.json'),
-];
+const CONTRACT_FILENAME = 'aico-content-contract.json';
+
+const unique = (values: string[]): string[] => Array.from(new Set(values));
+
+export const getAicoContractCandidates = (): string[] =>
+  unique([
+    path.resolve(__dirname, '../../../../../bootstrap', CONTRACT_FILENAME),
+    path.resolve(__dirname, '../../../../../../src/bootstrap', CONTRACT_FILENAME),
+    path.resolve(__dirname, '../../../../../../dist/src/bootstrap', CONTRACT_FILENAME),
+    path.resolve(process.cwd(), 'src/bootstrap', CONTRACT_FILENAME),
+    path.resolve(process.cwd(), 'apps/api/src/bootstrap', CONTRACT_FILENAME),
+    path.resolve(process.cwd(), 'dist/src/bootstrap', CONTRACT_FILENAME),
+  ]);
+
+export const resolveAicoContentContractPath = (): string | null =>
+  getAicoContractCandidates().find((candidate) => fs.existsSync(candidate)) ?? null;
 
 export const getAicoContentContract = (): AicoContentContract => {
   if (cachedContract) return cachedContract;
 
-  const filePath = contractCandidates().find((candidate) => fs.existsSync(candidate));
+  const filePath = resolveAicoContentContractPath();
   if (!filePath) {
     throw new Error('AICO content contract file not found.');
   }

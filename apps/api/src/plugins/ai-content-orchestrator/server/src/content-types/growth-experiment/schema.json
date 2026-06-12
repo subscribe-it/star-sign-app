@@ -1,0 +1,42 @@
+{
+  "kind": "collectionType",
+  "collectionName": "aico_growth_experiments",
+  "info": {
+    "singularName": "growth-experiment",
+    "pluralName": "growth-experiments",
+    "displayName": "AICO Growth Experiment"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": { "visible": true },
+    "content-type-builder": { "visible": true }
+  },
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "experiment_type": {
+      "type": "enumeration",
+      "enum": ["content_title", "cta", "image", "social_caption", "ad_creative", "homepage_slot"],
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["draft", "running", "paused", "completed", "failed"],
+      "default": "draft",
+      "required": true
+    },
+    "primary_metric": { "type": "string", "default": "premium_cta_click" },
+    "variants": { "type": "json" },
+    "started_at": { "type": "datetime" },
+    "ended_at": { "type": "datetime" },
+    "winner_variant_key": { "type": "string" },
+    "decision": { "type": "json" },
+    "metadata": { "type": "json" },
+    "workflow": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.workflow"
+    }
+  }
+}

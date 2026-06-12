@@ -11,6 +11,8 @@ RUN_FRONTEND_FULL="${RUN_FRONTEND_FULL:-false}"
 RUN_E2E="${RUN_E2E:-false}"
 RUN_DOMAIN_AUDITS="${RUN_DOMAIN_AUDITS:-auto}"
 RUN_ENV_GUARD="${RUN_ENV_GUARD:-auto}"
+RUN_AICO_OPENROUTER_SMOKE="${RUN_AICO_OPENROUTER_SMOKE:-auto}"
+RUN_AICO_POST_SEED_PREFLIGHT="${RUN_AICO_POST_SEED_PREFLIGHT:-auto}"
 RUN_SECURITY_HEADERS="${RUN_SECURITY_HEADERS:-auto}"
 API_AUDIT_LEVEL="${API_AUDIT_LEVEL:-high}"
 
@@ -78,6 +80,23 @@ run_env_guard() {
   PRODUCTION_ENV_FILE="$COMPOSE_ENV_FILE" sh ops/production-env-check.sh
 }
 
+resolve_compose_env_file() {
+  case "$COMPOSE_ENV_FILE" in
+    /*) printf '%s\n' "$COMPOSE_ENV_FILE" ;;
+    *) printf '%s\n' "$ROOT_DIR/$COMPOSE_ENV_FILE" ;;
+  esac
+}
+
+run_aico_post_seed_preflight() {
+  AICO_PREFLIGHT_ENV_FILE="$(resolve_compose_env_file)" \
+    npm exec -- nx run api:aico-post-seed-preflight --outputStyle=static
+}
+
+run_aico_openrouter_smoke() {
+  AICO_SMOKE_ENV_FILE="$(resolve_compose_env_file)" \
+    npm exec -- nx run api:aico-openrouter-smoke --outputStyle=static
+}
+
 run "npm ci dry-run" npm ci --dry-run
 run "apps/api npm ci dry-run" npm --prefix apps/api ci --dry-run
 run "nx sync check" npm exec -- nx sync:check
@@ -108,6 +127,18 @@ if should_run_required_check "$RUN_DOMAIN_AUDITS"; then
   run "AICO contract audit" npm exec -- nx run api:aico-contract-audit --outputStyle=static
 else
   skip "domain DB audits; set RUN_DOMAIN_AUDITS=true or PREDEPLOY_SCOPE=staging"
+fi
+
+if should_run_required_check "$RUN_AICO_OPENROUTER_SMOKE"; then
+  run "AICO OpenRouter smoke" run_aico_openrouter_smoke
+else
+  skip "AICO OpenRouter smoke; set RUN_AICO_OPENROUTER_SMOKE=true or PREDEPLOY_SCOPE=staging"
+fi
+
+if should_run_required_check "$RUN_AICO_POST_SEED_PREFLIGHT"; then
+  run "AICO post-seed preflight" run_aico_post_seed_preflight
+else
+  skip "AICO post-seed preflight; set RUN_AICO_POST_SEED_PREFLIGHT=true or PREDEPLOY_SCOPE=staging"
 fi
 
 if should_run_required_check "$RUN_SECURITY_HEADERS"; then
