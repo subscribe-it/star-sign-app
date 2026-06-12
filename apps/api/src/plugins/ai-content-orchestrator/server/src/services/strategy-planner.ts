@@ -2,10 +2,17 @@ import {
   CONTENT_PLAN_ITEM_UID,
   CONTENT_UIDS,
   DEFAULT_TIMEZONE,
+  EDITORIAL_MEMORY_UID,
   TOPIC_QUEUE_UID,
   WORKFLOW_UID,
 } from '../constants';
-import type { ContentPlanItemRecord, Strapi, TopicQueueItemRecord, WorkflowRecord } from '../types';
+import type {
+  ContentPlanItemRecord,
+  EditorialMemoryRecord,
+  Strapi,
+  TopicQueueItemRecord,
+  WorkflowRecord,
+} from '../types';
 import { addDaysToDateString, formatDateInZone } from '../utils/date-time';
 import { getEntityService } from '../utils/entity-service';
 import { isRecord } from '../utils/json';
@@ -60,6 +67,40 @@ type TopicsService = {
 type PerformanceHintSnapshot = {
   content_title?: string | null;
   content_slug?: string | null;
+};
+
+export type InsightBias = {
+  trendingTitles: string[];
+  underperforming: string[];
+  bestHours: number[];
+};
+
+export const EMPTY_INSIGHT_BIAS: InsightBias = {
+  trendingTitles: [],
+  underperforming: [],
+  bestHours: [],
+};
+
+const toStringArray = (value: unknown, field: 'title' | 'key'): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) =>
+      isRecord(entry) ? String(entry[field] ?? entry.title ?? '').trim() : String(entry ?? '').trim()
+    )
+    .filter(Boolean);
+};
+
+const toHourArray = (value: unknown): number[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => Number(entry))
+    .filter((hour) => Number.isInteger(hour) && hour >= 0 && hour <= 23);
 };
 
 const getId = (value: unknown): number | null => {
@@ -131,6 +172,7 @@ const strategyPlanner = ({ strapi }: { strapi: Strapi }) => {
       const categories = await this.resolveCategories();
       const existingKeys = await this.resolveExistingDedupeKeys();
       const performanceHints = await this.resolvePerformanceHints();
+      const insightBias = await this.resolveInsightBias(now);
 
       const candidates = this.buildCandidates({
         workflows,
@@ -138,6 +180,7 @@ const strategyPlanner = ({ strapi }: { strapi: Strapi }) => {
         weekStart,
         limit,
         performanceHints,
+        insightBias,
         trigger: input.trigger,
       });
 
@@ -332,6 +375,40 @@ const strategyPlanner = ({ strapi }: { strapi: Strapi }) => {
       return keys;
     },
 
+    /**
+     * Czyta świeże insighty z editorial-memory (zapisane przez insights-engine)
+     * i zamienia je na deterministyczny "bias" planowania treści.
+     * Brak insightów = pusty bias = dotychczasowe zachowanie planera.
+     */
+    async resolveInsightBias(now: Date = new Date()): Promise<InsightBias> {
+      try {
+        const rows = await entityService.findMany<EditorialMemoryRecord>(EDITORIAL_MEMORY_UID, {
+          filters: { key: 'insight:performance', active: true },
+          limit: 1,
+        });
+
+        const memory = rows[0];
+        const metadata = memory && isRecord(memory.metadata) ? memory.metadata : null;
+        if (!metadata || metadata.kind !== 'performance_insight') {
+          return EMPTY_INSIGHT_BIAS;
+        }
+
+        // Brak lub nieparsowalne validUntil = traktuj insight jako przeterminowany.
+        const validUntil = new Date(String(metadata.validUntil ?? ''));
+        if (!Number.isFinite(validUntil.getTime()) || validUntil.getTime() < now.getTime()) {
+          return EMPTY_INSIGHT_BIAS;
+        }
+
+        return {
+          trendingTitles: toStringArray(metadata.trendingTopics, 'title'),
+          underperforming: toStringArray(metadata.bottomContent, 'title'),
+          bestHours: toHourArray(metadata.bestPublishHours),
+        };
+      } catch {
+        return EMPTY_INSIGHT_BIAS;
+      }
+    },
+
     async resolvePerformanceHints(): Promise<string[]> {
       const snapshots = await entityService.findMany<PerformanceHintSnapshot>(
         'plugin::ai-content-orchestrator.content-performance-snapshot',
@@ -352,17 +429,30 @@ const strategyPlanner = ({ strapi }: { strapi: Strapi }) => {
       weekStart: string;
       limit: number;
       performanceHints: string[];
+      insightBias?: InsightBias;
       trigger?: string;
     }): Array<Record<string, unknown> & { dedupe_key: string }> {
       const workflows = input.workflows.length > 0 ? input.workflows : [null];
       const categoryPool = input.categories.length > 0 ? input.categories : [{ id: 0, name: 'Astrologia' }];
       const candidates: Array<Record<string, unknown> & { dedupe_key: string }> = [];
+      const bias = input.insightBias ?? EMPTY_INSIGHT_BIAS;
+      const underperforming = new Set(bias.underperforming.map((value) => slugify(value)));
+
+      // Tematy rosnące mają pierwszeństwo przed zwykłymi hintami;
+      // hinty pokrywające się z najsłabszymi treściami są pomijane.
+      const hintPool = [
+        ...bias.trendingTitles,
+        ...input.performanceHints.filter((hint) => !underperforming.has(slugify(hint))),
+      ].filter((hint, index, all) => all.indexOf(hint) === index);
 
       for (let index = 0; index < input.limit * 2; index += 1) {
         const workflow = workflows[index % workflows.length];
         const category = categoryPool[index % categoryPool.length];
-        const hint = input.performanceHints[index % Math.max(1, input.performanceHints.length)];
+        const hint = hintPool[index % Math.max(1, hintPool.length)];
+        const isTrendingHint = Boolean(hint && bias.trendingTitles.includes(hint));
         const day = addDaysToDateString(input.weekStart, index);
+        const publishHour =
+          bias.bestHours.length > 0 ? bias.bestHours[index % bias.bestHours.length] : 8;
         const cluster = workflow?.content_cluster || slugify(category.name || 'astrologia');
         const title = hint
           ? `Co dalej po temacie: ${hint}`
@@ -380,19 +470,23 @@ const strategyPlanner = ({ strapi }: { strapi: Strapi }) => {
             .join(' '),
           seo_intent: 'informational',
           seo_cluster: cluster,
-          priority_score: Math.max(30, 90 - index * 3),
+          priority_score: Math.min(100, Math.max(30, 90 - index * 3) + (isTrendingHint ? 10 : 0)),
           target_persona: 'czytelnik astrologii i rozwoju osobistego',
-          target_publish_at: toIsoDateTime(day),
+          target_publish_at: toIsoDateTime(day, publishHour),
           channels: ['facebook', 'instagram', 'twitter'],
-          agent_rationale: hint
-            ? 'Plan bazuje na treści z dobrym wynikiem i tworzy naturalną kontynuację.'
-            : 'Plan uzupełnia regularny kalendarz SEO/blog dla Star Sign.',
+          agent_rationale: isTrendingHint
+            ? 'Plan podąża za rosnącym tematem z insightów performance (insights-engine).'
+            : hint
+              ? 'Plan bazuje na treści z dobrym wynikiem i tworzy naturalną kontynuację.'
+              : 'Plan uzupełnia regularny kalendarz SEO/blog dla Star Sign.',
           source: hint ? 'performance_feedback' : 'strategy_agent',
           dedupe_key: dedupeKey,
           metadata: {
             weekStart: input.weekStart,
             categoryName: category.name,
             performanceHint: hint || null,
+            insightTrendingHint: isTrendingHint,
+            insightPublishHour: bias.bestHours.length > 0 ? publishHour : null,
             trigger: input.trigger ?? 'manual',
           },
           workflow: workflow?.id ?? null,

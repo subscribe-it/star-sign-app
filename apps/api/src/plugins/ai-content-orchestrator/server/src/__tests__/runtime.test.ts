@@ -4037,7 +4037,7 @@ describe('ai-content-orchestrator runtime', () => {
     expect(JSON.stringify(result)).not.toContain('secret');
   });
 
-  it('keeps production NO-GO for live adapter modes until controlled live smoke exists', async () => {
+  it('keeps production NO-GO for live video mode while accepting live ads mode after controlled smoke', async () => {
     vi.stubEnv('AICO_FULL_AUTONOMY_REQUIRED', 'true');
     vi.stubEnv('AICO_STRICT_AUDIT_REQUIRED', 'true');
     vi.stubEnv('AICO_AUDIT_TRAIL_STRICT', 'true');
@@ -4087,7 +4087,6 @@ describe('ai-content-orchestrator runtime', () => {
     expect(result.liveEffectsAllowed).toBe(false);
     expect(result.blockers).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'live.ads-adapter' }),
         expect.objectContaining({ id: 'live.video-adapter' }),
       ])
     );
@@ -4095,6 +4094,7 @@ describe('ai-content-orchestrator runtime', () => {
       expect.arrayContaining([
         expect.objectContaining({ id: 'audit.strict-go', status: 'pass' }),
         expect.objectContaining({ id: 'providers.required-ready', status: 'pass' }),
+        expect.objectContaining({ id: 'live.ads-adapter', status: 'pass' }),
       ])
     );
   });
@@ -4929,8 +4929,9 @@ describe('ai-content-orchestrator runtime', () => {
     });
   });
 
-  it('blocks live ads adapter mode until a real provider adapter exists', async () => {
+  it('blocks live ads adapter mode when the controlled live gate is not enabled', async () => {
     vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'live');
+    vi.stubEnv('AICO_CONTROLLED_LIVE_ENABLED', '');
     const result = await adsProviderAdapter({ strapi: createStrapi({}, {}) }).createOrUpdateCampaign({
       id: 44,
       name: 'Live blocked',
@@ -4944,7 +4945,7 @@ describe('ai-content-orchestrator runtime', () => {
       ok: false,
       mode: 'live',
       status: 'blocked',
-      reason: 'provider_adapter_live_not_implemented',
+      reason: 'live_gate_not_enabled',
     });
   });
 
@@ -5086,8 +5087,10 @@ describe('ai-content-orchestrator runtime', () => {
     });
   });
 
-  it('does not mark live ads paused when provider pause adapter is not implemented', async () => {
+  it('does not mark live ads paused when live credentials are missing', async () => {
     vi.stubEnv('AICO_ADS_PROVIDER_MODE', 'live');
+    vi.stubEnv('AICO_META_ADS_ACCESS_TOKEN', '');
+    vi.stubEnv('AICO_META_AD_ACCOUNT_ID', '');
     const updates: Array<{ uid: string; id: number; data: Record<string, unknown> }> = [];
     const entityService = {
       findOne: vi.fn(async () => ({
@@ -5123,7 +5126,7 @@ describe('ai-content-orchestrator runtime', () => {
 
     expect(result).toMatchObject({
       status: 'blocked',
-      blocked_reason: 'provider_pause_live_not_implemented',
+      blocked_reason: 'meta_ads_credentials_missing',
       provider_campaign_id: 'live-campaign-47',
       provider_adset_id: 'live-adset-47',
       provider_ad_id: 'live-creative-47',
@@ -5136,7 +5139,7 @@ describe('ai-content-orchestrator runtime', () => {
       }),
       {
         providerMode: 'live',
-        providerDecision: 'provider_pause_live_not_implemented',
+        providerDecision: 'meta_ads_credentials_missing',
         ok: false,
       }
     );
@@ -5145,10 +5148,10 @@ describe('ai-content-orchestrator runtime', () => {
       id: 47,
       data: {
         status: 'blocked',
-        blocked_reason: 'provider_pause_live_not_implemented',
+        blocked_reason: 'meta_ads_credentials_missing',
         stop_loss_state: expect.objectContaining({
           providerMode: 'live',
-          providerDecision: 'provider_pause_live_not_implemented',
+          providerDecision: 'meta_ads_credentials_missing',
           providerPaused: false,
           liveSpendEnabled: false,
           adsLedger: expect.objectContaining({

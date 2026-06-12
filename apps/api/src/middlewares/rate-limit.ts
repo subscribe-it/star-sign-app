@@ -37,6 +37,7 @@ const defaultLimitedPaths = [
   '/api/contact',
   '/api/newsletter',
   '/api/checkout/session',
+  '/api/account',
   '/api/account/subscription',
   '/api/analytics/events',
 ];

@@ -46,6 +46,12 @@ type AdsProviderAdapterService = {
     providerCreativeId?: string;
     providerPayload?: Record<string, unknown>;
   }>;
+  fetchSpend?: (plan: AdCampaignPlanRecord) => Promise<{
+    ok: boolean;
+    mode: string;
+    reason: string;
+    spendPln: number;
+  }>;
 };
 
 type ProviderStatusService = {
@@ -703,10 +709,105 @@ const adsAgent = ({ strapi }: { strapi: Strapi }) => {
       return result;
     },
 
+    async reconcileLiveSpend(input: { limit?: number } = {}): Promise<{
+      providerMode: string;
+      checked: number;
+      pausedForStopLoss: number;
+      results: Array<{ id: number; spendPln: number; dailyBudgetPln: number; action: 'ok' | 'paused' | 'spend_unavailable' }>;
+    }> {
+      const providerMode = getAdsProviderMode();
+      const summary = {
+        providerMode,
+        checked: 0,
+        pausedForStopLoss: 0,
+        results: [] as Array<{
+          id: number;
+          spendPln: number;
+          dailyBudgetPln: number;
+          action: 'ok' | 'paused' | 'spend_unavailable';
+        }>,
+      };
+
+      if (providerMode !== 'live') {
+        return summary;
+      }
+
+      const provider = getPluginService<Partial<AdsProviderAdapterService> | undefined>(
+        strapi,
+        'ads-provider-adapter'
+      );
+      if (typeof provider?.fetchSpend !== 'function') {
+        return summary;
+      }
+
+      const limit = Math.max(1, Math.min(200, Number(input.limit ?? 50)));
+      const plans = await entityService.findMany<AdCampaignPlanRecord>(AD_CAMPAIGN_PLAN_UID, {
+        filters: { status: 'active' },
+        sort: [{ updatedAt: 'desc' }],
+        limit,
+      });
+
+      for (const plan of plans) {
+        summary.checked += 1;
+        const dailyBudgetPln = toNumber(plan.daily_budget_pln, 0);
+        const spend = await provider.fetchSpend(plan);
+
+        if (!spend.ok) {
+          summary.results.push({ id: plan.id, spendPln: 0, dailyBudgetPln, action: 'spend_unavailable' });
+          await recordSystemAuditEvent(strapi, {
+            action: 'ads.stop-loss.spend-check',
+            outcome: 'skipped',
+            severity: 'warn',
+            resourceUid: AD_CAMPAIGN_PLAN_UID,
+            resourceId: plan.id,
+            metadata: { reason: spend.reason, platform: plan.platform },
+          });
+          continue;
+        }
+
+        if (dailyBudgetPln > 0 && spend.spendPln >= dailyBudgetPln) {
+          await recordSystemAuditEvent(strapi, {
+            action: 'ads.stop-loss.triggered',
+            outcome: 'success',
+            severity: 'warn',
+            resourceUid: AD_CAMPAIGN_PLAN_UID,
+            resourceId: plan.id,
+            metadata: {
+              platform: plan.platform,
+              spendPln: spend.spendPln,
+              dailyBudgetPln,
+            },
+          });
+          await this.pause(plan.id);
+          summary.pausedForStopLoss += 1;
+          summary.results.push({ id: plan.id, spendPln: spend.spendPln, dailyBudgetPln, action: 'paused' });
+        } else {
+          summary.results.push({ id: plan.id, spendPln: spend.spendPln, dailyBudgetPln, action: 'ok' });
+        }
+      }
+
+      return summary;
+    },
+
     async activate(id: number): Promise<AdCampaignPlanRecord> {
       const plan = await entityService.findOne<AdCampaignPlanRecord>(AD_CAMPAIGN_PLAN_UID, id);
       if (!plan) {
         throw new Error('Nie znaleziono planu kampanii reklamowej.');
+      }
+
+      if (plan.status === 'active' && plan.provider_campaign_id) {
+        await recordSystemAuditEvent(strapi, {
+          action: 'ads.activate.noop',
+          outcome: 'success',
+          resourceUid: AD_CAMPAIGN_PLAN_UID,
+          resourceId: id,
+          metadata: {
+            platform: plan.platform,
+            reason: 'plan_already_active',
+            providerCampaignId: plan.provider_campaign_id,
+          },
+        });
+        return plan;
       }
 
       const policy = getPluginService<AutonomyPolicyService>(strapi, 'autonomy-policy');

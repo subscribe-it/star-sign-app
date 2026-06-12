@@ -12,6 +12,7 @@ import experimentAgent from './experiment-agent';
 import generationJobs from './generation-jobs';
 import mediaAssets from './media-assets';
 import imageDesigner from './image-designer';
+import insightsEngine from './insights-engine';
 import mediaGenerator from './media-generator';
 import mediaLibrary from './media-library';
 import mediaSelector from './media-selector';
@@ -49,6 +50,7 @@ export default {
   'experiment-agent': experimentAgent,
   'generation-jobs': generationJobs,
   'image-designer': imageDesigner,
+  'insights-engine': insightsEngine,
   'media-assets': mediaAssets,
   'media-generator': mediaGenerator,
   'media-library': mediaLibrary,
