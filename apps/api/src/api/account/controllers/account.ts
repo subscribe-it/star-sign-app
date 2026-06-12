@@ -867,4 +867,61 @@ export default {
       ctx.body = { error: 'Nie udało się otworzyć panelu subskrypcji.' };
     }
   },
+
+  async deleteAccount(ctx: any) {
+    const user = await getAuthenticatedUser(ctx);
+    if (!user) {
+      return ctx.unauthorized('Musisz się zalogować.');
+    }
+
+    const payload = getPayload(ctx);
+    if (payload.confirmation !== 'USUWAM KONTO') {
+      return ctx.badRequest(
+        'Aby usunąć konto, wyślij potwierdzenie: { "confirmation": "USUWAM KONTO" }.',
+      );
+    }
+
+    const userId = user.id;
+    const email = typeof user.email === 'string' ? user.email : null;
+
+    try {
+      await strapi.db
+        .query('api::user-reading.user-reading')
+        .deleteMany({ where: { user: userId } });
+
+      await strapi.db
+        .query('api::user-profile.user-profile')
+        .deleteMany({ where: { user: userId } });
+
+      // Zdarzenia analityczne zostają (statystyki), ale bez powiązania z osobą.
+      const analyticsEvents = await strapi.db
+        .query('api::analytics-event.analytics-event')
+        .findMany({ where: { user: userId }, select: ['id'] });
+      for (const event of analyticsEvents) {
+        await strapi.db
+          .query('api::analytics-event.analytics-event')
+          .update({ where: { id: event.id }, data: { user: null } });
+      }
+
+      if (email) {
+        await strapi.db
+          .query('api::newsletter-subscription.newsletter-subscription')
+          .deleteMany({ where: { email } });
+      }
+
+      // Zamówienia pozostają bez zmian — obowiązek przechowywania dokumentów
+      // rozliczeniowych (podstawa prawna niezależna od zgody użytkownika).
+
+      await strapi.db
+        .query('plugin::users-permissions.user')
+        .delete({ where: { id: userId } });
+
+      strapi.log.info(`Konto użytkownika ${userId} usunięte na żądanie (RODO).`);
+      ctx.body = { deleted: true };
+    } catch (error) {
+      strapi.log.error(`Nie udało się usunąć konta użytkownika ${userId}.`, error);
+      ctx.status = 500;
+      ctx.body = { error: 'Nie udało się usunąć konta. Spróbuj ponownie.' };
+    }
+  },
 };

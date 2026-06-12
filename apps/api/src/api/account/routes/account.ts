@@ -56,5 +56,13 @@ export default {
         auth: false,
       },
     },
+    {
+      method: 'DELETE',
+      path: '/account',
+      handler: 'account.deleteAccount',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };

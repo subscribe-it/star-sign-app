@@ -1,0 +1,11 @@
+[Unit]
+Description=Star Sign PostgreSQL backup
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/star-sign
+EnvironmentFile=/opt/star-sign/.env.ops
+ExecStart=/bin/sh /opt/star-sign/ops/backup-postgres.sh
+ExecStartPost=/bin/sh /opt/star-sign/ops/verify-backup.sh

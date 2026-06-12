@@ -262,3 +262,83 @@ describe('account subscription checkout settings gate', () => {
     });
   });
 });
+
+describe('account deletion (RODO)', () => {
+  const createDeleteStrapiMock = () => {
+    const userReadingQuery = { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) };
+    const userProfileQuery = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) };
+    const analyticsEventQuery = {
+      findMany: vi.fn().mockResolvedValue([{ id: 11 }, { id: 12 }]),
+      update: vi.fn().mockResolvedValue({}),
+    };
+    const newsletterQuery = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) };
+    const userQuery = { delete: vi.fn().mockResolvedValue({}) };
+
+    const strapiMock = {
+      db: {
+        query: vi.fn((uid: string) => {
+          if (uid === 'api::user-reading.user-reading') return userReadingQuery;
+          if (uid === 'api::user-profile.user-profile') return userProfileQuery;
+          if (uid === 'api::analytics-event.analytics-event')
+            return analyticsEventQuery;
+          if (uid === 'api::newsletter-subscription.newsletter-subscription')
+            return newsletterQuery;
+          if (uid === 'plugin::users-permissions.user') return userQuery;
+          throw new Error(`Unexpected query uid: ${uid}`);
+        }),
+      },
+      log: { error: vi.fn(), info: vi.fn() },
+    };
+
+    vi.stubGlobal('strapi', strapiMock);
+
+    return {
+      userReadingQuery,
+      userProfileQuery,
+      analyticsEventQuery,
+      newsletterQuery,
+      userQuery,
+    };
+  };
+
+  it('requires authentication', async () => {
+    createDeleteStrapiMock();
+    const ctx = createCtx({ confirmation: 'USUWAM KONTO' });
+    ctx.state.user = undefined as never;
+
+    await accountController.deleteAccount(ctx);
+
+    expect(ctx.unauthorized).toHaveBeenCalled();
+  });
+
+  it('requires explicit confirmation phrase', async () => {
+    createDeleteStrapiMock();
+    const ctx = createCtx({ confirmation: 'nie' });
+
+    await accountController.deleteAccount(ctx);
+
+    expect(ctx.badRequest).toHaveBeenCalled();
+  });
+
+  it('deletes profile, readings, newsletter and user, anonymizes analytics', async () => {
+    const mocks = createDeleteStrapiMock();
+    const ctx = createCtx({ confirmation: 'USUWAM KONTO' });
+
+    await accountController.deleteAccount(ctx);
+
+    expect(mocks.userReadingQuery.deleteMany).toHaveBeenCalledWith({
+      where: { user: 123 },
+    });
+    expect(mocks.userProfileQuery.deleteMany).toHaveBeenCalledWith({
+      where: { user: 123 },
+    });
+    expect(mocks.analyticsEventQuery.update).toHaveBeenCalledTimes(2);
+    expect(mocks.newsletterQuery.deleteMany).toHaveBeenCalledWith({
+      where: { email: 'test@example.com' },
+    });
+    expect(mocks.userQuery.delete).toHaveBeenCalledWith({
+      where: { id: 123 },
+    });
+    expect(ctx.body).toEqual({ deleted: true });
+  });
+});

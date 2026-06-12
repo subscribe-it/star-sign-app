@@ -1,0 +1,10 @@
+[Unit]
+Description=Star Sign uptime watch
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/star-sign
+EnvironmentFile=/opt/star-sign/.env.ops
+ExecStart=/bin/sh /opt/star-sign/ops/uptime-watch.sh

@@ -1,8 +1,29 @@
-title = "Star Sign gitleaks allowlist"
+title = "Star Sign gitleaks config"
+
+# Bez [extend] gitleaks użyłby WYŁĄCZNIE tego pliku (zero reguł = zero detekcji).
+[extend]
+useDefault = true
+
+[[rules]]
+id = "openrouter-api-key"
+description = "OpenRouter API key"
+regex = '''sk-or-v1-[a-f0-9]{64}'''
+
+[[rules]]
+id = "brevo-api-key"
+description = "Brevo (Sendinblue) API key"
+regex = '''xkeysib-[a-f0-9]{64}-[A-Za-z0-9]{16}'''
+
+[[rules]]
+id = "replicate-api-token"
+description = "Replicate API token"
+regex = '''r8_[A-Za-z0-9]{37,}'''
 
 [allowlist]
 description = "Known false positives for deterministic test fixtures and env validation keys."
+regexTarget = "match"
 regexes = [
   '''asset_key:\s*'horoscope-baran-daily-01'''',
   '''key:\s*'GA4_MEASUREMENT_ID'''',
+  '''ga4_missing_credentials''',
 ]

@@ -90,7 +90,7 @@ services:
         - 'traefik.http.middlewares.star-sign-frontend-headers.headers.frameDeny=true'
         - 'traefik.http.middlewares.star-sign-frontend-headers.headers.referrerPolicy=strict-origin-when-cross-origin'
         - 'traefik.http.middlewares.star-sign-frontend-headers.headers.permissionsPolicy=accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()'
-        - "traefik.http.middlewares.star-sign-frontend-headers.headers.contentSecurityPolicy=frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+        - "traefik.http.middlewares.star-sign-frontend-headers.headers.contentSecurityPolicy=frame-ancestors 'none'; base-uri 'self'; object-src 'none'; default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://js.stripe.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.star-sign.pl https://www.google-analytics.com https://www.googletagmanager.com; font-src 'self' data:; media-src 'self' https://cdn.star-sign.pl; frame-src https://js.stripe.com https://challenges.cloudflare.com; connect-src 'self' https://api.star-sign.pl https://www.google-analytics.com https://region1.google-analytics.com https://api.stripe.com https://challenges.cloudflare.com https://*.sentry.io; worker-src 'self'; manifest-src 'self'"
 
   api:
     image: ghcr.io/${GHCR_OWNER:-subscribe-it}/star-sign-api:${STAR_SIGN_IMAGE_TAG:-main}
@@ -171,6 +171,52 @@ services:
       AICO_ENABLE_WORKFLOWS: ${AICO_ENABLE_WORKFLOWS:-true}
       AICO_ALLOW_MISSING_TOKEN: ${AICO_ALLOW_MISSING_TOKEN:-false}
       AICO_BACKUP_ENABLED: ${AICO_BACKUP_ENABLED:-true}
+      AICO_FULL_AUTONOMY_REQUIRED: ${AICO_FULL_AUTONOMY_REQUIRED:-false}
+      AICO_AUTO_PUBLISH_ENABLED: ${AICO_AUTO_PUBLISH_ENABLED:-true}
+      AICO_IMAGE_GEN_TOKEN: ${AICO_IMAGE_GEN_TOKEN:-}
+      AICO_IMAGE_GEN_MODEL: ${AICO_IMAGE_GEN_MODEL:-openai/gpt-image-2}
+      AICO_MEDIA_GEN_REQUIRED: ${AICO_MEDIA_GEN_REQUIRED:-false}
+      AICO_CONTROLLED_LIVE_ENABLED: ${AICO_CONTROLLED_LIVE_ENABLED:-false}
+      AICO_ADMIN_RUN_NOW_ENABLED: ${AICO_ADMIN_RUN_NOW_ENABLED:-false}
+      AICO_ADS_PROVIDER_MODE: ${AICO_ADS_PROVIDER_MODE:-disabled}
+      AICO_ADS_TARGET_URL_PREFLIGHT_REQUIRED: ${AICO_ADS_TARGET_URL_PREFLIGHT_REQUIRED:-false}
+      AICO_VIDEO_PROVIDER_MODE: ${AICO_VIDEO_PROVIDER_MODE:-disabled}
+      AICO_VIDEO_GEN_TOKEN: ${AICO_VIDEO_GEN_TOKEN:-}
+      AICO_VIDEO_GEN_MODEL: ${AICO_VIDEO_GEN_MODEL:-}
+      AICO_VIDEO_GEN_CANCEL_AFTER: ${AICO_VIDEO_GEN_CANCEL_AFTER:-15m}
+      AICO_VIDEO_GEN_INPUT_JSON: ${AICO_VIDEO_GEN_INPUT_JSON:-}
+      AICO_PUBLIC_FRONTEND_URL: ${AICO_PUBLIC_FRONTEND_URL:-https://star-sign.pl}
+      AICO_SOCIAL_DEFAULT_IMAGE_URL: ${AICO_SOCIAL_DEFAULT_IMAGE_URL:-https://star-sign.pl/assets/og-default.png}
+      AICO_SOCIAL_PUBLISH_REQUIRED: ${AICO_SOCIAL_PUBLISH_REQUIRED:-false}
+      AICO_SOCIAL_CONNECTION_PREFLIGHT: ${AICO_SOCIAL_CONNECTION_PREFLIGHT:-false}
+      AICO_STRATEGY_AUTOPILOT_ENABLED: ${AICO_STRATEGY_AUTOPILOT_ENABLED:-false}
+      AICO_STRATEGY_AUTO_APPROVE_PLAN: ${AICO_STRATEGY_AUTO_APPROVE_PLAN:-false}
+      AICO_STRATEGY_MIN_TOPIC_BACKLOG: ${AICO_STRATEGY_MIN_TOPIC_BACKLOG:-3}
+      AICO_STRATEGY_MAX_PLAN_ITEMS_PER_TICK: ${AICO_STRATEGY_MAX_PLAN_ITEMS_PER_TICK:-2}
+      AICO_SOCIAL_CHANNELS: ${AICO_SOCIAL_CHANNELS:-facebook,instagram,twitter}
+      AICO_FACEBOOK_PAGE_ID: ${AICO_FACEBOOK_PAGE_ID:-}
+      AICO_FACEBOOK_ACCESS_TOKEN: ${AICO_FACEBOOK_ACCESS_TOKEN:-}
+      AICO_INSTAGRAM_USER_ID: ${AICO_INSTAGRAM_USER_ID:-}
+      AICO_INSTAGRAM_ACCESS_TOKEN: ${AICO_INSTAGRAM_ACCESS_TOKEN:-}
+      AICO_X_API_KEY: ${AICO_X_API_KEY:-}
+      AICO_X_API_SECRET: ${AICO_X_API_SECRET:-}
+      AICO_X_ACCESS_TOKEN: ${AICO_X_ACCESS_TOKEN:-}
+      AICO_X_ACCESS_TOKEN_SECRET: ${AICO_X_ACCESS_TOKEN_SECRET:-}
+      AICO_TIKTOK_ACCESS_TOKEN: ${AICO_TIKTOK_ACCESS_TOKEN:-}
+      AICO_YOUTUBE_CLIENT_ID: ${AICO_YOUTUBE_CLIENT_ID:-}
+      AICO_YOUTUBE_CLIENT_SECRET: ${AICO_YOUTUBE_CLIENT_SECRET:-}
+      AICO_YOUTUBE_REFRESH_TOKEN: ${AICO_YOUTUBE_REFRESH_TOKEN:-}
+      AICO_META_ADS_ACCESS_TOKEN: ${AICO_META_ADS_ACCESS_TOKEN:-}
+      AICO_META_AD_ACCOUNT_ID: ${AICO_META_AD_ACCOUNT_ID:-}
+      AICO_GOOGLE_ADS_DEVELOPER_TOKEN: ${AICO_GOOGLE_ADS_DEVELOPER_TOKEN:-}
+      AICO_GOOGLE_ADS_CLIENT_ID: ${AICO_GOOGLE_ADS_CLIENT_ID:-}
+      AICO_GOOGLE_ADS_CLIENT_SECRET: ${AICO_GOOGLE_ADS_CLIENT_SECRET:-}
+      AICO_GOOGLE_ADS_REFRESH_TOKEN: ${AICO_GOOGLE_ADS_REFRESH_TOKEN:-}
+      AICO_GOOGLE_ADS_CUSTOMER_ID: ${AICO_GOOGLE_ADS_CUSTOMER_ID:-}
+      GA4_PROPERTY_ID: ${GA4_PROPERTY_ID:-}
+      AICO_GA4_ACCESS_TOKEN: ${AICO_GA4_ACCESS_TOKEN:-}
+      GA4_SERVICE_ACCOUNT_JSON: ${GA4_SERVICE_ACCOUNT_JSON:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
