@@ -58,6 +58,25 @@ export class HomeComponent {
     this.seoService.updateSeo(
       'Twoja Droga Przez Gwiazdy',
       'Odkryj magię astrologii, horoskopy, tarot i unikalne talizmany w Star Sign.',
+      {
+        jsonLd: {
+          '@context': 'https://schema.org',
+          '@graph': [
+            {
+              '@type': 'Organization',
+              name: 'Star Sign',
+              url: 'https://star-sign.pl',
+              logo: 'https://star-sign.pl/assets/icons/icon-512.png',
+            },
+            {
+              '@type': 'WebSite',
+              name: 'Star Sign',
+              url: 'https://star-sign.pl',
+              inLanguage: 'pl-PL',
+            },
+          ],
+        },
+      },
     );
   }
 

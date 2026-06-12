@@ -1,13 +1,18 @@
 import {
   Component,
   ChangeDetectionStrategy,
+  PLATFORM_ID,
   signal,
   OnInit,
   inject,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { CookieService } from 'ngx-cookie-service';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { AnalyticsService } from '../../services/analytics.service';
+import {
+  CookieConsentChoice,
+  CookieConsentService,
+} from '../../services/cookie-consent.service';
 import { featureFlags } from '../../feature-flags';
 
 export interface CookieConsent {
@@ -19,16 +24,17 @@ export interface CookieConsent {
 @Component({
   selector: 'app-cookie-banner',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   templateUrl: './cookie-banner.html',
   styleUrl: './cookie-banner.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CookieBanner implements OnInit {
-  private readonly cookieService = inject(CookieService);
+  private readonly platformId = inject(PLATFORM_ID);
   private readonly analyticsService = inject(AnalyticsService);
+  private readonly consentService = inject(CookieConsentService);
 
-  public readonly isVisible = signal(false);
+  public readonly isVisible = this.consentService.bannerVisible;
   public readonly showSettings = signal(false);
   public readonly adsEnabled = featureFlags.adsEnabled;
 
@@ -39,32 +45,29 @@ export class CookieBanner implements OnInit {
   });
 
   ngOnInit() {
-    const consentJson = this.cookieService.get('cookie-consent-v2');
-    if (!consentJson) {
-      setTimeout(() => this.isVisible.set(true), 1500);
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    if (!this.consentService.hasDecision()) {
+      setTimeout(() => this.consentService.reopen(), 1500);
     }
   }
 
   public acceptAll(): void {
-    const consent: CookieConsent = {
-      necessary: true,
-      analytics: true,
-      marketing: this.adsEnabled,
-    };
-    this.saveConsent(consent);
+    this.saveConsent({ analytics: true, marketing: this.adsEnabled });
   }
 
   public acceptSelected(): void {
-    this.saveConsent(this.consent());
+    const selected = this.consent();
+    this.saveConsent({
+      analytics: selected.analytics,
+      marketing: selected.marketing,
+    });
   }
 
   public declineAll(): void {
-    const consent: CookieConsent = {
-      necessary: true,
-      analytics: false,
-      marketing: false,
-    };
-    this.saveConsent(consent);
+    this.saveConsent({ analytics: false, marketing: false });
   }
 
   public toggleSettings(): void {
@@ -80,22 +83,19 @@ export class CookieBanner implements OnInit {
     this.consent.update((prev) => ({ ...prev, [key]: checked }));
   }
 
-  private saveConsent(consent: CookieConsent): void {
-    const normalizedConsent: CookieConsent = {
-      ...consent,
-      marketing: this.adsEnabled && consent.marketing,
+  private saveConsent(choice: CookieConsentChoice): void {
+    const normalized: CookieConsentChoice = {
+      analytics: choice.analytics,
+      marketing: this.adsEnabled && choice.marketing,
     };
 
-    this.cookieService.set(
-      'cookie-consent-v2',
-      JSON.stringify(normalizedConsent),
-      365,
-      '/',
-    );
-    this.isVisible.set(false);
+    this.consentService.save(normalized);
+    this.showSettings.set(false);
 
-    if (normalizedConsent.analytics) {
+    if (normalized.analytics) {
       this.analyticsService.onConsentGranted();
+    } else {
+      this.analyticsService.onConsentRevoked();
     }
   }
 }

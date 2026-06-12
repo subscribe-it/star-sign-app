@@ -2,6 +2,11 @@
 <div
   class="cookie-banner-shell"
   data-test="cookie-banner"
+  role="dialog"
+  aria-modal="false"
+  aria-live="polite"
+  aria-label="Zgody na pliki cookie"
+  tabindex="-1"
 >
   <div class="cookie-panel">
     @if (!showSettings()) {
@@ -15,7 +20,13 @@
           <p class="cookie-copy">
             Używamy ciasteczek niezbędnych do działania konta i bezpieczeństwa.
             Analityka i marketing są opcjonalne. Możesz je zaakceptować,
-            odrzucić albo ustawić ręcznie.
+            odrzucić albo ustawić ręcznie. Szczegóły znajdziesz w
+            <a
+              routerLink="/cookies"
+              class="cookie-policy-link"
+              data-test="cookie-policy-link"
+              >Polityce cookies</a
+            >.
           </p>
         </div>
       </div>
@@ -26,7 +37,7 @@
           data-test="cookie-decline-button"
           class="cookie-button cookie-button--outline"
         >
-          Odrzuć opcjonalne
+          Tylko niezbędne
         </button>
         <button
           (click)="toggleSettings()"
@@ -40,7 +51,7 @@
           data-test="cookie-accept-all-button"
           class="cookie-button cookie-button--primary"
         >
-          Zgadzam się na wszystko
+          Akceptuję wszystkie
         </button>
       </div>
     </div>
@@ -117,7 +128,7 @@
           data-test="cookie-settings-decline-button"
           class="cookie-button cookie-button--outline"
         >
-          Odrzuć opcjonalne
+          Tylko niezbędne
         </button>
         <button
           (click)="acceptSelected()"

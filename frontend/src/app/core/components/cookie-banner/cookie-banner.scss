@@ -81,6 +81,16 @@
   line-height: 1.5;
 }
 
+.cookie-policy-link {
+  color: #8b5e6b;
+  font-weight: 600;
+  text-decoration: underline;
+
+  &:hover {
+    color: #7c5360;
+  }
+}
+
 .cookie-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

@@ -11,6 +11,7 @@ import {
   Product,
 } from '@star-sign-monorepo/shared-types';
 import { RuntimeConfigService } from './runtime-config.service';
+import { CookieConsentService } from './cookie-consent.service';
 
 type GtagFunction = (...args: [command: string, ...params: unknown[]]) => void;
 type AnalyticsParams = Record<string, unknown>;
@@ -25,10 +26,6 @@ type FirstPartyEventName =
   | 'checkout_redirect'
   | 'purchase'
   | 'premium_subscription_conversion';
-type CookieConsentPayload = {
-  analytics?: unknown;
-};
-
 declare global {
   interface Window {
     dataLayer?: DataLayerEntry[];
@@ -48,6 +45,7 @@ export class AnalyticsService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly runtimeConfig = inject(RuntimeConfigService);
+  private readonly consentService = inject(CookieConsentService);
   private readonly isBrowser = isPlatformBrowser(this.platformId);
 
   private gaId = '';
@@ -64,17 +62,9 @@ export class AnalyticsService {
   }
 
   private checkConsent(): void {
-    const consentJson = this.cookieService.get('cookie-consent-v2');
-    if (consentJson) {
-      try {
-        const consent = JSON.parse(consentJson) as CookieConsentPayload;
-        if (consent.analytics === true) {
-          this.hasConsent.set(true);
-          this.loadGoogleAnalytics();
-        }
-      } catch (e) {
-        console.error('Failed to parse cookie consent for analytics', e);
-      }
+    if (this.consentService.analyticsAllowed()) {
+      this.hasConsent.set(true);
+      this.loadGoogleAnalytics();
     }
   }
 
@@ -325,6 +315,30 @@ export class AnalyticsService {
       this.hasConsent.set(true);
       this.loadGoogleAnalytics();
       this.trackPageView(this.router.url);
+    }
+
+    if (this.isBrowser && this.gaId) {
+      (window as unknown as Record<string, unknown>)[
+        `ga-disable-${this.gaId}`
+      ] = false;
+    }
+  }
+
+  /**
+   * Called when the user withdraws analytics consent
+   * (e.g. reopened the banner via "Zarządzaj zgodami" and declined).
+   */
+  public onConsentRevoked(): void {
+    if (!this.hasConsent()) {
+      return;
+    }
+
+    this.hasConsent.set(false);
+
+    if (this.isBrowser && this.gaId) {
+      (window as unknown as Record<string, unknown>)[
+        `ga-disable-${this.gaId}`
+      ] = true;
     }
   }
 

@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -7,6 +7,7 @@ import {
   simplePinterest,
 } from '@ng-icons/simple-icons';
 import { featureFlags } from '../../feature-flags';
+import { CookieConsentService } from '../../services/cookie-consent.service';
 
 @Component({
   selector: 'app-footer',
@@ -19,6 +20,8 @@ import { featureFlags } from '../../feature-flags';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Footer {
+  private readonly cookieConsentService = inject(CookieConsentService);
+
   public readonly currentYear = new Date().getFullYear();
   public readonly shopEnabled = featureFlags.shopEnabled;
 
@@ -31,4 +34,8 @@ export class Footer {
   ];
 
   public readonly socials: { label: string; icon: string; href: string }[] = [];
+
+  public manageCookieConsent(): void {
+    this.cookieConsentService.reopen();
+  }
 }

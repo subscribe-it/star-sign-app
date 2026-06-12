@@ -3,6 +3,7 @@ import { AnalyticsService } from './analytics.service';
 import { CookieService } from 'ngx-cookie-service';
 import { PLATFORM_ID } from '@angular/core';
 import { RuntimeConfigService } from './runtime-config.service';
+import { CookieConsentService } from './cookie-consent.service';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { EMPTY, of } from 'rxjs';
@@ -11,6 +12,7 @@ describe('AnalyticsService', () => {
   let service: AnalyticsService;
   let cookieServiceMock: any;
   let httpClientMock: { post: ReturnType<typeof vi.fn> };
+  let consentServiceMock: { analyticsAllowed: ReturnType<typeof vi.fn> };
   let runtimeConfigMock: {
     ga4MeasurementId: ReturnType<typeof vi.fn>;
     gtmContainerId: ReturnType<typeof vi.fn>;
@@ -18,11 +20,14 @@ describe('AnalyticsService', () => {
 
   beforeEach(() => {
     cookieServiceMock = {
-      get: vi.fn(),
+      get: vi.fn().mockReturnValue(''),
       set: vi.fn(),
     };
     httpClientMock = {
       post: vi.fn(() => of({ accepted: true })),
+    };
+    consentServiceMock = {
+      analyticsAllowed: vi.fn().mockReturnValue(false),
     };
     runtimeConfigMock = {
       ga4MeasurementId: vi.fn().mockReturnValue(''),
@@ -35,6 +40,7 @@ describe('AnalyticsService', () => {
         { provide: CookieService, useValue: cookieServiceMock },
         { provide: HttpClient, useValue: httpClientMock },
         { provide: RuntimeConfigService, useValue: runtimeConfigMock },
+        { provide: CookieConsentService, useValue: consentServiceMock },
         { provide: Router, useValue: { events: EMPTY, url: '/test' } },
         { provide: PLATFORM_ID, useValue: 'browser' },
       ],
@@ -47,6 +53,7 @@ describe('AnalyticsService', () => {
     vi.restoreAllMocks();
     delete (window as any).gtag;
     delete (window as any).dataLayer;
+    delete (window as any)['ga-disable-G-TEST'];
     const scripts = document.head.querySelectorAll(
       'script[src*="googletagmanager"]',
     );
@@ -58,8 +65,8 @@ describe('AnalyticsService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should not load GA if no consent cookie', () => {
-    cookieServiceMock.get.mockReturnValue('');
+  it('should not load GA when no consent decision exists', () => {
+    consentServiceMock.analyticsAllowed.mockReturnValue(false);
     const spy = vi.spyOn(document.head, 'appendChild');
 
     service.init();
@@ -67,7 +74,8 @@ describe('AnalyticsService', () => {
   });
 
   it('should not load GA if analytics consent is false', () => {
-    cookieServiceMock.get.mockReturnValue(JSON.stringify({ analytics: false }));
+    consentServiceMock.analyticsAllowed.mockReturnValue(false);
+    runtimeConfigMock.ga4MeasurementId.mockReturnValue('G-TEST');
     const spy = vi.spyOn(document.head, 'appendChild');
 
     service.init();
@@ -75,7 +83,7 @@ describe('AnalyticsService', () => {
   });
 
   it('should load GA if analytics consent is true and GA ID is set', () => {
-    cookieServiceMock.get.mockReturnValue(JSON.stringify({ analytics: true }));
+    consentServiceMock.analyticsAllowed.mockReturnValue(true);
     runtimeConfigMock.ga4MeasurementId.mockReturnValue('G-TEST');
 
     const spy = vi.spyOn(document.head, 'appendChild');
@@ -87,9 +95,7 @@ describe('AnalyticsService', () => {
   });
 
   it('should load GTM before GA when a GTM container is configured', () => {
-    cookieServiceMock.get.mockImplementation((name: string) =>
-      name === 'cookie-consent-v2' ? JSON.stringify({ analytics: true }) : '',
-    );
+    consentServiceMock.analyticsAllowed.mockReturnValue(true);
     runtimeConfigMock.ga4MeasurementId.mockReturnValue('G-TEST');
     runtimeConfigMock.gtmContainerId.mockReturnValue('GTM-ABC123');
 
@@ -117,6 +123,7 @@ describe('AnalyticsService', () => {
         { provide: CookieService, useValue: cookieServiceMock },
         { provide: HttpClient, useValue: httpClientMock },
         { provide: RuntimeConfigService, useValue: runtimeConfigMock },
+        { provide: CookieConsentService, useValue: consentServiceMock },
         { provide: Router, useValue: { events: EMPTY, url: '/test' } },
         { provide: PLATFORM_ID, useValue: 'server' },
       ],
@@ -131,7 +138,7 @@ describe('AnalyticsService', () => {
     service.trackEvent('test_event');
     expect((window as any).dataLayer).toBeUndefined();
 
-    cookieServiceMock.get.mockReturnValue(JSON.stringify({ analytics: true }));
+    consentServiceMock.analyticsAllowed.mockReturnValue(true);
     runtimeConfigMock.ga4MeasurementId.mockReturnValue('G-123');
     service.init();
 
@@ -151,8 +158,21 @@ describe('AnalyticsService', () => {
     expect((window as any).gtag).toBeDefined();
   });
 
+  it('should stop tracking after consent is revoked', () => {
+    consentServiceMock.analyticsAllowed.mockReturnValue(true);
+    runtimeConfigMock.ga4MeasurementId.mockReturnValue('G-TEST');
+    service.init();
+
+    service.onConsentRevoked();
+
+    const before = ((window as any).dataLayer || []).length;
+    service.trackEvent('after_revoke');
+    expect(((window as any).dataLayer || []).length).toBe(before);
+    expect((window as any)['ga-disable-G-TEST']).toBe(true);
+  });
+
   it('should ignore placeholder GA IDs', () => {
-    cookieServiceMock.get.mockReturnValue(JSON.stringify({ analytics: true }));
+    consentServiceMock.analyticsAllowed.mockReturnValue(true);
     runtimeConfigMock.ga4MeasurementId.mockReturnValue('G-XXXXXXXXXX');
     const spy = vi.spyOn(document.head, 'appendChild');
 
@@ -162,7 +182,7 @@ describe('AnalyticsService', () => {
   });
 
   it('should emit standard e-commerce events', () => {
-    cookieServiceMock.get.mockReturnValue(JSON.stringify({ analytics: true }));
+    consentServiceMock.analyticsAllowed.mockReturnValue(true);
     runtimeConfigMock.ga4MeasurementId.mockReturnValue('G-TEST');
     service.init();
 
@@ -200,7 +220,7 @@ describe('AnalyticsService', () => {
   });
 
   it('should send first-party premium analytics without GA consent', () => {
-    cookieServiceMock.get.mockReturnValue('');
+    consentServiceMock.analyticsAllowed.mockReturnValue(false);
 
     service.trackDailyHoroscopeView({
       content_type: 'horoscope',
