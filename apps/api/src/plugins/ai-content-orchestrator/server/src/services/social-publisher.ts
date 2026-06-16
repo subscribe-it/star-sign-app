@@ -1444,6 +1444,7 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
           caption,
           mediaUrl,
           targetUrl: ticket.target_url || undefined,
+          contentFormat: (ticket as { content_format?: string }).content_format,
           workflow,
         });
 
@@ -1826,6 +1827,7 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
       caption: string;
       mediaUrl: string;
       targetUrl?: string;
+      contentFormat?: string;
       workflow: WorkflowRecord;
     }): Promise<{ providerPostId?: string; providerPayload?: Record<string, unknown> }> {
       if (input.platform === 'facebook') {
@@ -1857,6 +1859,7 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
       caption: string;
       mediaUrl: string;
       targetUrl?: string;
+      contentFormat?: string;
       workflow: WorkflowRecord;
     }): Promise<{ providerPostId?: string; providerPayload?: Record<string, unknown> }> {
       if (!input.workflow.fb_page_id || !input.workflow.fb_access_token_encrypted) {
@@ -1872,16 +1875,26 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
       );
 
       const message = appendLinkIfMissing(input.caption, input.targetUrl);
-      const endpoint = `${GRAPH_API_BASE}/${input.workflow.fb_page_id}/photos`;
+      const isVideo = input.contentFormat === 'video';
+      // Video → Page /videos (file_url + description); image → /photos (url + caption).
+      const endpoint = isVideo
+        ? `${GRAPH_API_BASE}/${input.workflow.fb_page_id}/videos`
+        : `${GRAPH_API_BASE}/${input.workflow.fb_page_id}/photos`;
 
       const response = await axios.post(
         endpoint,
-        {
-          url: input.mediaUrl,
-          caption: message,
-          published: true,
-          access_token: token,
-        },
+        isVideo
+          ? {
+              file_url: input.mediaUrl,
+              description: message,
+              access_token: token,
+            }
+          : {
+              url: input.mediaUrl,
+              caption: message,
+              published: true,
+              access_token: token,
+            },
         {
           timeout: 20_000,
         }
@@ -1908,6 +1921,7 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
     async publishToInstagram(input: {
       caption: string;
       mediaUrl: string;
+      contentFormat?: string;
       workflow: WorkflowRecord;
     }): Promise<{ providerPostId?: string; providerPayload?: Record<string, unknown> }> {
       if (!input.workflow.ig_user_id || !input.workflow.ig_access_token_encrypted) {
@@ -1929,13 +1943,21 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
         `Instagram token workflow #${input.workflow.id}`
       );
 
+      const isVideo = input.contentFormat === 'video';
       const createContainer = await axios.post(
         `${GRAPH_API_BASE}/${input.workflow.ig_user_id}/media`,
-        {
-          image_url: input.mediaUrl,
-          caption: input.caption,
-          access_token: token,
-        },
+        isVideo
+          ? {
+              media_type: 'REELS',
+              video_url: input.mediaUrl,
+              caption: input.caption,
+              access_token: token,
+            }
+          : {
+              image_url: input.mediaUrl,
+              caption: input.caption,
+              access_token: token,
+            },
         {
           timeout: 20_000,
         }
