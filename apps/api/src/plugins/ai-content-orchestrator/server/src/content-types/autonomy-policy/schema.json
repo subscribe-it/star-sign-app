@@ -39,6 +39,9 @@
     "brand_safety_required": { "type": "boolean", "default": true },
     "legal_disclaimer_required": { "type": "boolean", "default": true },
     "no_sensitive_targeting": { "type": "boolean", "default": true },
+    "guarded_max_ads_impact_pct": { "type": "decimal", "default": 0.4 },
+    "ads_stop_loss_on_tick": { "type": "boolean", "default": true },
+    "auto_apply_experiments": { "type": "boolean", "default": false },
     "allowed_social_channels": {
       "type": "json",
       "default": ["facebook", "instagram", "twitter", "tiktok", "youtube_shorts"]

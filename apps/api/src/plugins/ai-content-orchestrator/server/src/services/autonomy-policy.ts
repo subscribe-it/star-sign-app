@@ -48,6 +48,22 @@ const GLOBAL_POLICY_KEY = 'global';
 const DEFAULT_DAILY_ADS_BUDGET_PLN = 25;
 const DEFAULT_META_ADS_BUDGET_PLN = 15;
 const DEFAULT_GOOGLE_ADS_BUDGET_PLN = 10;
+const DEFAULT_GUARDED_MAX_ADS_IMPACT_PCT = 0.4;
+
+// Decision taxonomy: which actions are financially/operationally CRITICAL (real
+// money / live exposure) vs NON_CRITICAL (content, organic social, generation —
+// reversible, no live spend). In `guarded` mode the agent acts autonomously on
+// non-critical actions within caps, but a critical action is only auto-approved
+// when its impact is small (<= guarded_max_ads_impact_pct of the daily cap);
+// larger critical actions require `full` mode. Unknown actions default to CRITICAL
+// (fail-safe).
+const NON_CRITICAL_ACTIONS = new Set([
+  'llm.generate',
+  'media.generate',
+  'video.generate',
+  'content.publish',
+  'social.publish',
+]);
 const LLM_JOB_TYPES = ['article', 'horoscope', 'social_caption', 'ad_creative', 'homepage_slot'];
 const ACTIVE_ADS_LEDGER_STATUSES = ['reserved', 'applied'];
 
@@ -81,6 +97,12 @@ const normalizePolicy = (policy: AutonomyPolicyRecord): AutonomyPolicyRecord => 
   brand_safety_required: toBoolean(policy.brand_safety_required, true),
   legal_disclaimer_required: toBoolean(policy.legal_disclaimer_required, true),
   no_sensitive_targeting: toBoolean(policy.no_sensitive_targeting, true),
+  guarded_max_ads_impact_pct: Math.min(
+    1,
+    Math.max(0, toNumber(policy.guarded_max_ads_impact_pct, DEFAULT_GUARDED_MAX_ADS_IMPACT_PCT))
+  ),
+  ads_stop_loss_on_tick: toBoolean(policy.ads_stop_loss_on_tick, true),
+  auto_apply_experiments: toBoolean(policy.auto_apply_experiments, false),
 });
 
 const autonomyPolicy = ({ strapi }: { strapi: Strapi }) => {
@@ -305,6 +327,25 @@ const autonomyPolicy = ({ strapi }: { strapi: Strapi }) => {
             : input.platform === 'google'
               ? toNumber(policy.daily_google_ads_budget_pln, DEFAULT_GOOGLE_ADS_BUDGET_PLN)
               : globalCap;
+
+        // Critical-action gate: in `guarded` the agent only auto-approves
+        // low-impact live spend; larger spend is critical and needs `full` mode.
+        if (mode === 'guarded') {
+          const guardedMaxImpactPct = Math.min(
+            1,
+            Math.max(0, toNumber(policy.guarded_max_ads_impact_pct, DEFAULT_GUARDED_MAX_ADS_IMPACT_PCT))
+          );
+          if (budgetImpactPln > guardedMaxImpactPct * globalCap) {
+            return {
+              allowed: false,
+              mode,
+              reason: 'guarded_blocks_high_impact_ads',
+              budgetImpactPln,
+              policy,
+              counts,
+            };
+          }
+        }
 
         if (counts.adsMutationsToday >= (policy.max_ads_mutations_per_day ?? 10)) {
           return {

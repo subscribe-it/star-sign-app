@@ -740,6 +740,26 @@ const adsAgent = ({ strapi }: { strapi: Strapi }) => {
         return summary;
       }
 
+      // Stop-loss margin from policy.stop_loss_rules.pauseAtSpendPct (e.g. 0.9 to
+      // pause at 90% of budget). Best-effort: default 1.0 (pause only at 100%),
+      // which preserves prior behavior when no rules are configured.
+      let pauseAtSpendPct = 1;
+      try {
+        const policySvc = getPluginService<
+          { getPolicy?: () => Promise<AutonomyPolicyRecord> } | undefined
+        >(strapi, 'autonomy-policy');
+        if (typeof policySvc?.getPolicy === 'function') {
+          const policy = await policySvc.getPolicy();
+          const rules = (policy?.stop_loss_rules ?? {}) as Record<string, unknown>;
+          const pct = Number(rules.pauseAtSpendPct);
+          if (Number.isFinite(pct) && pct > 0 && pct <= 1) {
+            pauseAtSpendPct = pct;
+          }
+        }
+      } catch {
+        // best-effort; keep default 1.0
+      }
+
       const limit = Math.max(1, Math.min(200, Number(input.limit ?? 50)));
       const plans = await entityService.findMany<AdCampaignPlanRecord>(AD_CAMPAIGN_PLAN_UID, {
         filters: { status: 'active' },
@@ -765,7 +785,8 @@ const adsAgent = ({ strapi }: { strapi: Strapi }) => {
           continue;
         }
 
-        if (dailyBudgetPln > 0 && spend.spendPln >= dailyBudgetPln) {
+        const stopLossThresholdPln = dailyBudgetPln * pauseAtSpendPct;
+        if (dailyBudgetPln > 0 && spend.spendPln >= stopLossThresholdPln) {
           await recordSystemAuditEvent(strapi, {
             action: 'ads.stop-loss.triggered',
             outcome: 'success',
@@ -776,6 +797,8 @@ const adsAgent = ({ strapi }: { strapi: Strapi }) => {
               platform: plan.platform,
               spendPln: spend.spendPln,
               dailyBudgetPln,
+              pauseAtSpendPct,
+              stopLossThresholdPln,
             },
           });
           await this.pause(plan.id);

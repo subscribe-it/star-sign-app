@@ -185,7 +185,11 @@ type RuntimeLocksService = {
 };
 
 type AutonomyPolicyRuntimeService = {
-  getPolicy: () => Promise<{ autonomy_mode?: string; global_kill_switch?: boolean }>;
+  getPolicy: () => Promise<{
+    autonomy_mode?: string;
+    global_kill_switch?: boolean;
+    ads_stop_loss_on_tick?: boolean;
+  }>;
   evaluate: (input: {
     action: 'content.publish';
     requiresBrandSafety?: boolean;
@@ -207,6 +211,11 @@ type AdsAgentRuntimeService = {
     blocked: number;
     failed: number;
     results?: Array<Record<string, unknown>>;
+  }>;
+  reconcileLiveSpend: (input?: { limit?: number }) => Promise<{
+    providerMode: string;
+    checked: number;
+    pausedForStopLoss: number;
   }>;
 };
 
@@ -378,13 +387,23 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       const executeTick = async (): Promise<void> => {
         const runtimeBlock = await this.getGlobalAutonomyRuntimeBlock();
         if (runtimeBlock.blocked) {
-          if (runtimeBlock.reason !== 'policy_unavailable') {
-            await this.enforceAdsStopLossForRuntimeBlock(runtimeBlock.reason);
+          // Fail-closed: pause active live campaigns on ANY block (incl.
+          // policy_unavailable), best-effort, so a missing/unhealthy policy never
+          // leaves money-spending campaigns running.
+          if (runtimeBlock.reason) {
+            try {
+              await this.enforceAdsStopLossForRuntimeBlock(runtimeBlock.reason);
+            } catch (error) {
+              strapi.log.warn(
+                `[AICO] stop-loss sweep on runtime block failed: ${toSafeErrorMessage(error)}`
+              );
+            }
           }
           return;
         }
         await this.processStrategyAutomationTick(now);
         await this.processInsightsTick(now);
+        await this.processAdsStopLossTick();
         await this.processGenerationTick(now);
         await this.processPublicationTick(now);
         if (await this.isAutoPublishGloballyEnabled()) {
@@ -439,7 +458,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
     },
 
     async enforceAdsStopLossForRuntimeBlock(
-      reason: 'global_kill_switch' | 'autonomy_off'
+      reason: 'global_kill_switch' | 'autonomy_off' | 'policy_unavailable'
     ): Promise<void> {
       const ads = adsAgentService();
       if (typeof ads?.pauseActiveForKillSwitch !== 'function') {
@@ -468,6 +487,29 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           failed: result.failed,
         },
       });
+    },
+
+    // Autonomous spend stop-loss on every tick: reconcile live campaign spend and
+    // pause those at/over their (optionally fractional) daily budget. Pause-only,
+    // live-mode-only (reconcileLiveSpend no-ops otherwise), so it can never
+    // increase spend. Gated by policy.ads_stop_loss_on_tick (default on).
+    async processAdsStopLossTick(): Promise<void> {
+      try {
+        const ads = adsAgentService();
+        if (typeof ads?.reconcileLiveSpend !== 'function') {
+          return;
+        }
+        const policy = autonomyPolicyService();
+        if (typeof policy?.getPolicy === 'function') {
+          const current = await policy.getPolicy();
+          if (current?.ads_stop_loss_on_tick === false) {
+            return;
+          }
+        }
+        await ads.reconcileLiveSpend({ limit: 50 });
+      } catch (error) {
+        strapi.log.warn(`[AICO] ads stop-loss tick failed: ${toSafeErrorMessage(error)}`);
+      }
     },
 
     async processStrategyAutomationTick(now: Date): Promise<void> {
