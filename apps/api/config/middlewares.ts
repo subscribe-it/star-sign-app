@@ -106,6 +106,7 @@ const config = ({
           env('NODE_ENV') !== 'production',
         ),
         trustProxy: env.bool('RATE_LIMIT_TRUST_PROXY', false),
+        trustedProxyHops: env.int('RATE_LIMIT_TRUSTED_PROXY_HOPS', 1),
       },
     },
     {

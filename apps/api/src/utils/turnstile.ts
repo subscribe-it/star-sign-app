@@ -39,6 +39,11 @@ export const isTurnstileEnabled = (): boolean =>
 const isFailOpenEnabled = (): boolean =>
   isEnabledFlag(process.env.TURNSTILE_FAIL_OPEN, false);
 
+const getTimeoutMs = (): number => {
+  const parsed = Number(process.env.TURNSTILE_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5_000;
+};
+
 const failOrOpen = (): TurnstileVerificationResult => {
   if (isFailOpenEnabled()) {
     strapi.log.warn(
@@ -84,6 +89,9 @@ export const verifyTurnstileToken = async (
     const response = await fetch(TURNSTILE_SITEVERIFY_URL, {
       method: 'POST',
       body,
+      // Abort a hung Cloudflare request so it falls through to failOrOpen()
+      // instead of blocking the protected endpoint indefinitely.
+      signal: AbortSignal.timeout(getTimeoutMs()),
     });
 
     if (!response.ok) {
