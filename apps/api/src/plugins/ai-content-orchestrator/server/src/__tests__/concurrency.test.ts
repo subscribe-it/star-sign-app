@@ -117,7 +117,12 @@ const createFakeStrapi = () => {
   const strapi = {
     entityService,
     db: { connection, query },
-    log: { info() {}, warn() {}, error() {}, debug() {} },
+    log: {
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
+    },
     plugin: () => ({ service: (name: string) => services[name] }),
   } as unknown as Strapi;
 

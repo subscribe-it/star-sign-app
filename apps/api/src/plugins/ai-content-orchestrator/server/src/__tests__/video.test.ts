@@ -60,7 +60,12 @@ const makeStrapi = (overrides: { video?: Row; policy?: unknown; serverUrl?: stri
   const strapi = {
     entityService,
     config: { get: (k: string) => (k === 'server.url' ? overrides.serverUrl ?? 'https://api.star-sign.pl' : '') },
-    log: { info() {}, warn() {}, error() {}, debug() {} },
+    log: {
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
+    },
     plugin: () => ({ service: (n: string) => services[n] }),
   } as unknown as Strapi;
   return { strapi, store };
