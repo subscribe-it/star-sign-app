@@ -2,6 +2,7 @@ import { Page, useFetchClient, useNotification } from '@strapi/strapi/admin';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 
 import { api } from '../api';
+import { help } from '../help';
 import { WorkflowSocialStep } from './homepage/WorkflowSocialStep';
 import type {
   AuditReport,
@@ -1237,6 +1238,19 @@ const HomePage = () => {
       return error.message;
     }
     return String(error);
+  };
+
+  const saveAutonomyPatch = async (
+    patch: Record<string, unknown>,
+    successMessage: string
+  ): Promise<void> => {
+    try {
+      await api.updateAutonomyPolicy(client, patch);
+      showSuccess(successMessage);
+      await loadAll();
+    } catch (error) {
+      showError(`Nie udało się zapisać ustawień autonomii: ${getErrorMessage(error)}`);
+    }
   };
 
   const runOptionalRequest = async <T,>(
@@ -5608,6 +5622,146 @@ const HomePage = () => {
                   label="Ads mutations dziś"
                   value={String(autonomyStatus?.counts?.adsMutationsToday ?? '-')}
                 />
+              </div>
+
+              <div
+                key={`autonomy-edit-${String(autonomyPolicy.updatedAt ?? autonomyMode)}`}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                  gap: 14,
+                  padding: 16,
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 10,
+                  background: '#ffffff',
+                  marginBottom: 16,
+                }}
+              >
+                <div style={{ gridColumn: '1 / -1', fontWeight: 700, color: COLORS.text }}>
+                  Ustawienia autonomii
+                  <span style={{ fontWeight: 400, color: COLORS.textLight, marginLeft: 8, fontSize: 12 }}>
+                    Zmiany zapisują się automatycznie. Najedź na „?", aby zobaczyć opis.
+                  </span>
+                </div>
+
+                <Field label={help('autonomy_mode').label} hint={help('autonomy_mode').hint}>
+                  <select
+                    style={inputStyle}
+                    defaultValue={autonomyMode}
+                    onChange={(event) =>
+                      void saveAutonomyPatch(
+                        { autonomy_mode: event.target.value },
+                        'Zmieniono tryb autonomii.'
+                      )
+                    }
+                  >
+                    <option value="off">Wyłączony</option>
+                    <option value="draft_only">Tylko szkice</option>
+                    <option value="guarded">Strzeżony</option>
+                    <option value="full">Pełny</option>
+                  </select>
+                </Field>
+
+                <Field label={help('global_kill_switch').label} hint={help('global_kill_switch').hint}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      defaultChecked={killSwitch}
+                      onChange={(event) =>
+                        void saveAutonomyPatch(
+                          { global_kill_switch: event.target.checked },
+                          event.target.checked
+                            ? 'Włączono wyłącznik awaryjny.'
+                            : 'Wyłączono wyłącznik awaryjny.'
+                        )
+                      }
+                    />
+                    <span>{killSwitch ? 'Aktywny' : 'Nieaktywny'}</span>
+                  </label>
+                </Field>
+
+                <Field
+                  label={help('daily_ads_budget_pln').label}
+                  hint={help('daily_ads_budget_pln').hint}
+                >
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    style={inputStyle}
+                    defaultValue={String(autonomyPolicy.daily_ads_budget_pln ?? '')}
+                    onBlur={(event) => {
+                      const value = Number(event.target.value);
+                      if (Number.isFinite(value) && value >= 0) {
+                        void saveAutonomyPatch(
+                          { daily_ads_budget_pln: value },
+                          'Zapisano dzienny budżet reklam.'
+                        );
+                      }
+                    }}
+                  />
+                </Field>
+
+                <Field
+                  label={help('guarded_max_ads_impact_pct').label}
+                  hint={help('guarded_max_ads_impact_pct').hint}
+                >
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    max="1"
+                    style={inputStyle}
+                    defaultValue={String(autonomyPolicy.guarded_max_ads_impact_pct ?? 0.4)}
+                    onBlur={(event) => {
+                      const value = Number(event.target.value);
+                      if (Number.isFinite(value) && value >= 0 && value <= 1) {
+                        void saveAutonomyPatch(
+                          { guarded_max_ads_impact_pct: value },
+                          'Zapisano próg trybu strzeżonego.'
+                        );
+                      }
+                    }}
+                  />
+                </Field>
+
+                <Field
+                  label={help('ads_stop_loss_on_tick').label}
+                  hint={help('ads_stop_loss_on_tick').hint}
+                >
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      defaultChecked={autonomyPolicy.ads_stop_loss_on_tick !== false}
+                      onChange={(event) =>
+                        void saveAutonomyPatch(
+                          { ads_stop_loss_on_tick: event.target.checked },
+                          'Zapisano stop-loss reklam.'
+                        )
+                      }
+                    />
+                    <span>Stop-loss na bieżąco</span>
+                  </label>
+                </Field>
+
+                <Field
+                  label={help('auto_apply_experiments').label}
+                  hint={help('auto_apply_experiments').hint}
+                >
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      defaultChecked={autonomyPolicy.auto_apply_experiments === true}
+                      onChange={(event) =>
+                        void saveAutonomyPatch(
+                          { auto_apply_experiments: event.target.checked },
+                          'Zapisano auto-wdrażanie zwycięzców testów A/B.'
+                        )
+                      }
+                    />
+                    <span>Auto-wdrażaj zwycięzców A/B</span>
+                  </label>
+                </Field>
               </div>
 
               <div
