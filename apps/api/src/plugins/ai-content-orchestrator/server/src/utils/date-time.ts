@@ -165,3 +165,50 @@ export const clampNumber = (value: number, min: number, max: number): number => 
 
   return value;
 };
+
+// Offset (local - UTC) in milliseconds for a given instant in a time zone.
+const getZoneOffsetMs = (date: Date, timeZone: string): number => {
+  const formatter = getFormatter(
+    timeZone,
+    {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    },
+    'en-US'
+  );
+
+  const map: Record<string, string> = {};
+  for (const part of formatter.formatToParts(date)) {
+    if (part.type !== 'literal') {
+      map[part.type] = part.value;
+    }
+  }
+
+  // Some runtimes emit '24' for midnight when hour12 is false.
+  const hour = map.hour === '24' ? 0 : Number(map.hour);
+  const asUtc = Date.UTC(
+    Number(map.year),
+    Number(map.month) - 1,
+    Number(map.day),
+    hour,
+    Number(map.minute),
+    Number(map.second)
+  );
+
+  return asUtc - date.getTime();
+};
+
+// UTC instant (ISO string) corresponding to local midnight of `date` in `timeZone`.
+// Aligns daily budget/usage windows with the workflow business day instead of UTC.
+export const startOfDayInZoneIso = (date: Date, timeZone: string): string => {
+  const { year, month, day } = getLocalDateParts(date, timeZone);
+  const localMidnightAsUtc = Date.UTC(year, month - 1, day, 0, 0, 0);
+  const offset = getZoneOffsetMs(new Date(localMidnightAsUtc), timeZone);
+
+  return new Date(localMidnightAsUtc - offset).toISOString();
+};

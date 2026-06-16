@@ -229,18 +229,31 @@ const markActive = async (
   });
 };
 
+// Constant-time string comparison (compares fixed-length SHA-256 digests so it
+// neither short-circuits nor leaks length) to avoid timing attacks on the secret.
+const timingSafeEqualStrings = (a: string, b: string): boolean => {
+  const digestA = crypto.createHash('sha256').update(a, 'utf8').digest();
+  const digestB = crypto.createHash('sha256').update(b, 'utf8').digest();
+  return crypto.timingSafeEqual(digestA, digestB);
+};
+
 const verifyWebhookSecret = (ctx: NewsletterContext): boolean => {
   const expected =
     process.env.BREVO_WEBHOOK_SECRET || process.env.NEWSLETTER_WEBHOOK_SECRET;
-  if (!expected && process.env.NODE_ENV !== 'production') {
-    return true;
+  if (!expected) {
+    // Outside production a missing secret is allowed for local webhook testing;
+    // in production an unset secret must fail closed.
+    return process.env.NODE_ENV !== 'production';
   }
 
   const authorization =
     typeof ctx.get === 'function' ? ctx.get('authorization') : '';
   const headerSecret =
     typeof ctx.get === 'function' ? ctx.get('x-newsletter-webhook-secret') : '';
-  return headerSecret === expected || authorization === `Bearer ${expected}`;
+  return (
+    timingSafeEqualStrings(headerSecret, expected) ||
+    timingSafeEqualStrings(authorization, `Bearer ${expected}`)
+  );
 };
 
 const normalizeBrevoEvents = (payload: unknown): NewsletterPayload[] => {

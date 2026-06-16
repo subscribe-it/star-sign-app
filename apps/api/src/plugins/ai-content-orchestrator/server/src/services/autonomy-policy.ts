@@ -1,11 +1,13 @@
 import {
   ADS_MUTATION_LEDGER_UID,
   AUTONOMY_POLICY_UID,
+  DEFAULT_TIMEZONE,
   GENERATION_JOB_UID,
   PUBLICATION_TICKET_UID,
   SOCIAL_POST_TICKET_UID,
 } from '../constants';
 import type { AdsMutationLedgerRecord, AdsPlatform, AutonomyMode, AutonomyPolicyRecord, Strapi } from '../types';
+import { formatDateInZone, startOfDayInZoneIso } from '../utils/date-time';
 import { getEntityService } from '../utils/entity-service';
 
 type AutonomyAction =
@@ -48,11 +50,6 @@ const DEFAULT_META_ADS_BUDGET_PLN = 15;
 const DEFAULT_GOOGLE_ADS_BUDGET_PLN = 10;
 const LLM_JOB_TYPES = ['article', 'horoscope', 'social_caption', 'ad_creative', 'homepage_slot'];
 const ACTIVE_ADS_LEDGER_STATUSES = ['reserved', 'applied'];
-
-const startOfTodayIso = (): string => {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-};
 
 const toNumber = (value: unknown, fallback: number): number => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -129,7 +126,11 @@ const autonomyPolicy = ({ strapi }: { strapi: Strapi }) => {
     },
 
     async getCounts(): Promise<PolicyDecision['counts']> {
-      const today = startOfTodayIso();
+      const now = new Date();
+      // Align daily windows with the business day in the workflow time zone so the
+      // spend cap reads the same `day` the ledger writes (was UTC → off-by-one near midnight).
+      const dayStart = startOfDayInZoneIso(now, DEFAULT_TIMEZONE);
+      const businessDay = formatDateInZone(now, DEFAULT_TIMEZONE);
       const [
         generationJobsToday,
         llmRequestsToday,
@@ -142,29 +143,29 @@ const autonomyPolicy = ({ strapi }: { strapi: Strapi }) => {
       ] =
         await Promise.all([
           entityService.count(GENERATION_JOB_UID, {
-            filters: { createdAt: { $gte: today } },
+            filters: { createdAt: { $gte: dayStart } },
           }),
           entityService.count(GENERATION_JOB_UID, {
-            filters: { job_type: { $in: LLM_JOB_TYPES }, createdAt: { $gte: today } },
+            filters: { job_type: { $in: LLM_JOB_TYPES }, createdAt: { $gte: dayStart } },
           }),
           entityService.count(GENERATION_JOB_UID, {
-            filters: { job_type: 'image', createdAt: { $gte: today } },
+            filters: { job_type: 'image', createdAt: { $gte: dayStart } },
           }),
           entityService.count(GENERATION_JOB_UID, {
-            filters: { job_type: 'video', createdAt: { $gte: today } },
+            filters: { job_type: 'video', createdAt: { $gte: dayStart } },
           }),
           entityService.count(PUBLICATION_TICKET_UID, {
-            filters: { createdAt: { $gte: today } },
+            filters: { createdAt: { $gte: dayStart } },
           }),
           entityService.count(SOCIAL_POST_TICKET_UID, {
-            filters: { createdAt: { $gte: today } },
+            filters: { createdAt: { $gte: dayStart } },
           }),
           entityService.count(ADS_MUTATION_LEDGER_UID, {
-            filters: { day: today.slice(0, 10), operation: 'activate' },
+            filters: { day: businessDay, operation: 'activate' },
           }),
           entityService.findMany<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, {
             filters: {
-              day: today.slice(0, 10),
+              day: businessDay,
               status: { $in: ACTIVE_ADS_LEDGER_STATUSES },
             },
             fields: ['amount_pln'],

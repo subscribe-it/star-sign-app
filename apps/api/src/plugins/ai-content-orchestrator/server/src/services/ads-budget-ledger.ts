@@ -14,6 +14,14 @@ type AutonomyPolicyService = {
   getPolicy: () => Promise<AutonomyPolicyRecord>;
 };
 
+type RuntimeLocksLike = {
+  runExclusive?: <T>(
+    key: string,
+    input: { ttlMs?: number; retries?: number; retryDelayMs?: number; metadata?: Record<string, unknown> },
+    runner: () => Promise<T>
+  ) => Promise<T>;
+};
+
 type ReserveActivationInput = {
   plan: AdCampaignPlanRecord;
   providerMode: string;
@@ -82,100 +90,122 @@ const adsBudgetLedger = ({ strapi }: { strapi: Strapi }) => {
   return {
     async reserveActivation(input: ReserveActivationInput): Promise<ReserveActivationResult> {
       const day = getDay(input.now);
-      const requestedPln = toNumber(input.plan.daily_budget_pln, 0);
-      const uniqueKey = buildActivationKey(day, input.plan);
-      const existing = (
-        await entityService.findMany<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, {
-          filters: { unique_key: uniqueKey },
-          limit: 1,
-        })
-      )[0];
 
-      const policy = await getPolicy();
-      const dailyLedgers = await entityService.findMany<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, {
-        filters: {
-          day,
-          status: { $in: ACTIVE_LEDGER_STATUSES },
-        },
-        limit: 500,
-      });
-      const activeLedgers = dailyLedgers.filter((ledger) => ledger.unique_key !== uniqueKey);
-      const globalReservedPln = activeLedgers.reduce((sum, ledger) => sum + toNumber(ledger.amount_pln, 0), 0);
-      const platformReservedPln = activeLedgers
-        .filter((ledger) => ledger.platform === input.plan.platform)
-        .reduce((sum, ledger) => sum + toNumber(ledger.amount_pln, 0), 0);
-      const totals: AdsLedgerTotals = {
-        globalReservedPln,
-        platformReservedPln,
-        mutationCount: activeLedgers.length,
-        globalCapPln: toNumber(policy.daily_ads_budget_pln, DEFAULT_DAILY_ADS_BUDGET_PLN),
-        platformCapPln: getPlatformCap(policy, input.plan.platform),
-        mutationCap: toNumber(policy.max_ads_mutations_per_day, 10),
-        requestedPln,
-      };
+      // The read-sum-then-create below is only safe against concurrent reservations
+      // (different plans, multi-instance) if serialized. We serialize per
+      // platform+day using the atomic runtime lock so the aggregate daily cap holds.
+      const runReservation = async (): Promise<ReserveActivationResult> => {
+        const requestedPln = toNumber(input.plan.daily_budget_pln, 0);
+        const uniqueKey = buildActivationKey(day, input.plan);
+        const existing = (
+          await entityService.findMany<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, {
+            filters: { unique_key: uniqueKey },
+            limit: 1,
+          })
+        )[0];
 
-      if (existing && ACTIVE_LEDGER_STATUSES.includes(existing.status)) {
+        const policy = await getPolicy();
+        const dailyLedgers = await entityService.findMany<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, {
+          filters: {
+            day,
+            status: { $in: ACTIVE_LEDGER_STATUSES },
+          },
+          limit: 500,
+        });
+        const activeLedgers = dailyLedgers.filter((ledger) => ledger.unique_key !== uniqueKey);
+        const globalReservedPln = activeLedgers.reduce((sum, ledger) => sum + toNumber(ledger.amount_pln, 0), 0);
+        const platformReservedPln = activeLedgers
+          .filter((ledger) => ledger.platform === input.plan.platform)
+          .reduce((sum, ledger) => sum + toNumber(ledger.amount_pln, 0), 0);
+        const totals: AdsLedgerTotals = {
+          globalReservedPln,
+          platformReservedPln,
+          mutationCount: activeLedgers.length,
+          globalCapPln: toNumber(policy.daily_ads_budget_pln, DEFAULT_DAILY_ADS_BUDGET_PLN),
+          platformCapPln: getPlatformCap(policy, input.plan.platform),
+          mutationCap: toNumber(policy.max_ads_mutations_per_day, 10),
+          requestedPln,
+        };
+
+        if (existing && ACTIVE_LEDGER_STATUSES.includes(existing.status)) {
+          return {
+            allowed: true,
+            reason: 'already_reserved',
+            ledger: existing,
+            day,
+            totals,
+          };
+        }
+
+        if (totals.mutationCount >= totals.mutationCap) {
+          return {
+            allowed: false,
+            reason: 'ads_ledger_mutation_cap_reached',
+            day,
+            totals,
+          };
+        }
+
+        if (totals.platformReservedPln + requestedPln > totals.platformCapPln) {
+          return {
+            allowed: false,
+            reason: 'ads_ledger_platform_cap_exceeded',
+            day,
+            totals,
+          };
+        }
+
+        if (totals.globalReservedPln + requestedPln > totals.globalCapPln) {
+          return {
+            allowed: false,
+            reason: 'ads_ledger_budget_cap_exceeded',
+            day,
+            totals,
+          };
+        }
+
+        const ledger = await entityService.create<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, {
+          data: {
+            unique_key: uniqueKey,
+            day,
+            platform: input.plan.platform,
+            operation: 'activate',
+            status: 'reserved',
+            amount_pln: requestedPln,
+            provider_mode: input.providerMode,
+            metadata: {
+              planId: input.plan.id,
+              targetUrl: input.plan.target_url,
+              totals,
+            },
+            ad_campaign_plan: input.plan.id,
+          },
+        });
+
         return {
           allowed: true,
-          reason: 'already_reserved',
-          ledger: existing,
+          reason: 'reserved',
+          ledger,
           day,
           totals,
         };
-      }
-
-      if (totals.mutationCount >= totals.mutationCap) {
-        return {
-          allowed: false,
-          reason: 'ads_ledger_mutation_cap_reached',
-          day,
-          totals,
-        };
-      }
-
-      if (totals.platformReservedPln + requestedPln > totals.platformCapPln) {
-        return {
-          allowed: false,
-          reason: 'ads_ledger_platform_cap_exceeded',
-          day,
-          totals,
-        };
-      }
-
-      if (totals.globalReservedPln + requestedPln > totals.globalCapPln) {
-        return {
-          allowed: false,
-          reason: 'ads_ledger_budget_cap_exceeded',
-          day,
-          totals,
-        };
-      }
-
-      const ledger = await entityService.create<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, {
-        data: {
-          unique_key: uniqueKey,
-          day,
-          platform: input.plan.platform,
-          operation: 'activate',
-          status: 'reserved',
-          amount_pln: requestedPln,
-          provider_mode: input.providerMode,
-          metadata: {
-            planId: input.plan.id,
-            targetUrl: input.plan.target_url,
-            totals,
-          },
-          ad_campaign_plan: input.plan.id,
-        },
-      });
-
-      return {
-        allowed: true,
-        reason: 'reserved',
-        ledger,
-        day,
-        totals,
       };
+
+      const runtimeLocks = getPluginService<RuntimeLocksLike>(strapi, 'runtime-locks');
+      if (runtimeLocks && typeof runtimeLocks.runExclusive === 'function') {
+        // Single daily key (NOT per-platform): runReservation enforces the GLOBAL
+        // daily_ads_budget_pln across all platforms, so meta+google reservations
+        // must serialize against each other or the global cap can be breached.
+        // The critical section is a few local DB queries (provider calls happen
+        // outside the lock), so it completes well under ttlMs.
+        return runtimeLocks.runExclusive(
+          `ads-reserve:${day}`,
+          { ttlMs: 15_000, retries: 50, retryDelayMs: 100 },
+          runReservation
+        );
+      }
+
+      return runReservation();
     },
 
     async markApplied(
