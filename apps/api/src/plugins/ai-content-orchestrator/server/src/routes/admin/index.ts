@@ -431,17 +431,19 @@ export default () => ({
       method: 'POST',
       path: '/video/jobs',
       handler: 'video.createJob',
-      config: {
-        policies: withPermission(RBAC_ACTIONS.manageVideo),
-      },
+      config: withCostlyPermission(RBAC_ACTIONS.manageVideo),
     },
     {
       method: 'POST',
       path: '/video/assets/:id/render',
       handler: 'video.render',
-      config: {
-        policies: withPermission(RBAC_ACTIONS.renderVideo),
-      },
+      config: withCostlyPermission(RBAC_ACTIONS.renderVideo),
+    },
+    {
+      method: 'POST',
+      path: '/video/assets/:id/publish',
+      handler: 'video.publish',
+      config: withCostlyPermission(RBAC_ACTIONS.manageVideo),
     },
     {
       method: 'GET',
