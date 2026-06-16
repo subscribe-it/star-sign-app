@@ -6548,10 +6548,46 @@ const HomePage = () => {
   );
 };
 
-const Field = ({ label, children }: { label: string; children: React.ReactNode }) => {
+const HelpIcon = ({ hint }: { hint: string }) => (
+  <span
+    title={hint}
+    aria-label={hint}
+    role="img"
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 15,
+      height: 15,
+      borderRadius: '50%',
+      border: '1px solid #c0c0cf',
+      color: '#666687',
+      fontSize: 10,
+      fontWeight: 700,
+      cursor: 'help',
+      userSelect: 'none',
+      flex: '0 0 auto',
+    }}
+  >
+    ?
+  </span>
+);
+
+const Field = ({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) => {
   return (
     <label style={{ display: 'grid', gap: 6, fontSize: 13, color: '#47475a' }}>
-      <span>{label}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        {label}
+        {hint ? <HelpIcon hint={hint} /> : null}
+      </span>
       {children}
     </label>
   );
