@@ -12,6 +12,7 @@ import type {
 import { recordSystemAuditEvent } from '../utils/audit-trail';
 import { getEntityService } from '../utils/entity-service';
 import { isRecord, toSafeErrorMessage } from '../utils/json';
+import { getPluginService } from '../utils/plugin';
 
 export const EXPERIMENT_MIN_SAMPLE_SIZE = 100;
 export const EXPERIMENT_Z_CRITICAL_95 = 1.96;
@@ -220,7 +221,20 @@ const experimentAgent = ({ strapi }: { strapi: Strapi }) => {
       results: ExperimentEvaluation[];
     }> {
       const now = input.now ?? new Date();
-      const autoApply = process.env.AICO_STRATEGY_AUTO_APPROVE_PLAN === 'true';
+      // Auto-apply winners when enabled by the global env OR by the autonomy policy
+      // toggle (auto_apply_experiments) surfaced in the admin panel. Best-effort
+      // policy read so unit tests without the policy service keep using the env flag.
+      let policyAutoApply = false;
+      try {
+        const policyService = getPluginService<
+          { getPolicy?: () => Promise<{ auto_apply_experiments?: boolean }> } | undefined
+        >(strapi, 'autonomy-policy');
+        policyAutoApply = (await policyService?.getPolicy?.())?.auto_apply_experiments === true;
+      } catch {
+        policyAutoApply = false;
+      }
+      const autoApply =
+        process.env.AICO_STRATEGY_AUTO_APPROVE_PLAN === 'true' || policyAutoApply;
 
       const experiments = await entityService.findMany<GrowthExperimentRecord>(
         GROWTH_EXPERIMENT_UID,

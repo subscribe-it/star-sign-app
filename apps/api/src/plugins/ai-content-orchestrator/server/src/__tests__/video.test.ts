@@ -70,6 +70,7 @@ describe('video-agent.publish — short-form publish bridge', () => {
   const video = {
     id: 7,
     title: 'Lew',
+    status: 'uploaded',
     asset: { url: '/uploads/lew.mp4' },
     metadata: {
       captionByPlatform: { instagram: 'IG', facebook: 'FB', tiktok: 'TT', youtube_shorts: 'YT' },
@@ -111,9 +112,24 @@ describe('video-agent.publish — short-form publish bridge', () => {
   });
 
   it('blocks publishing when the asset has no public media URL', async () => {
-    const { strapi } = makeStrapi({ video: { id: 8, title: 'x', asset: null, metadata: {} } });
+    const { strapi } = makeStrapi({ video: { id: 8, title: 'x', status: 'uploaded', asset: null, metadata: {} } });
     const res = await videoAgent({ strapi }).publish({ videoAssetId: 8 });
     expect(res.blocked).toBe('media_url_not_public');
     expect(res.created).toBe(0);
+  });
+
+  it('blocks publishing a video that is not in a ready status', async () => {
+    const { strapi } = makeStrapi({ video: { id: 9, title: 'x', status: 'queued', asset: { url: '/uploads/x.mp4' }, metadata: {} } });
+    const res = await videoAgent({ strapi }).publish({ videoAssetId: 9 });
+    expect(res.blocked).toBe('video_not_ready');
+  });
+
+  it('rejects a non-public (localhost) media URL', async () => {
+    const { strapi } = makeStrapi({
+      video: { id: 10, title: 'x', status: 'uploaded', asset: { url: '/uploads/x.mp4' }, metadata: {} },
+      serverUrl: 'http://localhost:1337',
+    });
+    const res = await videoAgent({ strapi }).publish({ videoAssetId: 10 });
+    expect(res.blocked).toBe('media_url_not_public');
   });
 });

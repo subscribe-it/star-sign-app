@@ -1,12 +1,21 @@
-import { GENERATION_JOB_UID, SOCIAL_POST_TICKET_UID, VIDEO_ASSET_UID } from '../constants';
+import { DEFAULT_TIMEZONE, GENERATION_JOB_UID, SOCIAL_POST_TICKET_UID, VIDEO_ASSET_UID } from '../constants';
 import type { AutonomyPolicyRecord, GenerationJobRecord, Strapi, VideoAssetRecord } from '../types';
 import { recordSystemAuditEvent } from '../utils/audit-trail';
 import { buildAstrologyVideoScript, type AstrologyVideoSubject } from '../utils/astrology-video';
+import { formatDateInZone } from '../utils/date-time';
 import { getEntityService } from '../utils/entity-service';
 import { getPluginService } from '../utils/plugin';
 
 // Short-form platforms that accept a vertical (9:16) video: Reels / Shorts / TikTok / FB.
 const VIDEO_PLATFORMS = ['tiktok', 'instagram', 'facebook', 'youtube_shorts'] as const;
+
+// Platforms whose autonomous video delivery is NOT implemented in social-publisher
+// yet — we enqueue them as drafts (status pending) for manual review instead of
+// 'scheduled', so the publisher never tries (and fails) to auto-send them.
+const DRAFT_ONLY_VIDEO_PLATFORMS = new Set(['tiktok', 'youtube_shorts']);
+
+// Only publish a video that actually has a finished, attachable asset.
+const PUBLISHABLE_VIDEO_STATUSES = new Set(['uploaded', 'qc_passed', 'scheduled']);
 
 const toAbsoluteMediaUrl = (value: unknown, serverUrl: string): string | null => {
   const raw = typeof value === 'string' ? value.trim() : '';
@@ -14,6 +23,24 @@ const toAbsoluteMediaUrl = (value: unknown, serverUrl: string): string | null =>
   if (/^https?:\/\//i.test(raw)) return raw;
   if (!serverUrl) return null;
   return `${serverUrl.replace(/\/$/, '')}/${raw.replace(/^\//, '')}`;
+};
+
+// A social platform must be able to fetch the media — reject localhost / private
+// hosts so we never persist a non-public URL into tickets or the audit trail.
+const isPublicHttpUrl = (value: string): boolean => {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host)) return false;
+  if (host.endsWith('.local')) return false;
+  if (/^10\./.test(host) || /^192\.168\./.test(host)) return false;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
+  return true;
 };
 
 const resolveVideoMediaUrl = (video: VideoAssetRecord): string | null => {
@@ -298,13 +325,17 @@ const videoAgent = ({ strapi }: { strapi: Strapi }) => {
         throw new Error('Nie znaleziono assetu video.');
       }
 
+      if (!PUBLISHABLE_VIDEO_STATUSES.has(String(video.status))) {
+        return { created: 0, skipped: 0, blocked: 'video_not_ready', platforms: [], tickets: [] };
+      }
+
       const serverUrl = String(
         (strapi.config as { get?: (key: string) => unknown } | undefined)?.get?.('server.url') ??
           process.env.SERVER_URL ??
           ''
       ).trim();
       const mediaUrl = toAbsoluteMediaUrl(resolveVideoMediaUrl(video), serverUrl);
-      if (!mediaUrl) {
+      if (!mediaUrl || !isPublicHttpUrl(mediaUrl)) {
         return { created: 0, skipped: 0, blocked: 'media_url_not_public', platforms: [], tickets: [] };
       }
 
@@ -359,7 +390,8 @@ const videoAgent = ({ strapi }: { strapi: Strapi }) => {
 
       const captionByPlatform = (video.metadata?.captionByPlatform ?? {}) as Record<string, string>;
       const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : new Date();
-      const day = scheduledAt.toISOString().slice(0, 10);
+      // Business-timezone day so the idempotency window matches the social daily cap.
+      const day = formatDateInZone(scheduledAt, DEFAULT_TIMEZONE);
       const workflowId = typeof video.workflow === 'number' ? video.workflow : video.workflow?.id;
 
       let created = 0;
@@ -381,19 +413,19 @@ const videoAgent = ({ strapi }: { strapi: Strapi }) => {
 
         const caption =
           input.caption?.trim() || captionByPlatform[platform] || video.title || 'Astrologia';
-        const isTiktokDraft = platform === 'tiktok';
+        const isDraft = DRAFT_ONLY_VIDEO_PLATFORMS.has(platform);
 
         const row = (await entityService.create(SOCIAL_POST_TICKET_UID, {
           data: {
             platform,
             content_format: 'video',
-            status: isTiktokDraft ? 'pending' : 'scheduled',
+            status: isDraft ? 'pending' : 'scheduled',
             caption,
             media_url: mediaUrl,
             scheduled_at: scheduledAt,
             attempt_count: 0,
             idempotency_key: idempotencyKey,
-            blocked_reason: isTiktokDraft ? 'draft_only' : null,
+            blocked_reason: isDraft ? 'draft_only' : null,
             video_asset: video.id,
             workflow: workflowId,
             provider_payload: {
@@ -404,7 +436,7 @@ const videoAgent = ({ strapi }: { strapi: Strapi }) => {
         })) as { id: number };
 
         created += 1;
-        tickets.push({ platform, id: row.id, status: isTiktokDraft ? 'pending' : 'scheduled' });
+        tickets.push({ platform, id: row.id, status: isDraft ? 'pending' : 'scheduled' });
       }
 
       await recordSystemAuditEvent(strapi, {

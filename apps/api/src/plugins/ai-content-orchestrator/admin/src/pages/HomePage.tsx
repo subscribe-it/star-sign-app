@@ -1240,6 +1240,13 @@ const HomePage = () => {
     return String(error);
   };
 
+  const refreshAutonomy = async (): Promise<void> => {
+    const result = await runOptionalRequest(api.getAutonomyStatus(client));
+    if (result.ok) {
+      setAutonomyStatus(result.data);
+    }
+  };
+
   const saveAutonomyPatch = async (
     patch: Record<string, unknown>,
     successMessage: string
@@ -1247,7 +1254,9 @@ const HomePage = () => {
     try {
       await api.updateAutonomyPolicy(client, patch);
       showSuccess(successMessage);
-      await loadAll();
+      // Light refresh of just the autonomy status (avoids a full-page loadAll()
+      // reload + Page.Loading flicker on every toggle).
+      await refreshAutonomy();
     } catch (error) {
       showError(`Nie udało się zapisać ustawień autonomii: ${getErrorMessage(error)}`);
     }
@@ -5667,14 +5676,24 @@ const HomePage = () => {
                     <input
                       type="checkbox"
                       defaultChecked={killSwitch}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        if (
+                          checked &&
+                          !window.confirm(
+                            'Włączyć wyłącznik awaryjny? Zatrzyma to całą autonomię i spauzuje aktywne kampanie reklamowe.'
+                          )
+                        ) {
+                          event.target.checked = false;
+                          return;
+                        }
                         void saveAutonomyPatch(
-                          { global_kill_switch: event.target.checked },
-                          event.target.checked
+                          { global_kill_switch: checked },
+                          checked
                             ? 'Włączono wyłącznik awaryjny.'
                             : 'Wyłączono wyłącznik awaryjny.'
-                        )
-                      }
+                        );
+                      }}
                     />
                     <span>{killSwitch ? 'Aktywny' : 'Nieaktywny'}</span>
                   </label>
@@ -5692,7 +5711,11 @@ const HomePage = () => {
                     defaultValue={String(autonomyPolicy.daily_ads_budget_pln ?? '')}
                     onBlur={(event) => {
                       const value = Number(event.target.value);
-                      if (Number.isFinite(value) && value >= 0) {
+                      if (
+                        Number.isFinite(value) &&
+                        value >= 0 &&
+                        value !== Number(autonomyPolicy.daily_ads_budget_pln)
+                      ) {
                         void saveAutonomyPatch(
                           { daily_ads_budget_pln: value },
                           'Zapisano dzienny budżet reklam.'
@@ -5715,7 +5738,12 @@ const HomePage = () => {
                     defaultValue={String(autonomyPolicy.guarded_max_ads_impact_pct ?? 0.4)}
                     onBlur={(event) => {
                       const value = Number(event.target.value);
-                      if (Number.isFinite(value) && value >= 0 && value <= 1) {
+                      if (
+                        Number.isFinite(value) &&
+                        value >= 0 &&
+                        value <= 1 &&
+                        value !== Number(autonomyPolicy.guarded_max_ads_impact_pct ?? 0.4)
+                      ) {
                         void saveAutonomyPatch(
                           { guarded_max_ads_impact_pct: value },
                           'Zapisano próg trybu strzeżonego.'

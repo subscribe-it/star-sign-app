@@ -50,20 +50,13 @@ const DEFAULT_META_ADS_BUDGET_PLN = 15;
 const DEFAULT_GOOGLE_ADS_BUDGET_PLN = 10;
 const DEFAULT_GUARDED_MAX_ADS_IMPACT_PCT = 0.4;
 
-// Decision taxonomy: which actions are financially/operationally CRITICAL (real
-// money / live exposure) vs NON_CRITICAL (content, organic social, generation —
-// reversible, no live spend). In `guarded` mode the agent acts autonomously on
-// non-critical actions within caps, but a critical action is only auto-approved
-// when its impact is small (<= guarded_max_ads_impact_pct of the daily cap);
-// larger critical actions require `full` mode. Unknown actions default to CRITICAL
-// (fail-safe).
-const NON_CRITICAL_ACTIONS = new Set([
-  'llm.generate',
-  'media.generate',
-  'video.generate',
-  'content.publish',
-  'social.publish',
-]);
+// Decision taxonomy: actions that spend live money / create live exposure are
+// CRITICAL; content, organic social and generation are NON-CRITICAL (reversible,
+// no live spend). In `guarded` mode the agent auto-approves non-critical actions
+// within caps, but the one CRITICAL action here (ads.mutate = live spend) is only
+// auto-approved when its impact is small (<= guarded_max_ads_impact_pct of the
+// daily cap); larger spend requires `full` mode. Enforced inline in the
+// ads.mutate branch of evaluate() below.
 const LLM_JOB_TYPES = ['article', 'horoscope', 'social_caption', 'ad_creative', 'homepage_slot'];
 const ACTIVE_ADS_LEDGER_STATUSES = ['reserved', 'applied'];
 
