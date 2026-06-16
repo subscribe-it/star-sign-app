@@ -30,6 +30,9 @@ const matches = (row: Row, filters?: Record<string, unknown>): boolean => {
     if (cond && typeof cond === 'object' && '$gte' in (cond as Record<string, unknown>)) {
       return String(row[key]) >= String((cond as { $gte: unknown }).$gte);
     }
+    if (cond && typeof cond === 'object' && '$lt' in (cond as Record<string, unknown>)) {
+      return String(row[key]) < String((cond as { $lt: unknown }).$lt);
+    }
     return row[key] === cond;
   });
 };
@@ -99,10 +102,21 @@ const createFakeStrapi = () => {
     return builder;
   };
 
+  // Minimal query engine supporting deleteMany (used by the retention reaper).
+  const query = (uid: string) => ({
+    async deleteMany({ where }: { where?: Record<string, unknown> }) {
+      const rows = store[uid] ?? [];
+      const remaining = rows.filter((row) => !matches(row, where));
+      const count = rows.length - remaining.length;
+      store[uid] = remaining;
+      return { count };
+    },
+  });
+
   const services: Record<string, unknown> = {};
   const strapi = {
     entityService,
-    db: { connection },
+    db: { connection, query },
     log: { info() {}, warn() {}, error() {}, debug() {} },
     plugin: () => ({ service: (name: string) => services[name] }),
   } as unknown as Strapi;
@@ -186,6 +200,25 @@ describe('AICO concurrency safety (C1 runtime lock, C2 ads budget cap)', () => {
     const [a, b] = await Promise.all([locks.acquire({ key: 'tick' }), locks.acquire({ key: 'tick' })]);
 
     expect([a, b].filter((r) => r.acquired)).toHaveLength(1);
+  });
+
+  it('C12: reapStale deletes locks whose TTL passed the cutoff', async () => {
+    const { strapi, store } = createFakeStrapi();
+    const locks = runtimeLocks({ strapi });
+
+    const fresh = await locks.acquire({ key: 'fresh', ttlMs: 60_000 });
+    const stale = await locks.acquire({ key: 'stale', ttlMs: 60_000 });
+    expect(fresh.acquired && stale.acquired).toBe(true);
+
+    // Backdate one lock's expiry well beyond the reaper cutoff.
+    const staleRow = (store[RUNTIME_LOCK_UID] ?? []).find((r) => r.lock_key === 'stale');
+    staleRow!.expires_at = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+    const reaped = await locks.reapStale({ olderThanMs: 24 * 60 * 60 * 1000 });
+
+    expect(reaped).toBe(1);
+    const remaining = (store[RUNTIME_LOCK_UID] ?? []).map((r) => r.lock_key);
+    expect(remaining).toEqual(['fresh']);
   });
 
   it('C2: concurrent reservations across platforms never exceed the GLOBAL cap', async () => {

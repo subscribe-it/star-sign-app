@@ -226,6 +226,31 @@ const runtimeLocks = ({ strapi }: { strapi: Strapi }) => {
 
       throw new Error(`[aico] runtime lock contention timeout for ${key}`);
     },
+
+    // Reaper: deletes locks whose TTL has long passed (released or expired) so the
+    // runtime-lock table cannot grow unbounded (every tick/backfill/reserve adds a
+    // row). Locks have short TTLs (≤6h), so anything past the cutoff is dead.
+    async reapStale(input: { olderThanMs?: number; now?: Date } = {}): Promise<number> {
+      const now = input.now ?? new Date();
+      const olderThanMs = Math.max(60_000, Number(input.olderThanMs ?? 24 * 60 * 60_000));
+      const cutoffIso = new Date(now.getTime() - olderThanMs).toISOString();
+      const query = (
+        strapi as unknown as {
+          db?: {
+            query?: (uid: string) => {
+              deleteMany?: (params: { where: Record<string, unknown> }) => Promise<{ count?: number }>;
+            };
+          };
+        }
+      ).db?.query?.(RUNTIME_LOCK_UID);
+
+      if (!query?.deleteMany) {
+        return 0;
+      }
+
+      const result = await query.deleteMany({ where: { expires_at: { $lt: cutoffIso } } });
+      return result?.count ?? 0;
+    },
   };
 };
 
