@@ -1,0 +1,27 @@
+# Trivy ignore file — documented vulnerability acceptance for the production images.
+#
+# Policy: every FIXABLE and/or runtime-reachable advisory is fixed at the source
+# (Dockerfile + lockfiles): Debian `apt upgrade`, npm CLI bump to a version with
+# patched vendored deps, `ws` override to 8.21.0, and removal of the vulnerable
+# esbuild binary that vite pins. Only advisories that are BOTH (a) not fixable
+# without a breaking Strapi-5 change and (b) unreachable on the production
+# `strapi start` / SSR request path are listed below. A CRITICAL is never ignored.
+# Last reviewed: 2026-06-17.
+
+# vite 5.4.x — `server.fs.deny` bypass on Windows alternate data-stream paths.
+# Reachable ONLY through the vite *dev server* on *Windows*. Production runs on
+# Linux and never starts the vite dev server: the admin panel is pre-built in the
+# image's builder stage, and `strapi start` only loads vite's JS through the CLI
+# module graph, never serving files through it. The fix is vite >=6.4.3, a major
+# bump pinned transitively by Strapi 5 (@strapi/admin) that cannot be applied
+# without a breaking Strapi upgrade.
+CVE-2026-53571
+
+# esbuild 0.27.7 (pulled in by esbuild-loader) — missing binary integrity check
+# in esbuild's *Deno* module loader (lib/deno/mod.ts) while downloading the
+# native binary from an npm registry. Applies only when esbuild is consumed via
+# the Deno loader; this image runs on Node.js and never uses Deno, and
+# esbuild-loader is build-time webpack tooling that is not on the `strapi start`
+# request path. Fixed in esbuild 0.28.1 — already the resolved top-level version;
+# only esbuild-loader keeps a 0.27.7 copy that Strapi 5's tree pins.
+GHSA-gv7w-rqvm-qjhr
