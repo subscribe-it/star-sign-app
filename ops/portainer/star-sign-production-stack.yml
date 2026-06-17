@@ -75,7 +75,8 @@ services:
         - 'traefik.http.routers.star-sign-frontend.entrypoints=websecure'
         - 'traefik.http.routers.star-sign-frontend.tls=true'
         - 'traefik.http.routers.star-sign-frontend.tls.certresolver=letsencrypt'
-        - 'traefik.http.routers.star-sign-frontend.middlewares=real-ip@file,geo-block@file,rate-limit@file,inflight-req@file,star-sign-frontend-headers'
+        # TEMP: external @file middlewares (real-ip,geo-block,rate-limit,inflight-req) are temporarily disabled on Traefik — only the inline header middleware is referenced. Re-add the @file chain when they are re-enabled.
+        - 'traefik.http.routers.star-sign-frontend.middlewares=star-sign-frontend-headers'
         - 'traefik.http.routers.star-sign-frontend.service=star-sign-frontend'
         - 'traefik.http.services.star-sign-frontend.loadbalancer.server.port=4000'
         - 'traefik.http.routers.star-sign-frontend-http.rule=Host(`${PRODUCTION_DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge`)'
@@ -287,13 +288,15 @@ services:
         - 'traefik.http.routers.star-sign-api-path.tls=true'
         - 'traefik.http.routers.star-sign-api-path.tls.certresolver=letsencrypt'
         - 'traefik.http.routers.star-sign-api-path.priority=100'
-        - 'traefik.http.routers.star-sign-api-path.middlewares=real-ip@file,rate-limit@file,inflight-req@file,star-sign-api-headers'
+        # TEMP: external @file middlewares (real-ip,rate-limit,inflight-req) are temporarily disabled on Traefik — only the inline header middleware is referenced. Re-add the @file chain when they are re-enabled.
+        - 'traefik.http.routers.star-sign-api-path.middlewares=star-sign-api-headers'
         - 'traefik.http.routers.star-sign-api-path.service=star-sign-api'
         - 'traefik.http.routers.star-sign-api-domain.rule=Host(`${API_DOMAIN}`)'
         - 'traefik.http.routers.star-sign-api-domain.entrypoints=websecure'
         - 'traefik.http.routers.star-sign-api-domain.tls=true'
         - 'traefik.http.routers.star-sign-api-domain.tls.certresolver=letsencrypt'
-        - 'traefik.http.routers.star-sign-api-domain.middlewares=real-ip@file,rate-limit@file,inflight-req@file,star-sign-api-headers'
+        # TEMP: external @file middlewares (real-ip,rate-limit,inflight-req) are temporarily disabled on Traefik — only the inline header middleware is referenced. Re-add the @file chain when they are re-enabled.
+        - 'traefik.http.routers.star-sign-api-domain.middlewares=star-sign-api-headers'
         - 'traefik.http.routers.star-sign-api-domain.service=star-sign-api'
         - 'traefik.http.services.star-sign-api.loadbalancer.server.port=1337'
         - 'traefik.http.routers.star-sign-api-http.rule=Host(`${API_DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge`)'
