@@ -39,7 +39,8 @@ Przed pierwszym deployem potwierdź:
 - Działa zewnętrzna sieć overlay `traefik-public`.
 - Działa stack Traefik z repo `subscribe-it/traefik-load-balancer`.
 - Traefik ma skonfigurowany resolver Let's Encrypt o nazwie `letsencrypt`.
-- W Traefiku istnieją middleware `real-ip@file`, `geo-block@file`, `rate-limit@file`, `inflight-req@file`.
+- Traefik na brzegu ma globalny redirect HTTP→HTTPS (router `http-catchall` na entrypoincie `web`) — dlatego stack Star Sign nie definiuje własnych routerów `-http` ani middleware redirectu.
+- Stack Star Sign NIE referuje zewnętrznych middleware `@file` (np. `real-ip@file`, `geo-block@file`, `rate-limit@file`, `inflight-req@file`). Zależą one od wtyczek Traefika, które nie są gwarantowane w runtime, a brakująca referencja middleware powoduje `404` całego routera. Używane są wyłącznie samodzielne, inline'owe middleware nagłówków tworzone z etykiet tego stacka.
 - DNS domen produkcyjnych wskazuje na VPS.
 - Portainer ma dostęp do GHCR, jeżeli obrazy są prywatne.
 
@@ -456,15 +457,15 @@ Nie uruchamiaj paid Premium bez osobnego testu live Stripe, webhooków, success/
 Frontend:
 
 - `Host(${PRODUCTION_DOMAIN}) -> frontend:4000`
-- middleware: `real-ip@file,geo-block@file,rate-limit@file,inflight-req@file,star-sign-frontend-headers`
-- HTTP przekierowuje na HTTPS
+- middleware: `star-sign-frontend-headers` (inline, tworzone z etykiet tego stacka)
+- HTTP→HTTPS robi globalny router `http-catchall` brzegowego Traefika (stack nie ma własnego routera `-http`)
 
 API:
 
 - `Host(${PRODUCTION_DOMAIN}) && PathPrefix(/api) -> api:1337`
 - `Host(${API_DOMAIN}) -> api:1337`
-- middleware: `real-ip@file,rate-limit@file,inflight-req@file,star-sign-api-headers`
-- celowo bez `geo-block@file`, żeby nie zablokować Stripe, Brevo i innych webhooków
+- middleware: `star-sign-api-headers` (inline, tworzone z etykiet tego stacka)
+- bez zewnętrznych `@file` (w tym `geo-block@file`), żeby nie ryzykować `404` przy niezaładowanych wtyczkach i nie blokować webhooków Stripe/Brevo
 
 Nagłówki ustawione przez labels:
 
