@@ -9,11 +9,12 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { of } from 'rxjs';
 import { catchError, finalize } from 'rxjs/operators';
 import { ZodiacService } from '../../core/services/zodiac.service';
+import { StrapiImagePipe } from '../../core/pipes/strapi-image-pipe';
 import { ZodiacSign } from '@star-sign-monorepo/shared-types';
 
 @Component({
   selector: 'app-horoscope',
-  imports: [RouterLink],
+  imports: [RouterLink, StrapiImagePipe],
   templateUrl: './horoscope.html',
   styleUrl: './horoscope.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

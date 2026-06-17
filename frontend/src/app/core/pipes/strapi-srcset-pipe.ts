@@ -9,9 +9,7 @@ type StrapiImageFormat = {
 type StrapiImageWithFormats = {
   url?: string;
   width?: number;
-  formats?: Partial<
-    Record<'large' | 'medium' | 'small' | 'thumbnail', StrapiImageFormat>
-  >;
+  formats?: Record<string, StrapiImageFormat | undefined>;
 };
 
 @Pipe({
@@ -31,10 +29,10 @@ export class StrapiSrcsetPipe implements PipeTransform {
 
     const srcset: string[] = [];
 
-    this.addFormat(srcset, formats.large);
-    this.addFormat(srcset, formats.medium);
-    this.addFormat(srcset, formats.small);
-    this.addFormat(srcset, formats.thumbnail);
+    this.addFormat(srcset, formats['large']);
+    this.addFormat(srcset, formats['medium']);
+    this.addFormat(srcset, formats['small']);
+    this.addFormat(srcset, formats['thumbnail']);
 
     // Add the original image as the largest option
     srcset.push(`${this.getFullUrl(image.url)} ${image.width || 2000}w`);

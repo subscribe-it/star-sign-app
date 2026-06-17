@@ -318,6 +318,24 @@ export default () => ({
       },
     },
     {
+      method: 'POST',
+      path: '/media/backfill/article-images',
+      handler: 'media-assets.backfillArticleImages',
+      config: withCostlyPermission(RBAC_ACTIONS.manageMedia),
+    },
+    {
+      method: 'POST',
+      path: '/media/backfill/tarot-card-images',
+      handler: 'media-assets.backfillTarotCardImages',
+      config: withCostlyPermission(RBAC_ACTIONS.manageMedia),
+    },
+    {
+      method: 'POST',
+      path: '/media/backfill/zodiac-sign-images',
+      handler: 'media-assets.backfillZodiacSignImages',
+      config: withCostlyPermission(RBAC_ACTIONS.manageMedia),
+    },
+    {
       method: 'GET',
       path: '/media-library/files',
       handler: 'media-library.find',

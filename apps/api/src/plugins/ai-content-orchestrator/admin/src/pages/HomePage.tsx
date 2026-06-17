@@ -953,6 +953,9 @@ const HomePage = () => {
   const [showRunModal, setShowRunModal] = useState(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [backfillingImages, setBackfillingImages] = useState<
+    'article' | 'tarot' | 'zodiac' | null
+  >(null);
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
@@ -2435,6 +2438,30 @@ const HomePage = () => {
     }
   };
 
+  const backfillImages = async (kind: 'article' | 'tarot' | 'zodiac'): Promise<void> => {
+    const labels: Record<typeof kind, string> = {
+      article: 'artykułów',
+      tarot: 'kart tarota',
+      zodiac: 'znaków zodiaku',
+    };
+
+    setBackfillingImages(kind);
+    try {
+      const result =
+        kind === 'article'
+          ? await api.backfillArticleImages(client)
+          : kind === 'tarot'
+            ? await api.backfillTarotCardImages(client)
+            : await api.backfillZodiacSignImages(client);
+
+      showSuccess(`Uzupełniono zdjęcia ${labels[kind]}: ${result.updated}.`);
+    } catch (error) {
+      showError(`Uzupełnianie zdjęć ${labels[kind]} nie powiodło się: ${String(error)}`);
+    } finally {
+      setBackfillingImages(null);
+    }
+  };
+
   useEffect(() => {
     if (!selectedMediaFile && mediaLibrary[0]) {
       pickMediaFile(mediaLibrary[0]);
@@ -3713,6 +3740,42 @@ const HomePage = () => {
 
         {activeTab === 'media' && (
           <div style={{ display: 'grid', gap: 24 }}>
+            <section style={CARD_STYLE}>
+              <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 4 }}>
+                Uzupełnij brakujące zdjęcia
+              </h2>
+              <p style={{ color: COLORS.textLight, marginBottom: 16, fontSize: 14 }}>
+                Dla treści bez przypisanego zdjęcia spróbujemy dobrać lub wygenerować obraz. Może to
+                potrwać i zużywać limity generacji obrazów.
+              </p>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  disabled={backfillingImages !== null}
+                  style={primaryButtonStyle}
+                  onClick={() => void backfillImages('article')}
+                >
+                  {backfillingImages === 'article' ? 'Uzupełniam…' : 'Artykuły'}
+                </button>
+                <button
+                  type="button"
+                  disabled={backfillingImages !== null}
+                  style={primaryButtonStyle}
+                  onClick={() => void backfillImages('tarot')}
+                >
+                  {backfillingImages === 'tarot' ? 'Uzupełniam…' : 'Karty tarota'}
+                </button>
+                <button
+                  type="button"
+                  disabled={backfillingImages !== null}
+                  style={primaryButtonStyle}
+                  onClick={() => void backfillImages('zodiac')}
+                >
+                  {backfillingImages === 'zodiac' ? 'Uzupełniam…' : 'Znaki zodiaku'}
+                </button>
+              </div>
+            </section>
+
             <section style={CARD_STYLE}>
               <div
                 style={{
