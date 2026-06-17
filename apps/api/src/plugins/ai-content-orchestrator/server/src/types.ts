@@ -412,6 +412,9 @@ export type AutonomyPolicyRecord = {
   brand_safety_required?: boolean;
   legal_disclaimer_required?: boolean;
   no_sensitive_targeting?: boolean;
+  guarded_max_ads_impact_pct?: number;
+  ads_stop_loss_on_tick?: boolean;
+  auto_apply_experiments?: boolean;
   allowed_social_channels?: string[] | null;
   allowed_ads_platforms?: AdsPlatform[] | null;
   stop_loss_rules?: Record<string, unknown> | null;

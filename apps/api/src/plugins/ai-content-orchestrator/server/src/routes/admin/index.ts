@@ -10,6 +10,14 @@ const withPermission = (action: string) => [
   },
 ];
 
+// Per-admin rate limit for budget-burning endpoints (LLM/media/ads spend triggers).
+const COSTLY_MIDDLEWARES = ['plugin::ai-content-orchestrator.costly-rate-limit'];
+
+const withCostlyPermission = (action: string) => ({
+  policies: withPermission(action),
+  middlewares: COSTLY_MIDDLEWARES,
+});
+
 export default () => ({
   type: 'admin',
   routes: [
@@ -41,9 +49,7 @@ export default () => ({
       method: 'POST',
       path: '/strategy/generate-plan',
       handler: 'strategy.generatePlan',
-      config: {
-        policies: withPermission(RBAC_ACTIONS.manageStrategy),
-      },
+      config: withCostlyPermission(RBAC_ACTIONS.manageStrategy),
     },
     {
       method: 'POST',
@@ -129,9 +135,7 @@ export default () => ({
       method: 'POST',
       path: '/workflows/:id/run-now',
       handler: 'workflows.runNow',
-      config: {
-        policies: withPermission(RBAC_ACTIONS.run),
-      },
+      config: withCostlyPermission(RBAC_ACTIONS.run),
     },
     {
       method: 'POST',
@@ -145,9 +149,7 @@ export default () => ({
       method: 'POST',
       path: '/workflows/:id/backfill',
       handler: 'workflows.backfill',
-      config: {
-        policies: withPermission(RBAC_ACTIONS.backfill),
-      },
+      config: withCostlyPermission(RBAC_ACTIONS.backfill),
     },
     {
       method: 'GET',
@@ -161,9 +163,7 @@ export default () => ({
       method: 'POST',
       path: '/runs/:id/retry',
       handler: 'runs.retry',
-      config: {
-        policies: withPermission(RBAC_ACTIONS.run),
-      },
+      config: withCostlyPermission(RBAC_ACTIONS.run),
     },
     {
       method: 'GET',
@@ -361,9 +361,7 @@ export default () => ({
       method: 'POST',
       path: '/autonomy/tick/run-now',
       handler: 'autonomy.runNow',
-      config: {
-        policies: withPermission(RBAC_ACTIONS.manageAutonomy),
-      },
+      config: withCostlyPermission(RBAC_ACTIONS.manageAutonomy),
     },
     {
       method: 'GET',
@@ -433,17 +431,19 @@ export default () => ({
       method: 'POST',
       path: '/video/jobs',
       handler: 'video.createJob',
-      config: {
-        policies: withPermission(RBAC_ACTIONS.manageVideo),
-      },
+      config: withCostlyPermission(RBAC_ACTIONS.manageVideo),
     },
     {
       method: 'POST',
       path: '/video/assets/:id/render',
       handler: 'video.render',
-      config: {
-        policies: withPermission(RBAC_ACTIONS.renderVideo),
-      },
+      config: withCostlyPermission(RBAC_ACTIONS.renderVideo),
+    },
+    {
+      method: 'POST',
+      path: '/video/assets/:id/publish',
+      handler: 'video.publish',
+      config: withCostlyPermission(RBAC_ACTIONS.manageVideo),
     },
     {
       method: 'GET',

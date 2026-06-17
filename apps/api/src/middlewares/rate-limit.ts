@@ -9,6 +9,7 @@ type RateLimitConfig = {
   redisKeyPrefix?: string;
   failOpen?: boolean;
   trustProxy?: boolean;
+  trustedProxyHops?: number;
 };
 
 type Bucket = {
@@ -48,14 +49,33 @@ const normalizePaths = (paths?: string[]): string[] =>
 const sanitizeKeySegment = (value: string): string =>
   value.replace(/[^a-zA-Z0-9:._-]/g, '_');
 
-const getForwardedIp = (ctx: RateLimitContext): string | undefined => {
+// With `hops` trusted reverse proxies in front, the real client IP is the entry
+// appended by the OUTERMOST trusted proxy = `parts.length - hops` from the left.
+// Taking the leftmost entry (previous behavior) is spoofable: a client can send a
+// forged X-Forwarded-For and the trusted proxy only appends to the right of it.
+const getForwardedIp = (
+  ctx: RateLimitContext,
+  hops: number,
+): string | undefined => {
   const forwardedFor =
     typeof ctx.get === 'function' ? ctx.get('x-forwarded-for') : '';
-  return forwardedFor.split(',')[0]?.trim() || undefined;
+  const parts = forwardedFor
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) {
+    return undefined;
+  }
+  const index = Math.max(0, parts.length - Math.max(1, hops));
+  return parts[index] || undefined;
 };
 
-const getClientKey = (ctx: RateLimitContext, trustProxy: boolean): string =>
-  (trustProxy ? getForwardedIp(ctx) : undefined) ||
+const getClientKey = (
+  ctx: RateLimitContext,
+  trustProxy: boolean,
+  hops: number,
+): string =>
+  (trustProxy ? getForwardedIp(ctx, hops) : undefined) ||
   ctx.ip ||
   ctx.request?.ip ||
   'unknown';
@@ -64,6 +84,20 @@ const shouldLimitPath = (path: string, paths: string[]): boolean =>
   paths.some(
     (candidate) => path === candidate || path.startsWith(`${candidate}/`),
   );
+
+// Throttled logging so a flapping Redis connection cannot spam logs, while still
+// surfacing the degradation (previous behavior silently swallowed all errors).
+let lastRedisErrorLogAt = 0;
+const logRedisIssue = (context: string, error: unknown): void => {
+  const now = Date.now();
+  if (now - lastRedisErrorLogAt < 60_000) {
+    return;
+  }
+  lastRedisErrorLogAt = now;
+  const message = error instanceof Error ? error.message : String(error);
+  // eslint-disable-next-line no-console
+  console.warn(`[rate-limit] Redis ${context}: ${message}`);
+};
 
 const createRedisClient = (redisUrl?: string): Redis | undefined => {
   if (!redisUrl) {
@@ -76,7 +110,7 @@ const createRedisClient = (redisUrl?: string): Redis | undefined => {
     maxRetriesPerRequest: 1,
   });
 
-  client.on('error', () => undefined);
+  client.on('error', (error) => logRedisIssue('connection error', error));
 
   return client;
 };
@@ -164,6 +198,7 @@ export default (config: RateLimitConfig = {}) => {
   const redisKeyPrefix = config.redisKeyPrefix ?? 'star-sign:rate-limit:';
   const failOpen = config.failOpen === true;
   const trustProxy = config.trustProxy === true;
+  const trustedProxyHops = Math.max(1, Number(config.trustedProxyHops ?? 1));
 
   return async (ctx: RateLimitContext, next: Next): Promise<void> => {
     const path = ctx.path || '';
@@ -173,7 +208,7 @@ export default (config: RateLimitConfig = {}) => {
       return;
     }
 
-    const clientKey = sanitizeKeySegment(getClientKey(ctx, trustProxy));
+    const clientKey = sanitizeKeySegment(getClientKey(ctx, trustProxy, trustedProxyHops));
     const pathKey = sanitizeKeySegment(path);
     const key = `${redisKeyPrefix}${clientKey}:${pathKey}`;
     let bucket: Bucket;
@@ -182,7 +217,8 @@ export default (config: RateLimitConfig = {}) => {
       bucket = redis
         ? await incrementRedisBucket(redis, key, windowMs)
         : incrementMemoryBucket(key, windowMs);
-    } catch {
+    } catch (error) {
+      logRedisIssue('operation failed', error);
       if (failOpen) {
         await next();
         return;

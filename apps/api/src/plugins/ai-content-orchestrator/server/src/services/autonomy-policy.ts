@@ -1,11 +1,13 @@
 import {
   ADS_MUTATION_LEDGER_UID,
   AUTONOMY_POLICY_UID,
+  DEFAULT_TIMEZONE,
   GENERATION_JOB_UID,
   PUBLICATION_TICKET_UID,
   SOCIAL_POST_TICKET_UID,
 } from '../constants';
 import type { AdsMutationLedgerRecord, AdsPlatform, AutonomyMode, AutonomyPolicyRecord, Strapi } from '../types';
+import { formatDateInZone, startOfDayInZoneIso } from '../utils/date-time';
 import { getEntityService } from '../utils/entity-service';
 
 type AutonomyAction =
@@ -46,13 +48,17 @@ const GLOBAL_POLICY_KEY = 'global';
 const DEFAULT_DAILY_ADS_BUDGET_PLN = 25;
 const DEFAULT_META_ADS_BUDGET_PLN = 15;
 const DEFAULT_GOOGLE_ADS_BUDGET_PLN = 10;
+const DEFAULT_GUARDED_MAX_ADS_IMPACT_PCT = 0.4;
+
+// Decision taxonomy: actions that spend live money / create live exposure are
+// CRITICAL; content, organic social and generation are NON-CRITICAL (reversible,
+// no live spend). In `guarded` mode the agent auto-approves non-critical actions
+// within caps, but the one CRITICAL action here (ads.mutate = live spend) is only
+// auto-approved when its impact is small (<= guarded_max_ads_impact_pct of the
+// daily cap); larger spend requires `full` mode. Enforced inline in the
+// ads.mutate branch of evaluate() below.
 const LLM_JOB_TYPES = ['article', 'horoscope', 'social_caption', 'ad_creative', 'homepage_slot'];
 const ACTIVE_ADS_LEDGER_STATUSES = ['reserved', 'applied'];
-
-const startOfTodayIso = (): string => {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-};
 
 const toNumber = (value: unknown, fallback: number): number => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -84,6 +90,12 @@ const normalizePolicy = (policy: AutonomyPolicyRecord): AutonomyPolicyRecord => 
   brand_safety_required: toBoolean(policy.brand_safety_required, true),
   legal_disclaimer_required: toBoolean(policy.legal_disclaimer_required, true),
   no_sensitive_targeting: toBoolean(policy.no_sensitive_targeting, true),
+  guarded_max_ads_impact_pct: Math.min(
+    1,
+    Math.max(0, toNumber(policy.guarded_max_ads_impact_pct, DEFAULT_GUARDED_MAX_ADS_IMPACT_PCT))
+  ),
+  ads_stop_loss_on_tick: toBoolean(policy.ads_stop_loss_on_tick, true),
+  auto_apply_experiments: toBoolean(policy.auto_apply_experiments, false),
 });
 
 const autonomyPolicy = ({ strapi }: { strapi: Strapi }) => {
@@ -129,7 +141,11 @@ const autonomyPolicy = ({ strapi }: { strapi: Strapi }) => {
     },
 
     async getCounts(): Promise<PolicyDecision['counts']> {
-      const today = startOfTodayIso();
+      const now = new Date();
+      // Align daily windows with the business day in the workflow time zone so the
+      // spend cap reads the same `day` the ledger writes (was UTC → off-by-one near midnight).
+      const dayStart = startOfDayInZoneIso(now, DEFAULT_TIMEZONE);
+      const businessDay = formatDateInZone(now, DEFAULT_TIMEZONE);
       const [
         generationJobsToday,
         llmRequestsToday,
@@ -142,29 +158,29 @@ const autonomyPolicy = ({ strapi }: { strapi: Strapi }) => {
       ] =
         await Promise.all([
           entityService.count(GENERATION_JOB_UID, {
-            filters: { createdAt: { $gte: today } },
+            filters: { createdAt: { $gte: dayStart } },
           }),
           entityService.count(GENERATION_JOB_UID, {
-            filters: { job_type: { $in: LLM_JOB_TYPES }, createdAt: { $gte: today } },
+            filters: { job_type: { $in: LLM_JOB_TYPES }, createdAt: { $gte: dayStart } },
           }),
           entityService.count(GENERATION_JOB_UID, {
-            filters: { job_type: 'image', createdAt: { $gte: today } },
+            filters: { job_type: 'image', createdAt: { $gte: dayStart } },
           }),
           entityService.count(GENERATION_JOB_UID, {
-            filters: { job_type: 'video', createdAt: { $gte: today } },
+            filters: { job_type: 'video', createdAt: { $gte: dayStart } },
           }),
           entityService.count(PUBLICATION_TICKET_UID, {
-            filters: { createdAt: { $gte: today } },
+            filters: { createdAt: { $gte: dayStart } },
           }),
           entityService.count(SOCIAL_POST_TICKET_UID, {
-            filters: { createdAt: { $gte: today } },
+            filters: { createdAt: { $gte: dayStart } },
           }),
           entityService.count(ADS_MUTATION_LEDGER_UID, {
-            filters: { day: today.slice(0, 10), operation: 'activate' },
+            filters: { day: businessDay, operation: 'activate' },
           }),
           entityService.findMany<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, {
             filters: {
-              day: today.slice(0, 10),
+              day: businessDay,
               status: { $in: ACTIVE_ADS_LEDGER_STATUSES },
             },
             fields: ['amount_pln'],
@@ -304,6 +320,25 @@ const autonomyPolicy = ({ strapi }: { strapi: Strapi }) => {
             : input.platform === 'google'
               ? toNumber(policy.daily_google_ads_budget_pln, DEFAULT_GOOGLE_ADS_BUDGET_PLN)
               : globalCap;
+
+        // Critical-action gate: in `guarded` the agent only auto-approves
+        // low-impact live spend; larger spend is critical and needs `full` mode.
+        if (mode === 'guarded') {
+          const guardedMaxImpactPct = Math.min(
+            1,
+            Math.max(0, toNumber(policy.guarded_max_ads_impact_pct, DEFAULT_GUARDED_MAX_ADS_IMPACT_PCT))
+          );
+          if (budgetImpactPln > guardedMaxImpactPct * globalCap) {
+            return {
+              allowed: false,
+              mode,
+              reason: 'guarded_blocks_high_impact_ads',
+              budgetImpactPln,
+              policy,
+              counts,
+            };
+          }
+        }
 
         if (counts.adsMutationsToday >= (policy.max_ads_mutations_per_day ?? 10)) {
           return {

@@ -582,8 +582,16 @@ export const api = {
   async createVideoJob(
     client: FetchClient,
     payload: {
-      title: string;
+      title?: string;
       script?: string;
+      subject?: {
+        kind: 'zodiac' | 'tarot' | 'horoscope' | 'custom';
+        title?: string;
+        sign?: string;
+        card?: string;
+        period?: string;
+        sourceText?: string;
+      };
       workflowId?: number;
       idempotencyKey?: string;
       durationSeconds?: number;
@@ -599,6 +607,32 @@ export const api = {
 
   async renderVideoAsset(client: FetchClient, id: number): Promise<VideoAsset> {
     const { data } = await client.post<ApiEnvelope<VideoAsset>>(`${BASE}/video/assets/${id}/render`);
+    return data.data;
+  },
+
+  async publishVideoAsset(
+    client: FetchClient,
+    id: number,
+    payload?: { platforms?: string[]; caption?: string; scheduledAt?: string }
+  ): Promise<{
+    created: number;
+    skipped: number;
+    blocked?: string;
+    mediaUrl?: string;
+    platforms: string[];
+    tickets: Array<{ platform: string; id?: number; status: string; reason?: string }>;
+  }> {
+    const { data } = await client.post<
+      ApiEnvelope<{
+        created: number;
+        skipped: number;
+        blocked?: string;
+        mediaUrl?: string;
+        platforms: string[];
+        tickets: Array<{ platform: string; id?: number; status: string; reason?: string }>;
+      }>,
+      typeof payload
+    >(`${BASE}/video/assets/${id}/publish`, payload ?? {});
     return data.data;
   },
 

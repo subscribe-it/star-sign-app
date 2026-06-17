@@ -1,16 +1,80 @@
-import { GENERATION_JOB_UID, VIDEO_ASSET_UID } from '../constants';
-import type { GenerationJobRecord, Strapi, VideoAssetRecord } from '../types';
+import { DEFAULT_TIMEZONE, GENERATION_JOB_UID, SOCIAL_POST_TICKET_UID, VIDEO_ASSET_UID } from '../constants';
+import type { AutonomyPolicyRecord, GenerationJobRecord, Strapi, VideoAssetRecord } from '../types';
+import { recordSystemAuditEvent } from '../utils/audit-trail';
+import { buildAstrologyVideoScript, type AstrologyVideoSubject } from '../utils/astrology-video';
+import { formatDateInZone } from '../utils/date-time';
 import { getEntityService } from '../utils/entity-service';
 import { getPluginService } from '../utils/plugin';
+
+// Short-form platforms that accept a vertical (9:16) video: Reels / Shorts / TikTok / FB.
+const VIDEO_PLATFORMS = ['tiktok', 'instagram', 'facebook', 'youtube_shorts'] as const;
+
+// Platforms whose autonomous video delivery is NOT implemented in social-publisher
+// yet — we enqueue them as drafts (status pending) for manual review instead of
+// 'scheduled', so the publisher never tries (and fails) to auto-send them.
+const DRAFT_ONLY_VIDEO_PLATFORMS = new Set(['tiktok', 'youtube_shorts']);
+
+// Only publish a video that actually has a finished, attachable asset.
+const PUBLISHABLE_VIDEO_STATUSES = new Set(['uploaded', 'qc_passed', 'scheduled']);
+
+const toAbsoluteMediaUrl = (value: unknown, serverUrl: string): string | null => {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (!serverUrl) return null;
+  return `${serverUrl.replace(/\/$/, '')}/${raw.replace(/^\//, '')}`;
+};
+
+// A social platform must be able to fetch the media — reject localhost / private
+// hosts so we never persist a non-public URL into tickets or the audit trail.
+const isPublicHttpUrl = (value: string): boolean => {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host)) return false;
+  if (host.endsWith('.local')) return false;
+  if (/^10\./.test(host) || /^192\.168\./.test(host)) return false;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
+  return true;
+};
+
+const resolveVideoMediaUrl = (video: VideoAssetRecord): string | null => {
+  const asset = (video as unknown as { asset?: unknown }).asset;
+  if (!asset || typeof asset !== 'object') return null;
+  const direct = (asset as { url?: unknown }).url;
+  if (typeof direct === 'string') return direct;
+  const nested = (asset as { data?: { attributes?: { url?: unknown } } }).data?.attributes?.url;
+  return typeof nested === 'string' ? nested : null;
+};
 
 type CreateVideoJobInput = {
   title: string;
   script?: string;
+  subject?: AstrologyVideoSubject;
   workflowId?: number;
   generationJobId?: number;
   idempotencyKey?: string;
   durationSeconds?: number;
   dryRun?: boolean;
+};
+
+type PublishVideoInput = {
+  videoAssetId: number;
+  platforms?: string[];
+  caption?: string;
+  scheduledAt?: Date | string;
+};
+
+type PublishVideoTicketResult = {
+  platform: string;
+  id?: number;
+  status: string;
+  reason?: string;
 };
 
 type AutonomyPolicyService = {
@@ -69,12 +133,18 @@ const videoAgent = ({ strapi }: { strapi: Strapi }) => {
       plan: Record<string, unknown>;
     }> {
       const durationSeconds = Math.max(20, Math.min(45, Number(input.durationSeconds ?? 30)));
+      // Auto-build an astrology-themed script/storyboard/captions when a subject
+      // (zodiac / tarot / horoscope) is provided and no explicit script is given.
+      const built = input.subject
+        ? buildAstrologyVideoScript(input.subject, { durationSeconds })
+        : null;
       const plan = {
         title: input.title,
         aspectRatio: '9:16',
         resolution: '1080x1920',
         durationSeconds,
         channels: ['tiktok', 'youtube_shorts', 'instagram'],
+        subjectKind: input.subject?.kind ?? null,
         status: 'queued',
       };
 
@@ -140,13 +210,17 @@ const videoAgent = ({ strapi }: { strapi: Strapi }) => {
         data: {
           title: input.title,
           status: 'queued',
-          script: input.script ?? '',
+          script: input.script?.trim() || built?.script || '',
+          storyboard: built ? { scenes: built.storyboard } : undefined,
+          text_overlay: built ? { items: built.textOverlay } : undefined,
+          subtitles: built ? built.subtitles : undefined,
           aspect_ratio: '9:16',
           duration_seconds: durationSeconds,
           platform_variants: {
             tiktok: { privacy: 'provider_preflight_required' },
             youtube_shorts: { privacy: 'unlisted_until_preflight' },
             instagram: { format: 'reels' },
+            ...(built ? { captions: built.captionByPlatform } : {}),
           },
           workflow: input.workflowId,
           generation_job: generationJobId,
@@ -154,6 +228,9 @@ const videoAgent = ({ strapi }: { strapi: Strapi }) => {
             createdBy: 'video-agent',
             idempotencyKey: input.idempotencyKey,
             liveProviderCalls: false,
+            subjectKind: built?.subjectKind ?? null,
+            hashtags: built?.hashtags ?? [],
+            captionByPlatform: built?.captionByPlatform ?? null,
           },
         },
       });
@@ -227,6 +304,150 @@ const videoAgent = ({ strapi }: { strapi: Strapi }) => {
           },
         },
       });
+    },
+
+    // Publish bridge: turn a rendered video asset into social-post-tickets for the
+    // short-form platforms (TikTok / IG Reels / FB / YT Shorts). The social-publisher
+    // then delivers them on its tick with the existing per-platform safety
+    // (TikTok stays draft-only). Idempotent per (video, platform, day).
+    async publish(input: PublishVideoInput): Promise<{
+      created: number;
+      skipped: number;
+      blocked?: string;
+      mediaUrl?: string;
+      platforms: string[];
+      tickets: PublishVideoTicketResult[];
+    }> {
+      const video = await entityService.findOne<VideoAssetRecord>(VIDEO_ASSET_UID, input.videoAssetId, {
+        populate: ['asset', 'workflow'],
+      });
+      if (!video) {
+        throw new Error('Nie znaleziono assetu video.');
+      }
+
+      if (!PUBLISHABLE_VIDEO_STATUSES.has(String(video.status))) {
+        return { created: 0, skipped: 0, blocked: 'video_not_ready', platforms: [], tickets: [] };
+      }
+
+      const serverUrl = String(
+        (strapi.config as { get?: (key: string) => unknown } | undefined)?.get?.('server.url') ??
+          process.env.SERVER_URL ??
+          ''
+      ).trim();
+      const mediaUrl = toAbsoluteMediaUrl(resolveVideoMediaUrl(video), serverUrl);
+      if (!mediaUrl || !isPublicHttpUrl(mediaUrl)) {
+        return { created: 0, skipped: 0, blocked: 'media_url_not_public', platforms: [], tickets: [] };
+      }
+
+      const policyService = getPluginService<
+        | {
+            getPolicy?: () => Promise<AutonomyPolicyRecord>;
+            evaluate?: (i: {
+              action: 'social.publish';
+              requiresBrandSafety?: boolean;
+              requiresLegalDisclaimer?: boolean;
+            }) => Promise<{ allowed: boolean; reason: string }>;
+          }
+        | undefined
+      >(strapi, 'autonomy-policy');
+
+      let policy: AutonomyPolicyRecord | null = null;
+      try {
+        policy = (await policyService?.getPolicy?.()) ?? null;
+      } catch {
+        policy = null;
+      }
+
+      const allowList = Array.isArray(policy?.allowed_social_channels)
+        ? (policy?.allowed_social_channels as string[])
+        : null;
+      const requested = input.platforms?.length ? input.platforms : [...VIDEO_PLATFORMS];
+      const platforms = requested.filter(
+        (p) => (VIDEO_PLATFORMS as readonly string[]).includes(p) && (!allowList || allowList.includes(p))
+      );
+
+      if (platforms.length === 0) {
+        return { created: 0, skipped: 0, blocked: 'no_allowed_platforms', mediaUrl, platforms: [], tickets: [] };
+      }
+
+      if (typeof policyService?.evaluate === 'function') {
+        const decision = await policyService.evaluate({
+          action: 'social.publish',
+          requiresBrandSafety: true,
+          requiresLegalDisclaimer: true,
+        });
+        if (!decision.allowed) {
+          return {
+            created: 0,
+            skipped: 0,
+            blocked: decision.reason,
+            mediaUrl,
+            platforms,
+            tickets: platforms.map((p) => ({ platform: p, status: 'blocked', reason: decision.reason })),
+          };
+        }
+      }
+
+      const captionByPlatform = (video.metadata?.captionByPlatform ?? {}) as Record<string, string>;
+      const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : new Date();
+      // Business-timezone day so the idempotency window matches the social daily cap.
+      const day = formatDateInZone(scheduledAt, DEFAULT_TIMEZONE);
+      const workflowId = typeof video.workflow === 'number' ? video.workflow : video.workflow?.id;
+
+      let created = 0;
+      let skipped = 0;
+      const tickets: PublishVideoTicketResult[] = [];
+
+      for (const platform of platforms) {
+        const idempotencyKey = `video:${video.id}:${platform}:${day}`;
+        const existing = (await entityService.findMany(SOCIAL_POST_TICKET_UID, {
+          filters: { idempotency_key: idempotencyKey },
+          limit: 1,
+        })) as Array<{ id: number }>;
+
+        if (existing[0]) {
+          skipped += 1;
+          tickets.push({ platform, id: existing[0].id, status: 'exists' });
+          continue;
+        }
+
+        const caption =
+          input.caption?.trim() || captionByPlatform[platform] || video.title || 'Astrologia';
+        const isDraft = DRAFT_ONLY_VIDEO_PLATFORMS.has(platform);
+
+        const row = (await entityService.create(SOCIAL_POST_TICKET_UID, {
+          data: {
+            platform,
+            content_format: 'video',
+            status: isDraft ? 'pending' : 'scheduled',
+            caption,
+            media_url: mediaUrl,
+            scheduled_at: scheduledAt,
+            attempt_count: 0,
+            idempotency_key: idempotencyKey,
+            blocked_reason: isDraft ? 'draft_only' : null,
+            video_asset: video.id,
+            workflow: workflowId,
+            provider_payload: {
+              source: 'video-agent',
+              subjectKind: video.metadata?.subjectKind ?? null,
+            },
+          },
+        })) as { id: number };
+
+        created += 1;
+        tickets.push({ platform, id: row.id, status: isDraft ? 'pending' : 'scheduled' });
+      }
+
+      await recordSystemAuditEvent(strapi, {
+        action: 'video.publish.enqueue',
+        outcome: 'success',
+        resourceUid: VIDEO_ASSET_UID,
+        resourceId: video.id,
+        metadata: { created, skipped, platforms, mediaUrl },
+      });
+
+      return { created, skipped, mediaUrl, platforms, tickets };
     },
   };
 };

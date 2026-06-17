@@ -38,6 +38,14 @@
       "type": "string",
       "unique": true
     },
+    "stripe_session_url": {
+      "type": "text",
+      "private": true
+    },
+    "checkout_fingerprint": {
+      "type": "string",
+      "private": true
+    },
     "stripe_payment_intent_id": {
       "type": "string"
     },

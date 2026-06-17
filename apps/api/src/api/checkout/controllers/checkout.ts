@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { isShopEnabled } from '../../../utils/features';
 import { serializeCheckoutAnalyticsSummary } from '../utils/analytics-summary';
 
@@ -32,6 +34,27 @@ const toMinorUnits = (value: number, currency: string): number => {
     return Math.round(value);
   }
   return Math.round(value * 100);
+};
+
+// Window during which an identical cart re-submitted by the same customer reuses
+// the existing open Stripe session instead of creating a duplicate order/session.
+const CHECKOUT_REUSE_WINDOW_MS = 30 * 60 * 1000;
+
+// Stable fingerprint of the checkout intent (cart contents + email + currency),
+// independent of the per-request order id, so double-submits collide on it.
+const computeCheckoutFingerprint = (
+  items: CheckoutItemInput[],
+  customerEmail: string,
+  currency: string,
+): string => {
+  const normalizedItems = items
+    .map((item) => `${item.productDocumentId}:${item.quantity}`)
+    .sort()
+    .join('|');
+  return crypto
+    .createHash('sha256')
+    .update(`${normalizedItems}#${customerEmail}#${currency}`, 'utf8')
+    .digest('hex');
 };
 
 const parseItems = (value: unknown): CheckoutItemInput[] => {
@@ -99,6 +122,9 @@ async function createStripeCheckoutSession(input: {
     headers: {
       Authorization: `Bearer ${input.secretKey}`,
       'Content-Type': 'application/x-www-form-urlencoded',
+      // Idempotency keyed on the order: retries / double-submits for the same
+      // order return the existing Stripe session instead of creating duplicates.
+      'Idempotency-Key': `checkout:${input.orderDocumentId}`,
     },
     body: params.toString(),
   });
@@ -190,6 +216,34 @@ export default {
       });
     }
 
+    // Double-submit / idempotency guard: if the same cart was just checked out and
+    // an open Stripe session already exists, reuse it instead of creating a
+    // duplicate order + session (the per-order Idempotency-Key alone cannot dedupe
+    // because each request would otherwise mint a fresh order id).
+    const checkoutFingerprint = computeCheckoutFingerprint(
+      items,
+      customerEmail,
+      orderCurrency || 'pln',
+    );
+    const reuseSince = new Date(Date.now() - CHECKOUT_REUSE_WINDOW_MS).toISOString();
+    const existingOrder = await strapi.db.query('api::order.order').findOne({
+      where: {
+        checkout_fingerprint: checkoutFingerprint,
+        status: 'pending',
+        stripe_session_url: { $notNull: true },
+        createdAt: { $gte: reuseSince },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingOrder?.stripe_session_url && existingOrder?.stripe_session_id) {
+      ctx.body = {
+        checkoutUrl: existingOrder.stripe_session_url,
+        sessionId: existingOrder.stripe_session_id,
+      };
+      return;
+    }
+
     const order = await strapi.db.query('api::order.order').create({
       data: {
         customer_email: customerEmail || null,
@@ -197,6 +251,7 @@ export default {
         payment_provider: 'stripe',
         currency: orderCurrency || 'pln',
         total_amount: orderTotal.toFixed(2),
+        checkout_fingerprint: checkoutFingerprint,
       },
     });
 
@@ -243,6 +298,7 @@ export default {
         where: { id: order.id },
         data: {
           stripe_session_id: session.id,
+          stripe_session_url: session.url,
         },
       });
 

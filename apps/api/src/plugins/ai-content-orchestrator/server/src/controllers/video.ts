@@ -22,20 +22,33 @@ const videoController = ({ strapi }: { strapi: Strapi }) => ({
       const body = (ctx.request.body ?? {}) as {
         title?: string;
         script?: string;
+        subject?: {
+          kind?: 'zodiac' | 'tarot' | 'horoscope' | 'custom';
+          title?: string;
+          sign?: string;
+          card?: string;
+          period?: string;
+          sourceText?: string;
+        };
         workflowId?: number;
         idempotencyKey?: string;
         durationSeconds?: number;
         dryRun?: boolean;
       };
 
-      if (!body.title?.trim()) {
-        ctx.badRequest('Wymagane pole: title.');
+      const subject =
+        body.subject && body.subject.kind ? { ...body.subject, kind: body.subject.kind } : undefined;
+      const title = body.title?.trim() || subject?.title?.trim();
+
+      if (!title) {
+        ctx.badRequest('Wymagane pole: title (lub subject.title).');
         return;
       }
 
       const result = await strapi.plugin('ai-content-orchestrator').service('video-agent').createJob({
-        title: body.title,
+        title,
         script: body.script,
+        subject,
         workflowId: body.workflowId,
         idempotencyKey: body.idempotencyKey,
         durationSeconds: body.durationSeconds,
@@ -81,6 +94,44 @@ const videoController = ({ strapi }: { strapi: Strapi }) => ({
         },
       });
       ctx.body = { data: video };
+    } catch (error) {
+      ctx.badRequest(toSafeErrorMessage(error));
+    }
+  },
+
+  async publish(ctx: Context): Promise<void> {
+    try {
+      const id = Number(ctx.params.id);
+      if (!Number.isFinite(id)) {
+        ctx.badRequest('Niepoprawny identyfikator video asset.');
+        return;
+      }
+
+      const body = (ctx.request.body ?? {}) as {
+        platforms?: string[];
+        caption?: string;
+        scheduledAt?: string;
+      };
+
+      const result = await strapi.plugin('ai-content-orchestrator').service('video-agent').publish({
+        videoAssetId: id,
+        platforms: Array.isArray(body.platforms) ? body.platforms : undefined,
+        caption: typeof body.caption === 'string' ? body.caption : undefined,
+        scheduledAt: typeof body.scheduledAt === 'string' ? body.scheduledAt : undefined,
+      });
+
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'video.asset.publish',
+        outcome: result.blocked ? 'skipped' : 'success',
+        resourceId: id,
+        metadata: {
+          created: result.created,
+          skipped: result.skipped,
+          blocked: result.blocked,
+          platforms: result.platforms,
+        },
+      });
+      ctx.body = { data: result };
     } catch (error) {
       ctx.badRequest(toSafeErrorMessage(error));
     }
