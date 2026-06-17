@@ -75,16 +75,11 @@ services:
         - 'traefik.http.routers.star-sign-frontend.entrypoints=websecure'
         - 'traefik.http.routers.star-sign-frontend.tls=true'
         - 'traefik.http.routers.star-sign-frontend.tls.certresolver=letsencrypt'
-        # TEMP: external @file middlewares (real-ip,geo-block,rate-limit,inflight-req) are temporarily disabled on Traefik — only the inline header middleware is referenced. Re-add the @file chain when they are re-enabled.
+        # HTTP→HTTPS is handled globally by the edge Traefik (http-catchall router on the `web` entrypoint), so no per-service HTTP router or redirect middleware is defined here.
+        # External @file middlewares are intentionally NOT referenced: they depend on edge Traefik plugins (real-ip/geo-block/rate-limit/inflight-req) that are not guaranteed to be loaded at runtime, and a missing middleware reference 404s the whole router. Only self-contained inline header middlewares (created by these swarm labels) are used.
         - 'traefik.http.routers.star-sign-frontend.middlewares=star-sign-frontend-headers'
         - 'traefik.http.routers.star-sign-frontend.service=star-sign-frontend'
         - 'traefik.http.services.star-sign-frontend.loadbalancer.server.port=4000'
-        - 'traefik.http.routers.star-sign-frontend-http.rule=Host(`${PRODUCTION_DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge`)'
-        - 'traefik.http.routers.star-sign-frontend-http.entrypoints=web'
-        - 'traefik.http.routers.star-sign-frontend-http.middlewares=star-sign-https-redirect'
-        - 'traefik.http.routers.star-sign-frontend-http.priority=20'
-        - 'traefik.http.middlewares.star-sign-https-redirect.redirectscheme.scheme=https'
-        - 'traefik.http.middlewares.star-sign-https-redirect.redirectscheme.permanent=true'
         - 'traefik.http.middlewares.star-sign-frontend-headers.headers.stsSeconds=31536000'
         - 'traefik.http.middlewares.star-sign-frontend-headers.headers.stsIncludeSubdomains=true'
         - 'traefik.http.middlewares.star-sign-frontend-headers.headers.contentTypeNosniff=true'
@@ -288,20 +283,16 @@ services:
         - 'traefik.http.routers.star-sign-api-path.tls=true'
         - 'traefik.http.routers.star-sign-api-path.tls.certresolver=letsencrypt'
         - 'traefik.http.routers.star-sign-api-path.priority=100'
-        # TEMP: external @file middlewares (real-ip,rate-limit,inflight-req) are temporarily disabled on Traefik — only the inline header middleware is referenced. Re-add the @file chain when they are re-enabled.
         - 'traefik.http.routers.star-sign-api-path.middlewares=star-sign-api-headers'
         - 'traefik.http.routers.star-sign-api-path.service=star-sign-api'
         - 'traefik.http.routers.star-sign-api-domain.rule=Host(`${API_DOMAIN}`)'
         - 'traefik.http.routers.star-sign-api-domain.entrypoints=websecure'
         - 'traefik.http.routers.star-sign-api-domain.tls=true'
         - 'traefik.http.routers.star-sign-api-domain.tls.certresolver=letsencrypt'
-        # TEMP: external @file middlewares (real-ip,rate-limit,inflight-req) are temporarily disabled on Traefik — only the inline header middleware is referenced. Re-add the @file chain when they are re-enabled.
+        # HTTP→HTTPS is handled globally by the edge Traefik (http-catchall on the `web` entrypoint); no per-service HTTP router/redirect needed. @file middlewares are intentionally not referenced (see frontend note).
         - 'traefik.http.routers.star-sign-api-domain.middlewares=star-sign-api-headers'
         - 'traefik.http.routers.star-sign-api-domain.service=star-sign-api'
         - 'traefik.http.services.star-sign-api.loadbalancer.server.port=1337'
-        - 'traefik.http.routers.star-sign-api-http.rule=Host(`${API_DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge`)'
-        - 'traefik.http.routers.star-sign-api-http.entrypoints=web'
-        - 'traefik.http.routers.star-sign-api-http.middlewares=star-sign-https-redirect'
         - 'traefik.http.middlewares.star-sign-api-headers.headers.stsSeconds=31536000'
         - 'traefik.http.middlewares.star-sign-api-headers.headers.stsIncludeSubdomains=true'
         - 'traefik.http.middlewares.star-sign-api-headers.headers.contentTypeNosniff=true'
