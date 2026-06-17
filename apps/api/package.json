@@ -54,7 +54,8 @@
     "@rushstack/node-core-library": "5.20.3",
     "axios": "$axios",
     "lodash": "4.18.1",
-    "yaml": "1.10.3"
+    "yaml": "1.10.3",
+    "ws": "^8.21.0"
   },
   "engines": {
     "node": ">=20.0.0 <=24.x.x",
