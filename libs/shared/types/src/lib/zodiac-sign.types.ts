@@ -11,7 +11,12 @@ export interface ZodiacSign {
   strengths?: string[];
   challenges?: string[];
   compatibility?: string[];
-  image?: any;
+  image?: {
+    url: string;
+    alternativeText?: string;
+    width?: number;
+    formats?: Record<string, { url: string; width?: number }>;
+  } | null;
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;

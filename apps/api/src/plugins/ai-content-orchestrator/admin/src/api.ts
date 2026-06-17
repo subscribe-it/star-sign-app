@@ -454,6 +454,27 @@ export const api = {
     return data.data;
   },
 
+  async backfillArticleImages(client: FetchClient): Promise<{ updated: number }> {
+    const { data } = await client.post<ApiEnvelope<{ updated: number }>>(
+      `${BASE}/media/backfill/article-images`
+    );
+    return data.data;
+  },
+
+  async backfillTarotCardImages(client: FetchClient): Promise<{ updated: number }> {
+    const { data } = await client.post<ApiEnvelope<{ updated: number }>>(
+      `${BASE}/media/backfill/tarot-card-images`
+    );
+    return data.data;
+  },
+
+  async backfillZodiacSignImages(client: FetchClient): Promise<{ updated: number }> {
+    const { data } = await client.post<ApiEnvelope<{ updated: number }>>(
+      `${BASE}/media/backfill/zodiac-sign-images`
+    );
+    return data.data;
+  },
+
   async getMediaUsage(client: FetchClient, limit = 200): Promise<MediaUsage[]> {
     const { data } = await client.get<ApiEnvelope<MediaUsage[]>>(
       `${BASE}/media-usage?limit=${limit}`

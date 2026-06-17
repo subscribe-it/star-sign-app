@@ -40,11 +40,24 @@
           class="absolute inset-0 bg-gradient-to-br from-mystic-rose/0 to-mystic-gold/0 group-hover:from-mystic-rose/5 group-hover:to-mystic-gold/5 transition-colors duration-500"
         ></div>
 
+        @if (sign.image) {
+        <div
+          class="w-20 h-20 sm:w-28 sm:h-28 mb-4 sm:mb-6 group-hover:scale-110 transition-transform duration-500"
+        >
+          <img
+            [src]="sign.image.url | strapiImage"
+            [alt]="sign.image.alternativeText || sign.name"
+            class="w-full h-full object-contain drop-shadow-sm"
+            loading="lazy"
+          />
+        </div>
+        } @else {
         <div
           class="text-4xl sm:text-6xl text-mystic-gold/40 group-hover:text-mystic-gold group-hover:scale-110 transition-all duration-500 mb-4 sm:mb-6 drop-shadow-sm select-none"
         >
           {{ sign.symbol || '✧' }}
         </div>
+        }
 
         <h3 class="serif-display text-xl sm:text-2xl text-mystic-cocoa mb-2 relative z-10">
           {{ sign.name }}

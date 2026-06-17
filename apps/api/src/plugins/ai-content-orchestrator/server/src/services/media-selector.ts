@@ -256,6 +256,134 @@ const mediaSelector = ({ strapi }: { strapi: Strapi }) => {
       };
     },
 
+    // Rozwiązuje (lub generuje) obraz dla karty tarota. Każda karta ma mieć UNIKALNY
+    // obraz, więc preferujemy generację on-demand (gdy mamy tokeny + nazwę). Dopiero
+    // gdy generacja jest niemożliwa lub padnie, używamy istniejącego media-asset jako
+    // fallbacku. Karty tarota nie mają sign_slug, więc nie da się ich rozróżnić w
+    // katalogu mediów — dlatego NIE reużywamy współdzielonego assetu daily_card jako
+    // pierwszego wyboru (inaczej wszystkie karty dostałyby ten sam obraz). Nie rzuca
+    // wyjątkiem — zwraca null na wypadek backfillu (best-effort).
+    async resolveForTarotCard(input: {
+      cardName: string;
+      description?: string | null;
+      meaningUpright?: string | null;
+      meaningReversed?: string | null;
+      contextKey?: string;
+      apiToken?: string | null;
+      llmModel?: string | null;
+      imageGenModel?: string | null;
+      imageGenToken?: string | null;
+      workflowId?: number;
+    }): Promise<{ mediaAssetId: number; uploadFileId: number } | null> {
+      const now = new Date();
+
+      // 1. Generacja on-demand (preferowana — unikalny obraz na kartę).
+      if (input.apiToken && input.llmModel && input.cardName?.trim()) {
+        try {
+          const content = [input.description, input.meaningUpright, input.meaningReversed]
+            .filter((value): value is string => Boolean(value && value.trim()))
+            .join('\n');
+
+          const result = await this.triggerAutonomousGeneration({
+            workflowType: 'daily_card',
+            contextKey: input.contextKey ?? 'reconciliation',
+            now,
+            title: input.cardName,
+            content,
+            categoryName: 'Tarot',
+            apiToken: input.apiToken,
+            llmModel: input.llmModel,
+            imageGenModel: input.imageGenModel ?? undefined,
+            imageGenToken: input.imageGenToken ?? undefined,
+            workflowId: input.workflowId,
+          });
+
+          return { mediaAssetId: result.mediaAssetId, uploadFileId: result.uploadFileId };
+        } catch (error) {
+          strapi.log.warn(
+            `[aico] Generacja obrazu dla karty tarota "${input.cardName}" nie powiodła się: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+          // Spadamy do fallbacku na istniejący asset poniżej.
+        }
+      }
+
+      // 2. Fallback: istniejący, mapowany media-asset (gdy brak tokenów lub generacja padła).
+      const candidates = (await entityService.findMany(MEDIA_ASSET_UID, {
+        filters: {
+          active: true,
+          purpose: { $in: ['daily_card', 'fallback_general'] },
+        },
+        sort: [{ priority: 'desc' }, { use_count: 'asc' }, { last_used_at: 'asc' }, { id: 'asc' }],
+        populate: ['asset'],
+        limit: 50,
+      })) as MediaAssetRecord[];
+
+      const existing = candidates.find((item) => Boolean(getId(item.asset)));
+      if (existing) {
+        const uploadFileId = getId(existing.asset);
+        if (uploadFileId) {
+          return { mediaAssetId: existing.id, uploadFileId };
+        }
+      }
+
+      return null;
+    },
+
+    // Rozwiązuje (lub generuje) obraz dla znaku zodiaku. Najpierw reużywa
+    // read-only resolveForZodiacSign (asset o przeznaczeniu zodiac_profile); jeśli
+    // brak, a mamy tokeny + nazwę — generuje on-demand. Nie rzuca wyjątkiem.
+    async resolveForZodiacSignWithGeneration(input: {
+      signSlug: string;
+      signName: string;
+      description?: string | null;
+      element?: string | null;
+      contextKey?: string;
+      apiToken?: string | null;
+      llmModel?: string | null;
+      imageGenModel?: string | null;
+      imageGenToken?: string | null;
+      workflowId?: number;
+    }): Promise<{ mediaAssetId: number; uploadFileId: number } | null> {
+      // 1. Istniejący profil znaku zodiaku.
+      const existing = await this.resolveForZodiacSign({ signSlug: input.signSlug });
+      if (existing) {
+        return existing;
+      }
+
+      // 2. Generacja on-demand.
+      if (input.apiToken && input.llmModel && input.signName?.trim()) {
+        try {
+          const result = await this.triggerAutonomousGeneration({
+            workflowType: 'daily_card',
+            requiredSignSlug: input.signSlug,
+            contextKey: input.contextKey ?? 'reconciliation',
+            now: new Date(),
+            title: input.signName,
+            content: input.description ?? '',
+            categoryName: input.element ?? 'Zodiak',
+            apiToken: input.apiToken,
+            llmModel: input.llmModel,
+            imageGenModel: input.imageGenModel ?? undefined,
+            imageGenToken: input.imageGenToken ?? undefined,
+            workflowId: input.workflowId,
+          });
+
+          return { mediaAssetId: result.mediaAssetId, uploadFileId: result.uploadFileId };
+        } catch (error) {
+          strapi.log.warn(
+            `[aico] Generacja obrazu dla znaku zodiaku "${input.signName}" nie powiodła się: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+          return null;
+        }
+      }
+
+      return null;
+    },
+
     async registerUsage(input: {
       mediaAssetId: number;
       workflowId?: number;

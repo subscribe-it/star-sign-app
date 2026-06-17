@@ -155,6 +155,30 @@ type MediaSelectorService = {
   resolveForZodiacSign: (input: {
     signSlug: string;
   }) => Promise<{ mediaAssetId: number; mediaAssetKey?: string; uploadFileId: number } | null>;
+  resolveForTarotCard: (input: {
+    cardName: string;
+    description?: string | null;
+    meaningUpright?: string | null;
+    meaningReversed?: string | null;
+    contextKey?: string;
+    apiToken?: string | null;
+    llmModel?: string | null;
+    imageGenModel?: string | null;
+    imageGenToken?: string | null;
+    workflowId?: number;
+  }) => Promise<{ mediaAssetId: number; uploadFileId: number } | null>;
+  resolveForZodiacSignWithGeneration: (input: {
+    signSlug: string;
+    signName: string;
+    description?: string | null;
+    element?: string | null;
+    contextKey?: string;
+    apiToken?: string | null;
+    llmModel?: string | null;
+    imageGenModel?: string | null;
+    imageGenToken?: string | null;
+    workflowId?: number;
+  }) => Promise<{ mediaAssetId: number; uploadFileId: number } | null>;
   registerUsage: (input: {
     mediaAssetId: number;
     workflowId?: number;
@@ -2230,6 +2254,159 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           }
         } catch {
           // ignore failures
+        }
+      }
+
+      return { updated: updatedCount };
+    },
+
+    // Backfill obrazów kart tarota: znajduje karty bez `image`, rozwiązuje/generuje
+    // obraz przez media-selector i ustawia `image`. Domyślny limit 25 (świadomie
+    // blisko dziennego limitu media-jobów autonomii ~20 — przy włączonej generacji
+    // część pozycji może zostać zablokowana przez autonomy-policy/provider-status,
+    // co jest oczekiwane). Best-effort per pozycję — nie przerywa całości na błędzie.
+    async reconcileTarotCardImages(limit = 25): Promise<{ updated: number }> {
+      const cards = (await entityService.findMany(CONTENT_UIDS.tarotCard, {
+        filters: {
+          image: { $null: true },
+        },
+        limit,
+      })) as Array<{
+        id: number;
+        name: string;
+        description?: string | null;
+        meaning_upright?: string | null;
+        meaning_reversed?: string | null;
+      }>;
+
+      if (cards.length === 0) {
+        return { updated: 0 };
+      }
+
+      // Pobieramy token z dowolnego aktywnego workflow, aby mieć "paliwo" do generacji.
+      const workflows = (await entityService.findMany(WORKFLOW_UID, {
+        filters: { enabled: true },
+        limit: 1,
+      })) as WorkflowRecord[];
+      const workflow = workflows[0];
+      const apiToken = workflow ? await workflowsService().decryptTokenForRuntime(workflow) : null;
+      const imageGenToken = workflow
+        ? await workflowsService().decryptImageTokenForRuntime(workflow)
+        : null;
+      const config = workflow ? await workflowsService().normalizeRuntime(workflow) : null;
+
+      let updatedCount = 0;
+
+      for (const card of cards) {
+        try {
+          const selection = await mediaSelectorService().resolveForTarotCard({
+            cardName: card.name,
+            description: card.description ?? null,
+            meaningUpright: card.meaning_upright ?? null,
+            meaningReversed: card.meaning_reversed ?? null,
+            contextKey: 'reconciliation',
+            apiToken,
+            llmModel: config?.llmModel,
+            imageGenModel: config?.imageGenModel,
+            imageGenToken,
+            workflowId: workflow?.id,
+          });
+
+          if (selection?.uploadFileId) {
+            await entityService.update(CONTENT_UIDS.tarotCard, card.id, {
+              data: {
+                image: selection.uploadFileId,
+              },
+            });
+
+            await mediaSelectorService().registerUsage({
+              mediaAssetId: selection.mediaAssetId,
+              workflowId: workflow?.id,
+              contentUid: CONTENT_UIDS.tarotCard,
+              contentEntryId: card.id,
+              contextKey: 'reconciliation',
+            });
+
+            updatedCount += 1;
+          }
+        } catch {
+          // ignore failures (best-effort backfill)
+        }
+      }
+
+      return { updated: updatedCount };
+    },
+
+    // Backfill obrazów znaków zodiaku (nazwa z sufiksem "Backfill", aby nie kolidować
+    // z istniejącą read-only metodą reconcileZodiacSignImages(signs) wołaną z
+    // fetchZodiacSigns). Znajduje znaki bez `image`, generuje/rozwiązuje obraz i
+    // ustawia `image`. Pole `symbol` celowo NIE jest wypełniane (na razie tylko
+    // `image`). Domyślny limit 25 (patrz uwaga o limicie media-jobów powyżej).
+    async reconcileZodiacSignImagesBackfill(limit = 25): Promise<{ updated: number }> {
+      const signs = (await entityService.findMany(CONTENT_UIDS.zodiacSign, {
+        filters: {
+          image: { $null: true },
+        },
+        limit,
+      })) as Array<{
+        id: number;
+        name: string;
+        slug: string;
+        element?: string | null;
+        description?: string | null;
+      }>;
+
+      if (signs.length === 0) {
+        return { updated: 0 };
+      }
+
+      const workflows = (await entityService.findMany(WORKFLOW_UID, {
+        filters: { enabled: true },
+        limit: 1,
+      })) as WorkflowRecord[];
+      const workflow = workflows[0];
+      const apiToken = workflow ? await workflowsService().decryptTokenForRuntime(workflow) : null;
+      const imageGenToken = workflow
+        ? await workflowsService().decryptImageTokenForRuntime(workflow)
+        : null;
+      const config = workflow ? await workflowsService().normalizeRuntime(workflow) : null;
+
+      let updatedCount = 0;
+
+      for (const sign of signs) {
+        try {
+          const selection = await mediaSelectorService().resolveForZodiacSignWithGeneration({
+            signSlug: sign.slug,
+            signName: sign.name,
+            description: sign.description ?? null,
+            element: sign.element ?? null,
+            contextKey: 'reconciliation',
+            apiToken,
+            llmModel: config?.llmModel,
+            imageGenModel: config?.imageGenModel,
+            imageGenToken,
+            workflowId: workflow?.id,
+          });
+
+          if (selection?.uploadFileId) {
+            await entityService.update(CONTENT_UIDS.zodiacSign, sign.id, {
+              data: {
+                image: selection.uploadFileId,
+              },
+            });
+
+            await mediaSelectorService().registerUsage({
+              mediaAssetId: selection.mediaAssetId,
+              workflowId: workflow?.id,
+              contentUid: CONTENT_UIDS.zodiacSign,
+              contentEntryId: sign.id,
+              contextKey: 'reconciliation',
+            });
+
+            updatedCount += 1;
+          }
+        } catch {
+          // ignore failures (best-effort backfill)
         }
       }
 

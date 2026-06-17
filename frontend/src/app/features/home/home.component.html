@@ -113,11 +113,24 @@
             <div
             class="absolute inset-0 backface-hidden bg-white border border-mystic-rose/10 rounded-2xl p-4 sm:p-8 flex flex-col items-center justify-center shadow-sm group-hover:shadow-mystic-rose/20 group-hover:border-mystic-rose/30 transition-all"
             >
-              <div
-                class="text-4xl sm:text-5xl mb-6 text-mystic-gold opacity-40 group-hover:scale-110 transition-transform duration-500"
-              >
-                ✦
-              </div>
+              @if (sign.image) {
+                <div
+                  class="w-20 h-20 sm:w-24 sm:h-24 mb-6 group-hover:scale-110 transition-transform duration-500"
+                >
+                  <img
+                    [src]="sign.image.url | strapiImage"
+                    [alt]="sign.image.alternativeText || sign.name"
+                    class="w-full h-full object-contain drop-shadow-sm"
+                    loading="lazy"
+                  />
+                </div>
+              } @else {
+                <div
+                  class="text-4xl sm:text-5xl mb-6 text-mystic-gold opacity-40 group-hover:scale-110 transition-transform duration-500"
+                >
+                  ✦
+                </div>
+              }
               <h3
                 class="serif-display text-xl sm:text-2xl text-mystic-cocoa mb-2 text-center"
               >
@@ -280,6 +293,20 @@
                 [alt]="article.image.alternativeText || article.title"
                 class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
               />
+            } @else {
+              <div
+                data-test="home-article-image-placeholder"
+                class="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_50%_35%,rgba(217,154,166,0.24),transparent_50%),linear-gradient(135deg,#fffafa_0%,#fdf0f3_58%,#f7e2e8_100%)]"
+              >
+                <div
+                  class="relative flex h-28 w-28 items-center justify-center rounded-full border border-mystic-rose/20 bg-white/45 shadow-inner"
+                >
+                  <span class="text-6xl text-mystic-gold/70">✦</span>
+                  <span
+                    class="absolute inset-5 rounded-full border border-mystic-gold/25"
+                  ></span>
+                </div>
+              </div>
             }
             <div
               class="absolute inset-0 bg-mystic-cocoa/5 group-hover:bg-transparent transition-colors duration-500"

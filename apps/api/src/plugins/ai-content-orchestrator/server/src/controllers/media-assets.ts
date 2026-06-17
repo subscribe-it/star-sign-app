@@ -191,6 +191,87 @@ const mediaAssetsController = ({ strapi }: { strapi: Strapi }) => ({
       ctx.badRequest(message);
     }
   },
+
+  async backfillArticleImages(ctx: Context): Promise<void> {
+    try {
+      const result = await strapi
+        .plugin('ai-content-orchestrator')
+        .service('orchestrator')
+        .reconcileArticleImages();
+
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'media-asset.backfill-article-images',
+        outcome: 'success',
+        resourceUid: MEDIA_ASSET_UID,
+        metadata: { result },
+      });
+      ctx.body = { data: result };
+    } catch (error) {
+      const message = toSafeErrorMessage(error);
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'media-asset.backfill-article-images',
+        outcome: 'failure',
+        severity: 'error',
+        resourceUid: MEDIA_ASSET_UID,
+        metadata: { error: message },
+      });
+      ctx.internalServerError(message);
+    }
+  },
+
+  async backfillTarotCardImages(ctx: Context): Promise<void> {
+    try {
+      const result = await strapi
+        .plugin('ai-content-orchestrator')
+        .service('orchestrator')
+        .reconcileTarotCardImages();
+
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'media-asset.backfill-tarot-card-images',
+        outcome: 'success',
+        resourceUid: MEDIA_ASSET_UID,
+        metadata: { result },
+      });
+      ctx.body = { data: result };
+    } catch (error) {
+      const message = toSafeErrorMessage(error);
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'media-asset.backfill-tarot-card-images',
+        outcome: 'failure',
+        severity: 'error',
+        resourceUid: MEDIA_ASSET_UID,
+        metadata: { error: message },
+      });
+      ctx.internalServerError(message);
+    }
+  },
+
+  async backfillZodiacSignImages(ctx: Context): Promise<void> {
+    try {
+      const result = await strapi
+        .plugin('ai-content-orchestrator')
+        .service('orchestrator')
+        .reconcileZodiacSignImagesBackfill();
+
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'media-asset.backfill-zodiac-sign-images',
+        outcome: 'success',
+        resourceUid: MEDIA_ASSET_UID,
+        metadata: { result },
+      });
+      ctx.body = { data: result };
+    } catch (error) {
+      const message = toSafeErrorMessage(error);
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'media-asset.backfill-zodiac-sign-images',
+        outcome: 'failure',
+        severity: 'error',
+        resourceUid: MEDIA_ASSET_UID,
+        metadata: { error: message },
+      });
+      ctx.internalServerError(message);
+    }
+  },
 });
 
 export default mediaAssetsController;
