@@ -46,6 +46,12 @@
         "cwd": "apps/api"
       }
     },
+    "aico-image-gen-smoke": {
+      "command": "npm run aico-image-gen-smoke",
+      "options": {
+        "cwd": "apps/api"
+      }
+    },
     "test": {
       "command": "npx vitest run --config vitest.config.ts",
       "options": {
