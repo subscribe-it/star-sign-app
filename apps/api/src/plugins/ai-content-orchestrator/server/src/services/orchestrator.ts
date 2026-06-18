@@ -2196,7 +2196,64 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       return { created: 1, updated: 0, skipped: 0 };
     },
 
-    async reconcileArticleImages(): Promise<{ updated: number }> {
+    // Wspólne źródło tokenów/modeli dla backfillu obrazów. Najpierw próbuje
+    // odszyfrować tokeny z przekazanego workflow; gdy workflow brak lub deszyfrowanie
+    // padnie (np. zły ENCRYPTION_KEY), loguje ostrzeżenie i spada do zmiennych ENV,
+    // dzięki czemu backfill nie no-opuje cicho mimo ustawionych sekretów w env.
+    async resolveBackfillRuntimeTokens(workflow?: WorkflowRecord): Promise<{
+      apiToken: string | null;
+      imageGenToken: string | null;
+      llmModel: string;
+      imageGenModel: string | undefined;
+    }> {
+      let apiToken: string | null = null;
+      let imageGenToken: string | null = null;
+      let config: NormalizedWorkflowConfig | null = null;
+
+      if (workflow) {
+        try {
+          apiToken = await workflowsService().decryptTokenForRuntime(workflow);
+        } catch (error) {
+          strapi.log.warn(
+            `[aico] backfill: nie udało się odszyfrować tokenu LLM workflow #${workflow.id}, fallback do ENV: ${toSafeErrorMessage(error)}`
+          );
+        }
+
+        try {
+          imageGenToken = await workflowsService().decryptImageTokenForRuntime(workflow);
+        } catch (error) {
+          strapi.log.warn(
+            `[aico] backfill: nie udało się odszyfrować tokenu generacji obrazów workflow #${workflow.id}, fallback do ENV: ${toSafeErrorMessage(error)}`
+          );
+        }
+
+        try {
+          config = await workflowsService().normalizeRuntime(workflow);
+        } catch (error) {
+          strapi.log.warn(
+            `[aico] backfill: nie udało się znormalizować konfiguracji workflow #${workflow.id}, fallback do ENV: ${toSafeErrorMessage(error)}`
+          );
+        }
+      }
+
+      return {
+        apiToken: apiToken || process.env.AICO_OPENROUTER_TOKEN?.trim() || null,
+        imageGenToken:
+          imageGenToken ||
+          process.env.AICO_IMAGE_GEN_TOKEN?.trim() ||
+          process.env.REPLICATE_API_TOKEN?.trim() ||
+          null,
+        llmModel: config?.llmModel ?? process.env.AICO_OPENROUTER_MODEL ?? 'openai/gpt-4.1-mini',
+        imageGenModel: config?.imageGenModel ?? process.env.AICO_IMAGE_GEN_MODEL ?? undefined,
+      };
+    },
+
+    async reconcileArticleImages(): Promise<{
+      updated: number;
+      attempted: number;
+      skipped: number;
+      failed: number;
+    }> {
       const articles = (await entityService.findMany(CONTENT_UIDS.article, {
         filters: {
           image: { $null: true },
@@ -2205,21 +2262,23 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
         limit: 50,
       })) as any[];
 
-      if (articles.length === 0) return { updated: 0 };
+      if (articles.length === 0) {
+        return { updated: 0, attempted: 0, skipped: 0, failed: 0 };
+      }
 
-      // Pobieramy token z dowolnego aktywnego workflow, aby mieć "paliwo" do generacji
+      // Pobieramy token z dowolnego aktywnego workflow, aby mieć "paliwo" do generacji;
+      // gdy brak workflow (lub token nie da się odszyfrować) — fallback do ENV.
       const workflows = await entityService.findMany(WORKFLOW_UID, {
         filters: { enabled: true },
         limit: 1,
       });
       const workflow = workflows[0];
-      const apiToken = workflow ? await workflowsService().decryptTokenForRuntime(workflow) : null;
-      const imageGenToken = workflow
-        ? await workflowsService().decryptImageTokenForRuntime(workflow)
-        : null;
-      const config = workflow ? await workflowsService().normalizeRuntime(workflow) : null;
+      const { apiToken, imageGenToken, llmModel, imageGenModel } =
+        await this.resolveBackfillRuntimeTokens(workflow);
 
       let updatedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
 
       for (const article of articles) {
         try {
@@ -2229,14 +2288,14 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
             now: new Date(),
             title: article.title,
             categoryName: article.category?.name,
-            apiToken,
-            llmModel: config?.llmModel,
-            imageGenModel: config?.imageGenModel,
-            imageGenToken,
+            apiToken: apiToken ?? undefined,
+            llmModel,
+            imageGenModel,
+            imageGenToken: imageGenToken ?? undefined,
             workflowId: workflow?.id,
           });
 
-          if (selection.uploadFileId) {
+          if (selection?.uploadFileId) {
             await entityService.update(CONTENT_UIDS.article, article.id, {
               data: {
                 image: selection.uploadFileId,
@@ -2250,14 +2309,24 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
               contextKey: 'reconciliation',
             });
 
-            updatedCount++;
+            updatedCount += 1;
+          } else {
+            skippedCount += 1;
           }
-        } catch {
-          // ignore failures
+        } catch (error) {
+          failedCount += 1;
+          strapi.log.warn(
+            `[aico] backfill image failed for ${CONTENT_UIDS.article} #${article.id}: ${toSafeErrorMessage(error)}`
+          );
         }
       }
 
-      return { updated: updatedCount };
+      return {
+        updated: updatedCount,
+        attempted: articles.length,
+        skipped: skippedCount,
+        failed: failedCount,
+      };
     },
 
     // Backfill obrazów kart tarota: znajduje karty bez `image`, rozwiązuje/generuje
@@ -2265,7 +2334,12 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
     // blisko dziennego limitu media-jobów autonomii ~20 — przy włączonej generacji
     // część pozycji może zostać zablokowana przez autonomy-policy/provider-status,
     // co jest oczekiwane). Best-effort per pozycję — nie przerywa całości na błędzie.
-    async reconcileTarotCardImages(limit = 25): Promise<{ updated: number }> {
+    async reconcileTarotCardImages(limit = 25): Promise<{
+      updated: number;
+      attempted: number;
+      skipped: number;
+      failed: number;
+    }> {
       const cards = (await entityService.findMany(CONTENT_UIDS.tarotCard, {
         filters: {
           image: { $null: true },
@@ -2280,22 +2354,22 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       }>;
 
       if (cards.length === 0) {
-        return { updated: 0 };
+        return { updated: 0, attempted: 0, skipped: 0, failed: 0 };
       }
 
-      // Pobieramy token z dowolnego aktywnego workflow, aby mieć "paliwo" do generacji.
+      // Pobieramy token z dowolnego aktywnego workflow, aby mieć "paliwo" do generacji;
+      // gdy brak workflow (lub token nie da się odszyfrować) — fallback do ENV.
       const workflows = (await entityService.findMany(WORKFLOW_UID, {
         filters: { enabled: true },
         limit: 1,
       })) as WorkflowRecord[];
       const workflow = workflows[0];
-      const apiToken = workflow ? await workflowsService().decryptTokenForRuntime(workflow) : null;
-      const imageGenToken = workflow
-        ? await workflowsService().decryptImageTokenForRuntime(workflow)
-        : null;
-      const config = workflow ? await workflowsService().normalizeRuntime(workflow) : null;
+      const { apiToken, imageGenToken, llmModel, imageGenModel } =
+        await this.resolveBackfillRuntimeTokens(workflow);
 
       let updatedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
 
       for (const card of cards) {
         try {
@@ -2306,8 +2380,8 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
             meaningReversed: card.meaning_reversed ?? null,
             contextKey: 'reconciliation',
             apiToken,
-            llmModel: config?.llmModel,
-            imageGenModel: config?.imageGenModel,
+            llmModel,
+            imageGenModel,
             imageGenToken,
             workflowId: workflow?.id,
           });
@@ -2328,13 +2402,23 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
             });
 
             updatedCount += 1;
+          } else {
+            skippedCount += 1;
           }
-        } catch {
-          // ignore failures (best-effort backfill)
+        } catch (error) {
+          failedCount += 1;
+          strapi.log.warn(
+            `[aico] backfill image failed for ${CONTENT_UIDS.tarotCard} #${card.id}: ${toSafeErrorMessage(error)}`
+          );
         }
       }
 
-      return { updated: updatedCount };
+      return {
+        updated: updatedCount,
+        attempted: cards.length,
+        skipped: skippedCount,
+        failed: failedCount,
+      };
     },
 
     // Backfill obrazów znaków zodiaku (nazwa z sufiksem "Backfill", aby nie kolidować
@@ -2342,7 +2426,12 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
     // fetchZodiacSigns). Znajduje znaki bez `image`, generuje/rozwiązuje obraz i
     // ustawia `image`. Pole `symbol` celowo NIE jest wypełniane (na razie tylko
     // `image`). Domyślny limit 25 (patrz uwaga o limicie media-jobów powyżej).
-    async reconcileZodiacSignImagesBackfill(limit = 25): Promise<{ updated: number }> {
+    async reconcileZodiacSignImagesBackfill(limit = 25): Promise<{
+      updated: number;
+      attempted: number;
+      skipped: number;
+      failed: number;
+    }> {
       const signs = (await entityService.findMany(CONTENT_UIDS.zodiacSign, {
         filters: {
           image: { $null: true },
@@ -2357,21 +2446,22 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       }>;
 
       if (signs.length === 0) {
-        return { updated: 0 };
+        return { updated: 0, attempted: 0, skipped: 0, failed: 0 };
       }
 
+      // Token z dowolnego aktywnego workflow; gdy brak workflow (lub token nie da się
+      // odszyfrować) — fallback do ENV.
       const workflows = (await entityService.findMany(WORKFLOW_UID, {
         filters: { enabled: true },
         limit: 1,
       })) as WorkflowRecord[];
       const workflow = workflows[0];
-      const apiToken = workflow ? await workflowsService().decryptTokenForRuntime(workflow) : null;
-      const imageGenToken = workflow
-        ? await workflowsService().decryptImageTokenForRuntime(workflow)
-        : null;
-      const config = workflow ? await workflowsService().normalizeRuntime(workflow) : null;
+      const { apiToken, imageGenToken, llmModel, imageGenModel } =
+        await this.resolveBackfillRuntimeTokens(workflow);
 
       let updatedCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
 
       for (const sign of signs) {
         try {
@@ -2382,8 +2472,8 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
             element: sign.element ?? null,
             contextKey: 'reconciliation',
             apiToken,
-            llmModel: config?.llmModel,
-            imageGenModel: config?.imageGenModel,
+            llmModel,
+            imageGenModel,
             imageGenToken,
             workflowId: workflow?.id,
           });
@@ -2404,13 +2494,23 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
             });
 
             updatedCount += 1;
+          } else {
+            skippedCount += 1;
           }
-        } catch {
-          // ignore failures (best-effort backfill)
+        } catch (error) {
+          failedCount += 1;
+          strapi.log.warn(
+            `[aico] backfill image failed for ${CONTENT_UIDS.zodiacSign} #${sign.id}: ${toSafeErrorMessage(error)}`
+          );
         }
       }
 
-      return { updated: updatedCount };
+      return {
+        updated: updatedCount,
+        attempted: signs.length,
+        skipped: skippedCount,
+        failed: failedCount,
+      };
     },
 
     async upsertArticleDraft(input: {

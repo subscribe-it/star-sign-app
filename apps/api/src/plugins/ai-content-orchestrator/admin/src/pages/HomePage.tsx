@@ -352,7 +352,7 @@ const initialHomepageForm = (): HomepageFormState => ({
   limit: 12,
 });
 
-const WORKFLOW_STEP_LABELS = ['Basics', 'Schedule', 'Content', 'Social', 'Controls'] as const;
+const WORKFLOW_STEP_LABELS = ['Podstawy', 'Harmonogram', 'Treść', 'Social', 'Sterowanie'] as const;
 const ADS_STOP_LOSS_CONFIRMATION = 'PAUSE_ACTIVE_ADS';
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; color: string }> = {
@@ -1775,6 +1775,13 @@ const HomePage = () => {
   };
 
   const runNow = async (workflowId: number): Promise<void> => {
+    if (
+      !window.confirm(
+        'Uruchomić ten przepływ teraz? Może to wygenerować treści i uruchomić płatne operacje.'
+      )
+    ) {
+      return;
+    }
     setRunningWorkflowIds((prev) => (prev.includes(workflowId) ? prev : [...prev, workflowId]));
     setWorkflows((prev) =>
       prev.map((workflow) =>
@@ -2097,7 +2104,7 @@ const HomePage = () => {
       setAdsStopLossConfirmation('');
       await refreshGrowthData();
       showSuccess(
-        `Ads stop-loss: attempted ${result.attempted}, paused ${result.paused}, blocked ${result.blocked}, failed ${result.failed}.`
+        `Stop-loss reklam: przetworzono ${result.attempted}, wstrzymano ${result.paused}, zablokowano ${result.blocked}, błędy ${result.failed}.`
       );
     } catch (error) {
       showError(`Ads stop-loss nie powiódł się: ${String(error)}`);
@@ -2445,6 +2452,14 @@ const HomePage = () => {
       zodiac: 'znaków zodiaku',
     };
 
+    if (
+      !window.confirm(
+        `Wygenerować brakujące zdjęcia (${labels[kind]})? To uruchomi płatną generację obrazów.`
+      )
+    ) {
+      return;
+    }
+
     setBackfillingImages(kind);
     try {
       const result =
@@ -2454,7 +2469,9 @@ const HomePage = () => {
             ? await api.backfillTarotCardImages(client)
             : await api.backfillZodiacSignImages(client);
 
-      showSuccess(`Uzupełniono zdjęcia ${labels[kind]}: ${result.updated}.`);
+      showSuccess(
+        `Uzupełniono zdjęcia ${labels[kind]}: ${result.updated} z ${result.attempted} (pominięto ${result.skipped}, błędy ${result.failed}).`
+      );
     } catch (error) {
       showError(`Uzupełnianie zdjęć ${labels[kind]} nie powiodło się: ${String(error)}`);
     } finally {
@@ -2595,9 +2612,9 @@ const HomePage = () => {
                       }))
                     }
                   >
-                    <option value="horoscope">horoscope</option>
-                    <option value="daily_card">daily_card</option>
-                    <option value="article">article</option>
+                    <option value="horoscope">Horoskop</option>
+                    <option value="daily_card">Karta dnia</option>
+                    <option value="article">Artykuł</option>
                   </select>
                 </Field>
                 <Field label="Tryb Tematów">
@@ -3138,6 +3155,8 @@ const HomePage = () => {
         style={{
           padding: '32px 40px',
           display: 'grid',
+          gridAutoRows: 'min-content',
+          alignContent: 'start',
           gap: 24,
           background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
           minHeight: '100vh',
@@ -3164,7 +3183,7 @@ const HomePage = () => {
                   border: `1px solid ${COLORS.border}`,
                 }}
               >
-                System status:{' '}
+                Status systemu:{' '}
                 <span style={{ color: COLORS.secondary, fontWeight: 700 }}>Online</span>
               </div>
             )}
@@ -3175,15 +3194,15 @@ const HomePage = () => {
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {(
               [
-                ['dashboard', 'Dashboard'],
-                ['workflows', 'Workflows'],
-                ['topics', 'Topic Queue'],
-                ['media', 'Media Catalog'],
+                ['dashboard', 'Pulpit'],
+                ['workflows', 'Przepływy'],
+                ['topics', 'Kolejka tematów'],
+                ['media', 'Katalog mediów'],
                 ['runs', 'Monitoring'],
-                ['social', 'Social Ops'],
-                ['audit', 'Audit'],
-                ['growth', 'Growth Ops'],
-                ['settings', 'Settings'],
+                ['social', 'Social'],
+                ['audit', 'Audyt'],
+                ['growth', 'Wzrost'],
+                ['settings', 'Ustawienia'],
               ] as Array<[TabKey, string]>
             ).map(([key, label]) => (
               <button
@@ -4622,13 +4641,13 @@ const HomePage = () => {
                   <tr>
                     <Th />
                     <Th>ID</Th>
-                    <Th>Workflow</Th>
-                    <Th>Type</Th>
+                    <Th>Przepływ</Th>
+                    <Th>Typ</Th>
                     <Th>Status</Th>
-                    <Th>Started</Th>
-                    <Th>Duration</Th>
-                    <Th>Result</Th>
-                    <Th>Action</Th>
+                    <Th>Start</Th>
+                    <Th>Czas trwania</Th>
+                    <Th>Wynik</Th>
+                    <Th>Akcja</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4769,9 +4788,9 @@ const HomePage = () => {
                                     <thead>
                                       <tr>
                                         <Th>Status</Th>
-                                        <Th>Step</Th>
-                                        <Th>Message</Th>
-                                        <Th>Output</Th>
+                                        <Th>Krok</Th>
+                                        <Th>Komunikat</Th>
+                                        <Th>Wynik</Th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -5001,7 +5020,7 @@ const HomePage = () => {
                 marginBottom: 20,
               }}
             >
-              <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 0 }}>Social Ticket Ops</h2>
+              <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 0 }}>Zlecenia social media</h2>
               <button
                 type="button"
                 style={primaryButtonStyle}
@@ -5116,14 +5135,14 @@ const HomePage = () => {
                 <thead>
                   <tr>
                     <Th>ID</Th>
-                    <Th>Platform</Th>
+                    <Th>Platforma</Th>
                     <Th>Status</Th>
-                    <Th>Workflow</Th>
-                    <Th>Scheduled</Th>
-                    <Th>Attempt</Th>
-                    <Th>Next Retry</Th>
-                    <Th>Last Error</Th>
-                    <Th>Action</Th>
+                    <Th>Przepływ</Th>
+                    <Th>Zaplanowano</Th>
+                    <Th>Próba</Th>
+                    <Th>Kolejna próba</Th>
+                    <Th>Ostatni błąd</Th>
+                    <Th>Akcja</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -5208,7 +5227,7 @@ const HomePage = () => {
               }}
             >
               <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 0 }}>
-                Production Audit (Go/No-Go)
+                Audyt produkcyjny (Go/No-Go)
               </h2>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
@@ -5219,7 +5238,7 @@ const HomePage = () => {
                     void runPreflightAudit(false);
                   }}
                 >
-                  Run (soft)
+                  Sprawdź (łagodnie)
                 </button>
                 <button
                   type="button"
@@ -5229,7 +5248,7 @@ const HomePage = () => {
                     void runPreflightAudit(true);
                   }}
                 >
-                  Run Strict
+                  Sprawdź rygorystycznie
                 </button>
               </div>
             </div>
@@ -5295,11 +5314,11 @@ const HomePage = () => {
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 940 }}>
                     <thead>
                       <tr>
-                        <Th>Area</Th>
+                        <Th>Obszar</Th>
                         <Th>ID</Th>
-                        <Th>Severity</Th>
+                        <Th>Waga</Th>
                         <Th>Status</Th>
-                        <Th>Message</Th>
+                        <Th>Komunikat</Th>
                       </tr>
                     </thead>
                     <tbody>
@@ -5500,7 +5519,7 @@ const HomePage = () => {
                 }}
               >
                 <div>
-                  <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 4 }}>Growth Ops</h2>
+                  <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 4 }}>Wzrost</h2>
                   <p style={{ fontSize: 13, color: COLORS.textLight, margin: 0 }}>
                     Strategy Agent, feedback SEO/performance i rekomendacje homepage bez zmiany
                     otwartego dostępu Premium.
@@ -5640,10 +5659,10 @@ const HomePage = () => {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr>
-                          <Th>Check</Th>
-                          <Th>Area</Th>
+                          <Th>Kontrola</Th>
+                          <Th>Obszar</Th>
                           <Th>Status</Th>
-                          <Th>Message</Th>
+                          <Th>Komunikat</Th>
                         </tr>
                       </thead>
                       <tbody>
@@ -5669,7 +5688,7 @@ const HomePage = () => {
             </section>
 
             <section style={CARD_STYLE}>
-              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Autonomy Control Plane</h3>
+              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Sterowanie autonomią</h3>
               <div
                 style={{
                   display: 'grid',
@@ -5868,7 +5887,7 @@ const HomePage = () => {
                   marginBottom: 16,
                 }}
               >
-                <Field label="Controlled run-now confirmation">
+                <Field label="Potwierdzenie kontrolowanego uruchomienia">
                   <input
                     style={inputStyle}
                     value={runNowConfirmation}
@@ -5893,7 +5912,7 @@ const HomePage = () => {
                     void runControlledAutonomyTick();
                   }}
                 >
-                  Controlled run-now
+                  Uruchom kontrolowanie
                 </button>
               </div>
 
@@ -5919,12 +5938,12 @@ const HomePage = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
-                      <Th>Provider</Th>
+                      <Th>Dostawca</Th>
                       <Th>Status</Th>
-                      <Th>Credentials</Th>
-                      <Th>Scopes</Th>
-                      <Th>Last test</Th>
-                      <Th>Blocked reason</Th>
+                      <Th>Dane logowania</Th>
+                      <Th>Zakresy</Th>
+                      <Th>Ostatni test</Th>
+                      <Th>Powód blokady</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -5957,10 +5976,10 @@ const HomePage = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
-                      <Th>Dry-run step</Th>
+                      <Th>Krok próbny</Th>
                       <Th>Status</Th>
-                      <Th>Reason</Th>
-                      <Th>Output</Th>
+                      <Th>Powód</Th>
+                      <Th>Wynik</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -5997,7 +6016,7 @@ const HomePage = () => {
             </section>
 
             <section style={CARD_STYLE}>
-              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Queues, Video, Ads, Experiments</h3>
+              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Kolejki, wideo, reklamy, eksperymenty</h3>
               <div
                 style={{
                   display: 'grid',
@@ -6017,11 +6036,11 @@ const HomePage = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
-                      <Th>Job</Th>
-                      <Th>Type</Th>
+                      <Th>Zadanie</Th>
+                      <Th>Typ</Th>
                       <Th>Status</Th>
-                      <Th>Priority</Th>
-                      <Th>Blocked</Th>
+                      <Th>Priorytet</Th>
+                      <Th>Zablokowane</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -6057,9 +6076,9 @@ const HomePage = () => {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        <Th>Title</Th>
+                        <Th>Tytuł</Th>
                         <Th>Status</Th>
-                        <Th>Blocked</Th>
+                        <Th>Zablokowane</Th>
                       </tr>
                     </thead>
                     <tbody>
@@ -6116,10 +6135,10 @@ const HomePage = () => {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        <Th>Name</Th>
-                        <Th>Platform</Th>
+                        <Th>Nazwa</Th>
+                        <Th>Platforma</Th>
                         <Th>Status</Th>
-                        <Th>Budget</Th>
+                        <Th>Budżet</Th>
                       </tr>
                     </thead>
                     <tbody>
@@ -6138,12 +6157,12 @@ const HomePage = () => {
                 </div>
 
                 <div style={{ overflowX: 'auto' }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Experiments</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Eksperymenty</div>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        <Th>Name</Th>
-                        <Th>Type</Th>
+                        <Th>Nazwa</Th>
+                        <Th>Typ</Th>
                         <Th>Status</Th>
                       </tr>
                     </thead>
@@ -6164,7 +6183,7 @@ const HomePage = () => {
             </section>
 
             <section style={CARD_STYLE}>
-              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Strategy Agent</h3>
+              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Agent strategii treści</h3>
               <div
                 style={{
                   display: 'grid',
@@ -6369,7 +6388,7 @@ const HomePage = () => {
             </section>
 
             <section style={CARD_STYLE}>
-              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>SEO / Performance Feedback</h3>
+              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Sygnały SEO / skuteczności</h3>
               <div
                 style={{
                   display: 'grid',
@@ -6478,7 +6497,7 @@ const HomePage = () => {
             </section>
 
             <section style={CARD_STYLE}>
-              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Homepage Recommendations</h3>
+              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Rekomendacje strony głównej</h3>
               <div
                 style={{
                   display: 'grid',
@@ -6833,6 +6852,9 @@ const Field = ({
         {label}
         {hint ? <HelpIcon hint={hint} /> : null}
       </span>
+      {hint ? (
+        <span style={{ fontSize: 12, lineHeight: 1.4, color: COLORS.textLight }}>{hint}</span>
+      ) : null}
       {children}
     </label>
   );

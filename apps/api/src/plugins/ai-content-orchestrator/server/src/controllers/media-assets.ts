@@ -3,6 +3,7 @@ import type { Context } from 'koa';
 import { MEDIA_ASSET_UID } from '../constants';
 import type { MediaPeriodScope, MediaPurpose, Strapi } from '../types';
 import { recordAdminAuditEvent } from '../utils/audit-trail';
+import { getEntityService } from '../utils/entity-service';
 import { toSafeErrorMessage } from '../utils/json';
 
 const mediaAssetsController = ({ strapi }: { strapi: Strapi }) => ({
@@ -87,6 +88,39 @@ const mediaAssetsController = ({ strapi }: { strapi: Strapi }) => ({
         severity: 'error',
         resourceUid: MEDIA_ASSET_UID,
         resourceId: ctx.params.id,
+        metadata: { error: message },
+      });
+      ctx.badRequest(message);
+    }
+  },
+
+  async delete(ctx: Context): Promise<void> {
+    const id = Number(ctx.params.id);
+
+    if (!Number.isFinite(id)) {
+      ctx.badRequest('Niepoprawny identyfikator media-asset.');
+      return;
+    }
+
+    try {
+      await getEntityService(strapi).delete(MEDIA_ASSET_UID, id);
+
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'media-asset.delete',
+        outcome: 'success',
+        resourceUid: MEDIA_ASSET_UID,
+        resourceId: id,
+        metadata: { deleted: true },
+      });
+      ctx.body = { data: { id } };
+    } catch (error) {
+      const message = toSafeErrorMessage(error);
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'media-asset.delete',
+        outcome: 'failure',
+        severity: 'error',
+        resourceUid: MEDIA_ASSET_UID,
+        resourceId: id,
         metadata: { error: message },
       });
       ctx.badRequest(message);

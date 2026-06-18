@@ -254,6 +254,14 @@ export default () => ({
       },
     },
     {
+      method: 'POST',
+      path: '/topics/:id/delete',
+      handler: 'topics.delete',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageTopics),
+      },
+    },
+    {
       method: 'GET',
       path: '/settings',
       handler: 'settings.find',
@@ -289,6 +297,14 @@ export default () => ({
       method: 'PUT',
       path: '/media-assets/:id',
       handler: 'media-assets.update',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.manageMedia),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/media-assets/:id/delete',
+      handler: 'media-assets.delete',
       config: {
         policies: withPermission(RBAC_ACTIONS.manageMedia),
       },
