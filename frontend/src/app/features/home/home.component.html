@@ -558,6 +558,7 @@
             class="btn-primary w-full !py-4 lg:w-auto lg:shrink-0 lg:!px-8"
             [disabled]="
               newsletterLoading() ||
+              !newsletterConsent() ||
               (newsletterTurnstileRequired() && !newsletterTurnstileToken())
             "
             data-test="home-newsletter-submit"
@@ -569,6 +570,30 @@
             }
           </button>
         </form>
+        <label
+          class="flex w-full max-w-xl items-start gap-3 mb-4 text-left text-xs text-mystic-cocoa lg:max-w-2xl"
+          data-test="home-newsletter-consent-label"
+        >
+          <input
+            type="checkbox"
+            required
+            [checked]="newsletterConsent()"
+            (change)="newsletterConsent.set($any($event.target).checked)"
+            [disabled]="newsletterLoading()"
+            class="mt-0.5 h-4 w-4 shrink-0 rounded border-mystic-rose/40 text-mystic-rose accent-mystic-rose focus:ring-mystic-rose/40"
+            data-test="home-newsletter-consent"
+          />
+          <span class="font-light leading-relaxed">
+            Wyrażam zgodę na otrzymywanie newslettera Star Sign drogą
+            e-mailową i akceptuję
+            <a
+              routerLink="/polityka-prywatnosci"
+              class="font-medium text-mystic-rose underline underline-offset-2 hover:text-mystic-cocoa"
+            >
+              politykę prywatności </a
+            >.
+          </span>
+        </label>
         <app-turnstile-widget
           action="home-newsletter"
           (tokenChange)="handleNewsletterTurnstileToken($event)"

@@ -16,12 +16,20 @@ import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { map, of, switchMap } from 'rxjs';
 
 import { AnalyticsService } from '../../core/services/analytics.service';
+import { SeoService } from '../../core/services/seo.service';
 import { PremiumPreviewBlock } from '../../shared/components/premium-preview-block/premium-preview-block';
+import { SocialShare } from '../../shared/components/social-share';
 import { StrapiImagePipe } from '../../core/pipes/strapi-image-pipe';
 
 @Component({
   selector: 'app-tarot-result',
-  imports: [RouterLink, NgIcon, PremiumPreviewBlock, StrapiImagePipe],
+  imports: [
+    RouterLink,
+    NgIcon,
+    PremiumPreviewBlock,
+    SocialShare,
+    StrapiImagePipe,
+  ],
   viewProviders: [provideIcons({ heroShare })],
   templateUrl: './tarot-result.html',
   styleUrl: './tarot-result.scss',
@@ -32,6 +40,7 @@ export class TarotResult implements OnInit {
   private readonly analyticsService = inject(AnalyticsService);
   private readonly authService = inject(AuthService);
   private readonly accountService = inject(AccountService);
+  private readonly seoService = inject(SeoService);
 
   public readonly card = signal<TarotCard | null>(null);
   public readonly isLoading = signal(true);
@@ -112,6 +121,14 @@ Energia dnia: cień karty ${card.name} może pokazywać miejsce, w którym dzia�
 Rytuał: zapisz na kartce słowo "${card.meaning_upright}". Pod nim dopisz trzy krótkie zdania: co dziś widzę wyraźniej, czego nie chcę wzmacniać i jaki gest pokaże mi zaufanie do siebie. Złóż kartkę albo zostaw ją przy świecy, kubku z wodą lub innym prostym przedmiocie. Wieczorem wróć do niej i zaznacz jedno zdanie, które nadal brzmi prawdziwie.
 
 Pytanie refleksyjne: jaki jeden krok pokaże mi dziś więcej zaufania do siebie, nawet jeśli nie rozwiąże całej sytuacji od razu?`;
+  }
+
+  public getCardShareUrl(): string {
+    return this.seoService.absoluteUrl('/tarot/karta-dnia');
+  }
+
+  public getCardShareTitle(card: TarotCard): string {
+    return `Moja Karta Dnia w Star Sign: ${card.name} ✦`;
   }
 
   public shareDailyCard(card: TarotCard): void {

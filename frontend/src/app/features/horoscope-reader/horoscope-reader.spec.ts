@@ -37,7 +37,10 @@ describe('HoroscopeReader', () => {
         { provide: ZodiacService, useValue: zodiacService },
         { provide: AuthService, useValue: { isLoggedIn: loggedIn } },
         { provide: AccountService, useValue: accountService },
-        { provide: SeoService, useValue: { updateSeo: vi.fn() } },
+        {
+          provide: SeoService,
+          useValue: { updateSeo: vi.fn(), absoluteUrl: (p: string) => `https://star-sign.pl${p}` },
+        },
         {
           provide: AnalyticsService,
           useValue: {

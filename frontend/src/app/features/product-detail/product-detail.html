@@ -32,6 +32,8 @@
             class="absolute inset-0 bg-gradient-to-tr from-mystic-rose/5 to-transparent"
           ></div>
           <span
+            [attr.aria-label]="item.name || 'Wizerunek produktu'"
+            role="img"
             class="text-9xl select-none group-hover:scale-110 transition-transform duration-700 animate-float"
             >{{ item.symbol || '✧' }}</span
           >
@@ -50,7 +52,9 @@
           <div
             class="aspect-square bg-[#FDF4F5] rounded-xl border border-mystic-rose/5 flex items-center justify-center"
           >
-            <span class="text-2xl opacity-30">{{ item.symbol || '✧' }}</span>
+            <span aria-hidden="true" class="text-2xl opacity-30"
+              >{{ item.symbol || '✧' }}</span
+            >
           </div>
           }
         </div>
@@ -181,6 +185,7 @@
           class="aspect-square bg-[#FDF4F5] rounded-2xl mb-4 border border-mystic-rose/5 group-hover:shadow-lg transition-all flex items-center justify-center"
         >
           <span
+            aria-hidden="true"
             class="text-4xl opacity-20 group-hover:scale-110 transition-transform"
             >{{ related.symbol || '✨' }}</span
           >

@@ -91,15 +91,30 @@ describe('HomeComponent', () => {
     newsletterService.subscribe.mockReturnValue(of({ accepted: true }));
     const emailInput = document.createElement('input');
     emailInput.value = 'test@example.com';
+    component.newsletterConsent.set(true);
 
     component.onSubmitNewsletter(new Event('submit'), emailInput);
 
     expect(newsletterService.subscribe).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'test@example.com',
+        marketingConsent: true,
       }),
     );
     expect(component.newsletterSent()).toBe(true);
+  });
+
+  it('should require marketing consent before subscribing to newsletter', () => {
+    const emailInput = document.createElement('input');
+    emailInput.value = 'test@example.com';
+    component.newsletterConsent.set(false);
+
+    component.onSubmitNewsletter(new Event('submit'), emailInput);
+
+    expect(component.newsletterError()).toBe(
+      'Zaznacz zgodę na otrzymywanie newslettera, aby kontynuować.',
+    );
+    expect(newsletterService.subscribe).not.toHaveBeenCalled();
   });
 
   it('should update SEO on init', () => {
@@ -343,6 +358,7 @@ describe('HomeComponent', () => {
     newsletterService.subscribe.mockReturnValue(pendingSubscribe);
     const emailInput = document.createElement('input');
     emailInput.value = 'test@example.com';
+    component.newsletterConsent.set(true);
 
     component.onSubmitNewsletter(new Event('submit'), emailInput);
     component.onSubmitNewsletter(new Event('submit'), emailInput);
@@ -362,6 +378,7 @@ describe('HomeComponent', () => {
     newsletterService.subscribe.mockReturnValue(of({ accepted: true }));
     const emailInput = document.createElement('input');
     emailInput.value = 'test@example.com';
+    component.newsletterConsent.set(true);
 
     component.onSubmitNewsletter(new Event('submit'), emailInput);
 
@@ -384,6 +401,7 @@ describe('HomeComponent', () => {
     );
     const emailInput = document.createElement('input');
     emailInput.value = 'test@example.com';
+    component.newsletterConsent.set(true);
 
     component.handleNewsletterTurnstileToken('token-123');
     component.onSubmitNewsletter(new Event('submit'), emailInput);

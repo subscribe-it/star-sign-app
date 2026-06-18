@@ -68,12 +68,12 @@
             <ng-icon name="heroUser" class="text-mystic-rose" />
             <span>Redakcja Star Sign</span>
           </div>
+          @if (currentArticle.read_time_minutes) {
           <div class="flex items-center gap-2">
             <ng-icon name="heroClock" class="text-mystic-rose" />
-            <span
-              >{{ currentArticle.read_time_minutes || 5 }} min czytania</span
-            >
+            <span>{{ currentArticle.read_time_minutes }} min czytania</span>
           </div>
+          }
           <div class="flex items-center gap-2">
             <span class="text-mystic-rose opacity-50">✦</span>
             <span
