@@ -44,10 +44,12 @@ export interface VideoTabProps {
   loading: boolean;
   creating: boolean; // create-job request in flight
   busyAssetId: number | null; // asset id whose render/publish is in flight
+  polling: boolean; // poll-renders request in flight
   onRefresh: () => void;
   onCreateJob: (payload: VideoJobPayload) => void;
   onRender: (id: number) => void;
   onPublish: (id: number) => void;
+  onPollRenders: () => void;
   cardStyle: React.CSSProperties;
   sectionTitleStyle: React.CSSProperties;
   colors: Record<string, string>;
@@ -110,10 +112,12 @@ export const VideoTab = ({
   loading,
   creating,
   busyAssetId,
+  polling,
   onRefresh,
   onCreateJob,
   onRender,
   onPublish,
+  onPollRenders,
   cardStyle,
   sectionTitleStyle,
   colors,
@@ -292,14 +296,24 @@ export const VideoTab = ({
           }}
         >
           <h2 style={{ ...sectionTitleStyle, marginBottom: 0 }}>Zasoby wideo</h2>
-          <UiButton
-            variant="primary"
-            disabled={loading}
-            loading={loading}
-            onClick={() => onRefresh()}
-          >
-            Odśwież
-          </UiButton>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <UiButton
+              variant="secondary"
+              disabled={polling}
+              loading={polling}
+              onClick={() => onPollRenders()}
+            >
+              Sprawdź rendery
+            </UiButton>
+            <UiButton
+              variant="primary"
+              disabled={loading}
+              loading={loading}
+              onClick={() => onRefresh()}
+            >
+              Odśwież
+            </UiButton>
+          </div>
         </div>
 
         {loading ? (

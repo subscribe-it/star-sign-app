@@ -663,6 +663,15 @@ export const api = {
     return data.data;
   },
 
+  async pollVideoRenders(
+    client: FetchClient
+  ): Promise<{ checked: number; completed: number; failed: number; pending: number }> {
+    const { data } = await client.post<
+      ApiEnvelope<{ checked: number; completed: number; failed: number; pending: number }>
+    >(`${BASE}/video/renders/poll`);
+    return data.data;
+  },
+
   async getAdCampaignPlans(
     client: FetchClient,
     params?: { status?: string; platform?: string; limit?: number }
