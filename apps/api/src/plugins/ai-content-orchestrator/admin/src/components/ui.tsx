@@ -14,7 +14,9 @@ import {
   Alert,
   Badge,
   Button,
+  Checkbox,
   Field,
+  Loader,
   SingleSelect,
   SingleSelectOption,
   Status,
@@ -266,6 +268,97 @@ export const UiSelect = ({
       </SingleSelectOption>
     ))}
   </SingleSelect>
+);
+
+// ——————————————————————————————————————————————————————————————————————————
+// UiCheckbox — nakładka na DS Checkbox (v2.2, oparty o Radix).
+// API DS: `checked` (kontrolowany) + `onCheckedChange(checked)` gdzie checked
+// to boolean | 'indeterminate'. Etykietę przekazujemy jako children (DS Checkbox
+// renderuje children obok kontrolki — zachowujemy widoczną etykietę).
+//
+// `onChange(checked: boolean)` upraszcza wpięcie do istniejącego setState
+// (koercja !!checked usuwa stan 'indeterminate', którego tu nie używamy).
+// ——————————————————————————————————————————————————————————————————————————
+export type UiCheckboxProps = {
+  children?: React.ReactNode;
+  checked?: boolean;
+  onChange?: (checked: boolean) => void;
+  disabled?: boolean;
+  name?: string;
+  'aria-label'?: string;
+};
+
+export const UiCheckbox = ({
+  children,
+  checked,
+  onChange,
+  disabled,
+  name,
+  'aria-label': ariaLabel,
+}: UiCheckboxProps) => (
+  <Checkbox
+    checked={checked}
+    onCheckedChange={(value: boolean | 'indeterminate') => onChange?.(!!value)}
+    disabled={disabled}
+    name={name}
+    aria-label={ariaLabel}
+  >
+    {children}
+  </Checkbox>
+);
+
+// ——————————————————————————————————————————————————————————————————————————
+// UiLoader — wskaźnik ładowania (DS Loader) wyśrodkowany w bloku.
+// Krótki, polski tekst pomocniczy (children) jest opcjonalny.
+// ——————————————————————————————————————————————————————————————————————————
+export type UiLoaderProps = {
+  children?: React.ReactNode;
+  small?: boolean;
+};
+
+export const UiLoader = ({ children = 'Ładowanie…', small }: UiLoaderProps) => (
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: small ? 18 : 40,
+    }}
+  >
+    <Loader small={small}>{children}</Loader>
+  </div>
+);
+
+// ——————————————————————————————————————————————————————————————————————————
+// UiEmptyState — spójny, markowy stan pusty: krótka wskazówka po polsku
+// i (opcjonalnie) akcja w pobliżu. Lekka, przerywana ramka jak w panelu.
+// ——————————————————————————————————————————————————————————————————————————
+export type UiEmptyStateProps = {
+  title?: string;
+  description?: React.ReactNode;
+  action?: React.ReactNode;
+  compact?: boolean;
+};
+
+export const UiEmptyState = ({ title, description, action, compact }: UiEmptyStateProps) => (
+  <div
+    style={{
+      padding: compact ? 18 : 32,
+      textAlign: 'center',
+      background: '#f8fafc',
+      borderRadius: 12,
+      border: '1px dashed #e2e8f0',
+      display: 'grid',
+      gap: 8,
+      justifyItems: 'center',
+    }}
+  >
+    {title ? <div style={{ fontWeight: 700, color: '#1e293b' }}>{title}</div> : null}
+    {description ? (
+      <div style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5 }}>{description}</div>
+    ) : null}
+    {action ? <div style={{ marginTop: 4 }}>{action}</div> : null}
+  </div>
 );
 
 // ——————————————————————————————————————————————————————————————————————————
