@@ -10,9 +10,15 @@ import {
   UiField,
   UiSelect,
   UiStatus,
+  UiTable,
+  UiTbody,
+  UiTd,
   UiTextField,
   UiTextInput,
   UiTextareaField,
+  UiTh,
+  UiThead,
+  UiTr,
 } from '../components/ui';
 import type { UiTone } from '../components/ui';
 import { WorkflowSocialStep } from './homepage/WorkflowSocialStep';
@@ -3441,40 +3447,40 @@ const HomePage = () => {
               </UiButton>
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <Th>ID</Th>
-                    <Th>Nazwa</Th>
-                    <Th>Typ</Th>
-                    <Th>Status</Th>
-                    <Th>Aktywny</Th>
-                    <Th>Harmonogram</Th>
-                    <Th>Ostatni Błąd</Th>
-                    <Th style={{ textAlign: 'right' }}>Akcje</Th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div>
+              <UiTable colCount={8} rowCount={workflows.length + 1}>
+                <UiThead>
+                  <UiTr>
+                    <UiTh>ID</UiTh>
+                    <UiTh>Nazwa</UiTh>
+                    <UiTh>Typ</UiTh>
+                    <UiTh>Status</UiTh>
+                    <UiTh>Aktywny</UiTh>
+                    <UiTh>Harmonogram</UiTh>
+                    <UiTh>Ostatni Błąd</UiTh>
+                    <UiTh style={{ textAlign: 'right' }}>Akcje</UiTh>
+                  </UiTr>
+                </UiThead>
+                <UiTbody>
                   {workflows.map((workflow) => (
-                    <tr key={workflow.id} style={{ transition: 'background 0.2s' }}>
-                      <Td>
+                    <UiTr key={workflow.id} style={{ transition: 'background 0.2s' }}>
+                      <UiTd>
                         <span style={{ color: COLORS.textLight, fontWeight: 700 }}>
                           #{workflow.id}
                         </span>
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <strong style={{ color: COLORS.text }}>{workflow.name}</strong>
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <UiBadge tone="neutral" size="S">
                           {workflow.workflow_type}
                         </UiBadge>
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <StatusPill status={workflow.status} />
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <div
                           style={{
                             width: 10,
@@ -3484,15 +3490,15 @@ const HomePage = () => {
                             margin: '0 auto',
                           }}
                         />
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <div style={{ fontSize: 12, color: COLORS.textLight }}>
                           Gen: {workflow.generate_cron}
                           <br />
                           Pub: {workflow.publish_cron}
                         </div>
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         {workflow.last_error ? (
                           <span
                             style={{
@@ -3510,8 +3516,8 @@ const HomePage = () => {
                         ) : (
                           '-'
                         )}
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                           <UiButton
                             variant="secondary"
@@ -3553,11 +3559,11 @@ const HomePage = () => {
                             Logi
                           </UiButton>
                         </div>
-                      </Td>
-                    </tr>
+                      </UiTd>
+                    </UiTr>
                   ))}
-                </tbody>
-              </table>
+                </UiTbody>
+              </UiTable>
               {workflows.length === 0 && (
                 <div style={{ padding: 40, textAlign: 'center', color: COLORS.textLight }}>
                   Brak zdefiniowanych workflow. Kliknij "+ Nowy Workflow", aby zacząć.
@@ -3597,28 +3603,28 @@ const HomePage = () => {
               </button>
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <Th>ID</Th>
-                    <Th>Tytuł / Brief</Th>
-                    <Th>Workflow</Th>
-                    <Th>Status</Th>
-                    <Th>Planowany</Th>
-                    <Th>Grafika</Th>
-                    <Th style={{ textAlign: 'right' }}>Akcje</Th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div>
+              <UiTable colCount={7} rowCount={topics.length + 1}>
+                <UiThead>
+                  <UiTr>
+                    <UiTh>ID</UiTh>
+                    <UiTh>Tytuł / Brief</UiTh>
+                    <UiTh>Workflow</UiTh>
+                    <UiTh>Status</UiTh>
+                    <UiTh>Planowany</UiTh>
+                    <UiTh>Grafika</UiTh>
+                    <UiTh style={{ textAlign: 'right' }}>Akcje</UiTh>
+                  </UiTr>
+                </UiThead>
+                <UiTbody>
                   {topics.map((topic) => (
-                    <tr key={topic.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                      <Td>
+                    <UiTr key={topic.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                      <UiTd>
                         <span style={{ color: COLORS.textLight, fontWeight: 700 }}>
                           #{topic.id}
                         </span>
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 2 }}>
                           {topic.title}
                         </div>
@@ -3634,21 +3640,21 @@ const HomePage = () => {
                         >
                           {topic.brief}
                         </div>
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <span style={{ fontSize: 12, fontWeight: 600 }}>
                           {getTopicWorkflowName(topic, workflows)}
                         </span>
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <StatusPill status={topic.status} />
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <div style={{ fontSize: 11, color: COLORS.textLight }}>
                           {topic.scheduled_for ? formatDateTime(topic.scheduled_for) : '-'}
                         </div>
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         {topic.image_asset_key ? (
                           <span
                             style={{
@@ -3665,8 +3671,8 @@ const HomePage = () => {
                         ) : (
                           '-'
                         )}
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                           <UiButton
                             variant="danger"
@@ -3676,11 +3682,11 @@ const HomePage = () => {
                             Usuń
                           </UiButton>
                         </div>
-                      </Td>
-                    </tr>
+                      </UiTd>
+                    </UiTr>
                   ))}
-                </tbody>
-              </table>
+                </UiTbody>
+              </UiTable>
               {topics.length === 0 && (
                 <div style={{ padding: 40, textAlign: 'center', color: COLORS.textLight }}>
                   Brak tematów w kolejce.
@@ -4321,31 +4327,31 @@ const HomePage = () => {
                         borderRadius: 8,
                       }}
                     >
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr
+                      <UiTable colCount={4} rowCount={bulkPreview.items.length + 1}>
+                        <UiThead>
+                          <UiTr
                             style={{
                               background: '#f1f5f9',
                               borderBottom: `1px solid ${COLORS.border}`,
                             }}
                           >
-                            <Th>Plik</Th>
-                            <Th>Akcja</Th>
-                            <Th>Klucz</Th>
-                            <Th>Status</Th>
-                          </tr>
-                        </thead>
-                        <tbody>
+                            <UiTh>Plik</UiTh>
+                            <UiTh>Akcja</UiTh>
+                            <UiTh>Klucz</UiTh>
+                            <UiTh>Status</UiTh>
+                          </UiTr>
+                        </UiThead>
+                        <UiTbody>
                           {bulkPreview.items.map((row, i) => (
-                            <tr key={i} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                              <Td>#{String(row.fileId ?? '')}</Td>
-                              <Td>{String(row.action ?? '')}</Td>
-                              <Td>{String(row.asset_key ?? '')}</Td>
-                              <Td>{String(row.status ?? '')}</Td>
-                            </tr>
+                            <UiTr key={i} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                              <UiTd>#{String(row.fileId ?? '')}</UiTd>
+                              <UiTd>{String(row.action ?? '')}</UiTd>
+                              <UiTd>{String(row.asset_key ?? '')}</UiTd>
+                              <UiTd>{String(row.status ?? '')}</UiTd>
+                            </UiTr>
                           ))}
-                        </tbody>
-                      </table>
+                        </UiTbody>
+                      </UiTable>
                     </div>
                   </div>
                 )}
@@ -4361,39 +4367,42 @@ const HomePage = () => {
                   overflow: 'hidden',
                 }}
               >
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr
+                <UiTable
+                  colCount={5}
+                  rowCount={(mediaUsage.length === 0 ? 1 : mediaUsage.length) + 1}
+                >
+                  <UiThead>
+                    <UiTr
                       style={{ background: '#f8fafc', borderBottom: `1px solid ${COLORS.border}` }}
                     >
-                      <Th>Zasób</Th>
-                      <Th>Workflow</Th>
-                      <Th>Treść</Th>
-                      <Th>Kontekst</Th>
-                      <Th>Data</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      <UiTh>Zasób</UiTh>
+                      <UiTh>Workflow</UiTh>
+                      <UiTh>Treść</UiTh>
+                      <UiTh>Kontekst</UiTh>
+                      <UiTh>Data</UiTh>
+                    </UiTr>
+                  </UiThead>
+                  <UiTbody>
                     {mediaUsage.length === 0 ? (
-                      <tr>
-                        <Td
+                      <UiTr>
+                        <UiTd
                           colSpan={5}
                           style={{ textAlign: 'center', padding: 24, color: COLORS.textLight }}
                         >
                           Brak danych o użyciu mediów.
-                        </Td>
-                      </tr>
+                        </UiTd>
+                      </UiTr>
                     ) : (
                       mediaUsage.map((item) => (
-                        <tr key={item.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                          <Td>
+                        <UiTr key={item.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                          <UiTd>
                             <strong style={{ color: COLORS.text }}>{item.media_asset}</strong>
-                          </Td>
-                          <Td>{item.workflow}</Td>
-                          <Td>
+                          </UiTd>
+                          <UiTd>{item.workflow}</UiTd>
+                          <UiTd>
                             {item.content_uid} (#{item.content_entry_id})
-                          </Td>
-                          <Td>
+                          </UiTd>
+                          <UiTd>
                             <span
                               style={{
                                 fontSize: 11,
@@ -4404,15 +4413,15 @@ const HomePage = () => {
                             >
                               {item.context_key}
                             </span>
-                          </Td>
-                          <Td style={{ color: COLORS.textLight }}>
+                          </UiTd>
+                          <UiTd style={{ color: COLORS.textLight }}>
                             {new Date(item.used_at).toLocaleString()}
-                          </Td>
-                        </tr>
+                          </UiTd>
+                        </UiTr>
                       ))
                     )}
-                  </tbody>
-                </table>
+                  </UiTbody>
+                </UiTable>
               </div>
             </section>
           </div>
@@ -4999,36 +5008,36 @@ const HomePage = () => {
               </div>
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1080 }}>
-                <thead>
-                  <tr>
-                    <Th>ID</Th>
-                    <Th>Platforma</Th>
-                    <Th>Status</Th>
-                    <Th>Przepływ</Th>
-                    <Th>Zaplanowano</Th>
-                    <Th>Próba</Th>
-                    <Th>Kolejna próba</Th>
-                    <Th>Ostatni błąd</Th>
-                    <Th>Akcja</Th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div>
+              <UiTable colCount={9} rowCount={filteredSocialTickets.length + 1} minWidth={1080}>
+                <UiThead>
+                  <UiTr>
+                    <UiTh>ID</UiTh>
+                    <UiTh>Platforma</UiTh>
+                    <UiTh>Status</UiTh>
+                    <UiTh>Przepływ</UiTh>
+                    <UiTh>Zaplanowano</UiTh>
+                    <UiTh>Próba</UiTh>
+                    <UiTh>Kolejna próba</UiTh>
+                    <UiTh>Ostatni błąd</UiTh>
+                    <UiTh>Akcja</UiTh>
+                  </UiTr>
+                </UiThead>
+                <UiTbody>
                   {filteredSocialTickets.map((ticket) => (
-                    <tr key={ticket.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                      <Td>#{ticket.id}</Td>
-                      <Td>{ticket.platform}</Td>
-                      <Td>
+                    <UiTr key={ticket.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                      <UiTd>#{ticket.id}</UiTd>
+                      <UiTd>{ticket.platform}</UiTd>
+                      <UiTd>
                         <StatusPill status={ticket.status} />
-                      </Td>
-                      <Td>{getWorkflowId(ticket.workflow) ?? '-'}</Td>
-                      <Td>{formatDateTime(ticket.scheduled_at)}</Td>
-                      <Td>{ticket.attempt_count ?? 0}</Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>{getWorkflowId(ticket.workflow) ?? '-'}</UiTd>
+                      <UiTd>{formatDateTime(ticket.scheduled_at)}</UiTd>
+                      <UiTd>{ticket.attempt_count ?? 0}</UiTd>
+                      <UiTd>
                         {ticket.next_attempt_at ? formatDateTime(ticket.next_attempt_at) : '-'}
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <div
                           style={{
                             maxWidth: 320,
@@ -5039,8 +5048,8 @@ const HomePage = () => {
                         >
                           {ticket.last_error || ticket.blocked_reason || '-'}
                         </div>
-                      </Td>
-                      <Td>
+                      </UiTd>
+                      <UiTd>
                         <div style={{ display: 'flex', gap: 8 }}>
                           <UiButton
                             variant="secondary"
@@ -5071,11 +5080,11 @@ const HomePage = () => {
                             Cancel
                           </UiButton>
                         </div>
-                      </Td>
-                    </tr>
+                      </UiTd>
+                    </UiTr>
                   ))}
-                </tbody>
-              </table>
+                </UiTbody>
+              </UiTable>
               {filteredSocialTickets.length === 0 ? (
                 <div style={{ padding: 14, color: '#606477', fontSize: 13 }}>
                   Brak ticketów social dla filtrów.
@@ -5163,24 +5172,24 @@ const HomePage = () => {
                   </div>
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 940 }}>
-                    <thead>
-                      <tr>
-                        <Th>Obszar</Th>
-                        <Th>ID</Th>
-                        <Th>Waga</Th>
-                        <Th>Status</Th>
-                        <Th>Komunikat</Th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                <div>
+                  <UiTable colCount={5} rowCount={auditReport.checks.length + 1} minWidth={940}>
+                    <UiThead>
+                      <UiTr>
+                        <UiTh>Obszar</UiTh>
+                        <UiTh>ID</UiTh>
+                        <UiTh>Waga</UiTh>
+                        <UiTh>Status</UiTh>
+                        <UiTh>Komunikat</UiTh>
+                      </UiTr>
+                    </UiThead>
+                    <UiTbody>
                       {auditReport.checks.map((check) => (
-                        <tr key={check.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                          <Td>{check.area}</Td>
-                          <Td>{check.id}</Td>
-                          <Td>{check.severity}</Td>
-                          <Td>
+                        <UiTr key={check.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                          <UiTd>{check.area}</UiTd>
+                          <UiTd>{check.id}</UiTd>
+                          <UiTd>{check.severity}</UiTd>
+                          <UiTd>
                             <StatusPill
                               status={
                                 check.status === 'pass'
@@ -5190,12 +5199,12 @@ const HomePage = () => {
                                     : 'failed'
                               }
                             />
-                          </Td>
-                          <Td>{check.message}</Td>
-                        </tr>
+                          </UiTd>
+                          <UiTd>{check.message}</UiTd>
+                        </UiTr>
                       ))}
-                    </tbody>
-                  </table>
+                    </UiTbody>
+                  </UiTable>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -5507,29 +5516,29 @@ const HomePage = () => {
                     />
                   </div>
 
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr>
-                          <Th>Kontrola</Th>
-                          <Th>Obszar</Th>
-                          <Th>Status</Th>
-                          <Th>Komunikat</Th>
-                        </tr>
-                      </thead>
-                      <tbody>
+                  <div>
+                    <UiTable colCount={4} rowCount={productionReadiness.checks.length + 1}>
+                      <UiThead>
+                        <UiTr>
+                          <UiTh>Kontrola</UiTh>
+                          <UiTh>Obszar</UiTh>
+                          <UiTh>Status</UiTh>
+                          <UiTh>Komunikat</UiTh>
+                        </UiTr>
+                      </UiThead>
+                      <UiTbody>
                         {productionReadiness.checks.map((check) => (
-                          <tr key={check.id}>
-                            <Td>{check.id}</Td>
-                            <Td>{check.area}</Td>
-                            <Td>
+                          <UiTr key={check.id}>
+                            <UiTd>{check.id}</UiTd>
+                            <UiTd>{check.area}</UiTd>
+                            <UiTd>
                               <StatusPill status={check.status} />
-                            </Td>
-                            <Td>{check.message}</Td>
-                          </tr>
+                            </UiTd>
+                            <UiTd>{check.message}</UiTd>
+                          </UiTr>
                         ))}
-                      </tbody>
-                    </table>
+                      </UiTbody>
+                    </UiTable>
                   </div>
                 </div>
               ) : (
@@ -5785,37 +5794,39 @@ const HomePage = () => {
                 </div>
               ) : null}
 
-              <div style={{ overflowX: 'auto', marginBottom: 18 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <Th>Dostawca</Th>
-                      <Th>Status</Th>
-                      <Th>Dane logowania</Th>
-                      <Th>Zakresy</Th>
-                      <Th>Ostatni test</Th>
-                      <Th>Powód blokady</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div style={{ marginBottom: 18 }}>
+                <UiTable colCount={6} rowCount={providerReadiness.length + 1}>
+                  <UiThead>
+                    <UiTr>
+                      <UiTh>Dostawca</UiTh>
+                      <UiTh>Status</UiTh>
+                      <UiTh>Dane logowania</UiTh>
+                      <UiTh>Zakresy</UiTh>
+                      <UiTh>Ostatni test</UiTh>
+                      <UiTh>Powód blokady</UiTh>
+                    </UiTr>
+                  </UiThead>
+                  <UiTbody>
                     {providerReadiness.map((provider: ProviderReadiness) => (
-                      <tr key={provider.provider}>
-                        <Td>{provider.provider}</Td>
-                        <Td>
+                      <UiTr key={provider.provider}>
+                        <UiTd>{provider.provider}</UiTd>
+                        <UiTd>
                           <StatusPill status={provider.ready ? 'ready' : 'blocked'} />
-                        </Td>
-                        <Td>{provider.hasCredentials ? 'yes' : 'no'}</Td>
-                        <Td>
+                        </UiTd>
+                        <UiTd>{provider.hasCredentials ? 'yes' : 'no'}</UiTd>
+                        <UiTd>
                           {provider.missingScopes.length > 0
                             ? `missing: ${provider.missingScopes.join(', ')}`
                             : provider.requiredScopes.join(', ') || '-'}
-                        </Td>
-                        <Td>{provider.lastTestedAt ? formatDateTime(provider.lastTestedAt) : '-'}</Td>
-                        <Td>{provider.blockedReason || '-'}</Td>
-                      </tr>
+                        </UiTd>
+                        <UiTd>
+                          {provider.lastTestedAt ? formatDateTime(provider.lastTestedAt) : '-'}
+                        </UiTd>
+                        <UiTd>{provider.blockedReason || '-'}</UiTd>
+                      </UiTr>
                     ))}
-                  </tbody>
-                </table>
+                  </UiTbody>
+                </UiTable>
                 {providerReadiness.length === 0 ? (
                   <div style={{ padding: 24, color: COLORS.textLight, textAlign: 'center' }}>
                     Brak macierzy provider readiness.
@@ -5823,25 +5834,25 @@ const HomePage = () => {
                 ) : null}
               </div>
 
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <Th>Krok próbny</Th>
-                      <Th>Status</Th>
-                      <Th>Powód</Th>
-                      <Th>Wynik</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div>
+                <UiTable colCount={4} rowCount={dryRunSteps.length + 1}>
+                  <UiThead>
+                    <UiTr>
+                      <UiTh>Krok próbny</UiTh>
+                      <UiTh>Status</UiTh>
+                      <UiTh>Powód</UiTh>
+                      <UiTh>Wynik</UiTh>
+                    </UiTr>
+                  </UiThead>
+                  <UiTbody>
                     {dryRunSteps.map((step) => (
-                      <tr key={String(step.id ?? step.label)}>
-                        <Td>{String(step.label ?? step.id ?? '-')}</Td>
-                        <Td>
+                      <UiTr key={String(step.id ?? step.label)}>
+                        <UiTd>{String(step.label ?? step.id ?? '-')}</UiTd>
+                        <UiTd>
                           <StatusPill status={String(step.status ?? 'idle')} />
-                        </Td>
-                        <Td>{String(step.reason ?? '-')}</Td>
-                        <Td>
+                        </UiTd>
+                        <UiTd>{String(step.reason ?? '-')}</UiTd>
+                        <UiTd>
                           <pre
                             style={{
                               margin: 0,
@@ -5853,11 +5864,11 @@ const HomePage = () => {
                           >
                             {formatDetailValue(step.output ?? {})}
                           </pre>
-                        </Td>
-                      </tr>
+                        </UiTd>
+                      </UiTr>
                     ))}
-                  </tbody>
-                </table>
+                  </UiTbody>
+                </UiTable>
                 {dryRunSteps.length === 0 ? (
                   <div style={{ padding: 24, color: COLORS.textLight, textAlign: 'center' }}>
                     Brak dry-run preview autopilota.
@@ -5883,31 +5894,31 @@ const HomePage = () => {
                 <StatTile label="Provider records" value={providerStatuses.length} />
               </div>
 
-              <div style={{ overflowX: 'auto', marginBottom: 18 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <Th>Zadanie</Th>
-                      <Th>Typ</Th>
-                      <Th>Status</Th>
-                      <Th>Priorytet</Th>
-                      <Th>Zablokowane</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div style={{ marginBottom: 18 }}>
+                <UiTable colCount={5} rowCount={generationJobs.slice(0, 10).length + 1}>
+                  <UiThead>
+                    <UiTr>
+                      <UiTh>Zadanie</UiTh>
+                      <UiTh>Typ</UiTh>
+                      <UiTh>Status</UiTh>
+                      <UiTh>Priorytet</UiTh>
+                      <UiTh>Zablokowane</UiTh>
+                    </UiTr>
+                  </UiThead>
+                  <UiTbody>
                     {generationJobs.slice(0, 10).map((job) => (
-                      <tr key={job.id}>
-                        <Td>#{job.id}</Td>
-                        <Td>{job.job_type}</Td>
-                        <Td>
+                      <UiTr key={job.id}>
+                        <UiTd>#{job.id}</UiTd>
+                        <UiTd>{job.job_type}</UiTd>
+                        <UiTd>
                           <StatusPill status={job.status} />
-                        </Td>
-                        <Td>{job.priority_score ?? '-'}</Td>
-                        <Td>{job.blocked_reason || job.last_error || '-'}</Td>
-                      </tr>
+                        </UiTd>
+                        <UiTd>{job.priority_score ?? '-'}</UiTd>
+                        <UiTd>{job.blocked_reason || job.last_error || '-'}</UiTd>
+                      </UiTr>
                     ))}
-                  </tbody>
-                </table>
+                  </UiTbody>
+                </UiTable>
                 {generationJobs.length === 0 ? (
                   <div style={{ padding: 18, color: COLORS.textLight, textAlign: 'center' }}>
                     Brak generation jobs.
@@ -5922,31 +5933,31 @@ const HomePage = () => {
                   gap: 18,
                 }}
               >
-                <div style={{ overflowX: 'auto' }}>
+                <div>
                   <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Video assets</div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr>
-                        <Th>Tytuł</Th>
-                        <Th>Status</Th>
-                        <Th>Zablokowane</Th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <UiTable colCount={3} rowCount={videoAssets.slice(0, 8).length + 1}>
+                    <UiThead>
+                      <UiTr>
+                        <UiTh>Tytuł</UiTh>
+                        <UiTh>Status</UiTh>
+                        <UiTh>Zablokowane</UiTh>
+                      </UiTr>
+                    </UiThead>
+                    <UiTbody>
                       {videoAssets.slice(0, 8).map((asset) => (
-                        <tr key={asset.id}>
-                          <Td>{asset.title}</Td>
-                          <Td>
+                        <UiTr key={asset.id}>
+                          <UiTd>{asset.title}</UiTd>
+                          <UiTd>
                             <StatusPill status={asset.status} />
-                          </Td>
-                          <Td>{asset.blocked_reason || asset.last_error || '-'}</Td>
-                        </tr>
+                          </UiTd>
+                          <UiTd>{asset.blocked_reason || asset.last_error || '-'}</UiTd>
+                        </UiTr>
                       ))}
-                    </tbody>
-                  </table>
+                    </UiTbody>
+                  </UiTable>
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
+                <div>
                   <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Ad plans</div>
                   <div
                     style={{
@@ -5981,52 +5992,52 @@ const HomePage = () => {
                       Pause active ads
                     </button>
                   </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr>
-                        <Th>Nazwa</Th>
-                        <Th>Platforma</Th>
-                        <Th>Status</Th>
-                        <Th>Budżet</Th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <UiTable colCount={4} rowCount={adCampaignPlans.slice(0, 8).length + 1}>
+                    <UiThead>
+                      <UiTr>
+                        <UiTh>Nazwa</UiTh>
+                        <UiTh>Platforma</UiTh>
+                        <UiTh>Status</UiTh>
+                        <UiTh>Budżet</UiTh>
+                      </UiTr>
+                    </UiThead>
+                    <UiTbody>
                       {adCampaignPlans.slice(0, 8).map((plan) => (
-                        <tr key={plan.id}>
-                          <Td>{plan.name}</Td>
-                          <Td>{plan.platform}</Td>
-                          <Td>
+                        <UiTr key={plan.id}>
+                          <UiTd>{plan.name}</UiTd>
+                          <UiTd>{plan.platform}</UiTd>
+                          <UiTd>
                             <StatusPill status={plan.status} />
-                          </Td>
-                          <Td>{plan.daily_budget_pln ?? '-'}</Td>
-                        </tr>
+                          </UiTd>
+                          <UiTd>{plan.daily_budget_pln ?? '-'}</UiTd>
+                        </UiTr>
                       ))}
-                    </tbody>
-                  </table>
+                    </UiTbody>
+                  </UiTable>
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
+                <div>
                   <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Eksperymenty</div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr>
-                        <Th>Nazwa</Th>
-                        <Th>Typ</Th>
-                        <Th>Status</Th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <UiTable colCount={3} rowCount={growthExperiments.slice(0, 8).length + 1}>
+                    <UiThead>
+                      <UiTr>
+                        <UiTh>Nazwa</UiTh>
+                        <UiTh>Typ</UiTh>
+                        <UiTh>Status</UiTh>
+                      </UiTr>
+                    </UiThead>
+                    <UiTbody>
                       {growthExperiments.slice(0, 8).map((experiment) => (
-                        <tr key={experiment.id}>
-                          <Td>{experiment.name}</Td>
-                          <Td>{experiment.experiment_type}</Td>
-                          <Td>
+                        <UiTr key={experiment.id}>
+                          <UiTd>{experiment.name}</UiTd>
+                          <UiTd>{experiment.experiment_type}</UiTd>
+                          <UiTd>
                             <StatusPill status={experiment.status} />
-                          </Td>
-                        </tr>
+                          </UiTd>
+                        </UiTr>
                       ))}
-                    </tbody>
-                  </table>
+                    </UiTbody>
+                  </UiTable>
                 </div>
               </div>
             </section>
@@ -6178,36 +6189,36 @@ const HomePage = () => {
                   ) : null}
                 </div>
               ) : null}
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      <Th>Tytuł</Th>
-                      <Th>Status</Th>
-                      <Th>SEO cluster</Th>
-                      <Th>Priorytet</Th>
-                      <Th>Publikacja</Th>
-                      <Th>Uzasadnienie</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div>
+                <UiTable colCount={6} rowCount={strategyPlan.slice(0, 12).length + 1}>
+                  <UiThead>
+                    <UiTr>
+                      <UiTh>Tytuł</UiTh>
+                      <UiTh>Status</UiTh>
+                      <UiTh>SEO cluster</UiTh>
+                      <UiTh>Priorytet</UiTh>
+                      <UiTh>Publikacja</UiTh>
+                      <UiTh>Uzasadnienie</UiTh>
+                    </UiTr>
+                  </UiThead>
+                  <UiTbody>
                     {strategyPlan.slice(0, 12).map((item) => (
-                      <tr key={item.id}>
-                        <Td>
+                      <UiTr key={item.id}>
+                        <UiTd>
                           <strong>{item.title}</strong>
                           {item.seo_intent ? (
                             <div style={{ fontSize: 11, color: COLORS.textLight }}>
                               {item.seo_intent}
                             </div>
                           ) : null}
-                        </Td>
-                        <Td>
+                        </UiTd>
+                        <UiTd>
                           <StatusPill status={item.status} />
-                        </Td>
-                        <Td>{item.seo_cluster || '-'}</Td>
-                        <Td>{item.priority_score ?? '-'}</Td>
-                        <Td>{formatDateTime(item.target_publish_at)}</Td>
-                        <Td>
+                        </UiTd>
+                        <UiTd>{item.seo_cluster || '-'}</UiTd>
+                        <UiTd>{item.priority_score ?? '-'}</UiTd>
+                        <UiTd>{formatDateTime(item.target_publish_at)}</UiTd>
+                        <UiTd>
                           <span
                             style={{
                               display: 'block',
@@ -6218,11 +6229,11 @@ const HomePage = () => {
                           >
                             {item.agent_rationale || '-'}
                           </span>
-                        </Td>
-                      </tr>
+                        </UiTd>
+                      </UiTr>
                     ))}
-                  </tbody>
-                </table>
+                  </UiTbody>
+                </UiTable>
                 {strategyPlan.length === 0 ? (
                   <div style={{ padding: 24, color: COLORS.textLight, textAlign: 'center' }}>
                     Brak pozycji planu.
