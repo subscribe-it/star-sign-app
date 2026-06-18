@@ -99,6 +99,32 @@ const videoController = ({ strapi }: { strapi: Strapi }) => ({
     }
   },
 
+  async pollRenders(ctx: Context): Promise<void> {
+    try {
+      const body = (ctx.request.body ?? {}) as { limit?: number };
+      const limit = Number.isFinite(Number(body.limit)) ? Number(body.limit) : undefined;
+
+      const result = await strapi
+        .plugin('ai-content-orchestrator')
+        .service('video-agent')
+        .pollRenders({ limit });
+
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'video.renders.poll',
+        outcome: result.failed > 0 ? 'skipped' : 'success',
+        metadata: {
+          checked: result.checked,
+          completed: result.completed,
+          failed: result.failed,
+          pending: result.pending,
+        },
+      });
+      ctx.body = { data: result };
+    } catch (error) {
+      ctx.badRequest(toSafeErrorMessage(error));
+    }
+  },
+
   async publish(ctx: Context): Promise<void> {
     try {
       const id = Number(ctx.params.id);

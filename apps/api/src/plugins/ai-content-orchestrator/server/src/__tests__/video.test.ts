@@ -1,6 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+
+import { afterEach, describe, it, expect, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  axiosGet: vi.fn(),
+}));
+
+vi.mock('axios', () => ({
+  default: {
+    get: mocks.axiosGet,
+  },
+}));
 
 import videoAgent from '../services/video-agent';
+import { VIDEO_ASSET_UID } from '../constants';
 import type { Strapi } from '../types';
 import { buildAstrologyVideoScript } from '../utils/astrology-video';
 
@@ -136,5 +149,131 @@ describe('video-agent.publish — short-form publish bridge', () => {
     });
     const res = await videoAgent({ strapi }).publish({ videoAssetId: 10 });
     expect(res.blocked).toBe('media_url_not_public');
+  });
+});
+
+type Update = { uid: string; id: number; data: Row };
+
+const makePollStrapi = (input: {
+  rendering: Row[];
+  getPrediction: (jobId: string) => Promise<{ status: string; videoUrl: string | null }>;
+  uploadFileId?: number;
+}) => {
+  const updates: Update[] = [];
+  let uploadFilepath = '';
+  const upload = vi.fn(async (params: { files: { filepath: string } }) => {
+    uploadFilepath = params.files.filepath;
+    return [{ id: input.uploadFileId ?? 77 }];
+  });
+  const entityService = {
+    async findMany(uid: string) {
+      if (uid === VIDEO_ASSET_UID) return input.rendering;
+      return [];
+    },
+    async update(uid: string, id: number, params: { data: Row }) {
+      const row = { id, ...params.data };
+      updates.push({ uid, id, data: params.data });
+      return row;
+    },
+  };
+  const services: Record<string, unknown> = {
+    'video-provider-adapter': { getPrediction: input.getPrediction },
+  };
+  const strapi = {
+    entityService,
+    config: { get: () => '' },
+    log: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    },
+    plugin: (name: string) => ({
+      service: (n: string) => {
+        if (name === 'upload' && n === 'upload') return { upload };
+        return services[n];
+      },
+    }),
+  } as unknown as Strapi;
+  return { strapi, updates, upload, getUploadFilepath: () => uploadFilepath };
+};
+
+describe('video-agent.pollRenders — render completion sweep', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.clearAllMocks();
+  });
+
+  it('downloads + attaches the asset and flips status to uploaded on success', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'replicate');
+    mocks.axiosGet.mockResolvedValue({ data: Buffer.from('mp4-bytes') });
+
+    const { strapi, updates, upload, getUploadFilepath } = makePollStrapi({
+      rendering: [{ id: 7, title: 'Lew', status: 'rendering', provider_job_id: 'job_abc' }],
+      getPrediction: async () => ({
+        status: 'succeeded',
+        videoUrl: 'https://cdn.example/render.mp4',
+      }),
+      uploadFileId: 99,
+    });
+
+    const res = await videoAgent({ strapi }).pollRenders();
+
+    expect(res).toEqual({ checked: 1, completed: 1, failed: 0, pending: 0 });
+    expect(mocks.axiosGet).toHaveBeenCalledWith('https://cdn.example/render.mp4', expect.any(Object));
+    expect(upload).toHaveBeenCalledTimes(1);
+    const update = updates.find((u) => u.uid === VIDEO_ASSET_UID && u.id === 7);
+    expect(update?.data.status).toBe('uploaded');
+    expect(update?.data.asset).toBe(99);
+    expect(update?.data.blocked_reason).toBeNull();
+    // temp file is cleaned up in finally
+    expect(getUploadFilepath()).not.toBe('');
+    expect(fs.existsSync(getUploadFilepath())).toBe(false);
+  });
+
+  it('marks the asset failed when the provider render failed', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'replicate');
+
+    const { strapi, updates, upload } = makePollStrapi({
+      rendering: [{ id: 8, title: 'Rak', status: 'rendering', provider_job_id: 'job_xyz' }],
+      getPrediction: async () => ({ status: 'failed', videoUrl: null }),
+    });
+
+    const res = await videoAgent({ strapi }).pollRenders();
+
+    expect(res).toEqual({ checked: 1, completed: 0, failed: 1, pending: 0 });
+    expect(upload).not.toHaveBeenCalled();
+    expect(mocks.axiosGet).not.toHaveBeenCalled();
+    const update = updates.find((u) => u.uid === VIDEO_ASSET_UID && u.id === 8);
+    expect(update?.data.status).toBe('failed');
+    expect(update?.data.last_error).toBe('render_failed');
+  });
+
+  it('leaves the asset rendering while the provider is still processing', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'replicate');
+
+    const { strapi, updates } = makePollStrapi({
+      rendering: [{ id: 9, title: 'Byk', status: 'rendering', provider_job_id: 'job_proc' }],
+      getPrediction: async () => ({ status: 'processing', videoUrl: null }),
+    });
+
+    const res = await videoAgent({ strapi }).pollRenders();
+
+    expect(res).toEqual({ checked: 1, completed: 0, failed: 0, pending: 1 });
+    expect(updates).toHaveLength(0);
+  });
+
+  it('no-ops when the provider mode is not replicate', async () => {
+    vi.stubEnv('AICO_VIDEO_PROVIDER_MODE', 'sandbox');
+
+    const { strapi, updates } = makePollStrapi({
+      rendering: [{ id: 10, title: 'Waga', status: 'rendering', provider_job_id: 'job_off' }],
+      getPrediction: async () => ({ status: 'succeeded', videoUrl: 'https://cdn.example/x.mp4' }),
+    });
+
+    const res = await videoAgent({ strapi }).pollRenders();
+
+    expect(res).toEqual({ checked: 0, completed: 0, failed: 0, pending: 0 });
+    expect(updates).toHaveLength(0);
   });
 });

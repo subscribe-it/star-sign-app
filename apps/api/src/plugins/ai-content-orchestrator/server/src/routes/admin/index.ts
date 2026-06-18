@@ -475,6 +475,12 @@ export default () => ({
     },
     {
       method: 'POST',
+      path: '/video/renders/poll',
+      handler: 'video.pollRenders',
+      config: withCostlyPermission(RBAC_ACTIONS.manageVideo),
+    },
+    {
+      method: 'POST',
       path: '/video/assets/:id/publish',
       handler: 'video.publish',
       config: withCostlyPermission(RBAC_ACTIONS.manageVideo),

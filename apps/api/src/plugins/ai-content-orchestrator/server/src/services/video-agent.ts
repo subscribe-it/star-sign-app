@@ -1,10 +1,18 @@
+import path from 'path';
+import fs from 'fs';
+import axios from 'axios';
 import { DEFAULT_TIMEZONE, GENERATION_JOB_UID, SOCIAL_POST_TICKET_UID, VIDEO_ASSET_UID } from '../constants';
 import type { AutonomyPolicyRecord, GenerationJobRecord, Strapi, VideoAssetRecord } from '../types';
 import { recordSystemAuditEvent } from '../utils/audit-trail';
 import { buildAstrologyVideoScript, type AstrologyVideoSubject } from '../utils/astrology-video';
 import { formatDateInZone } from '../utils/date-time';
 import { getEntityService } from '../utils/entity-service';
+import { resolveMediaPublicDir } from './media-generator';
 import { getPluginService } from '../utils/plugin';
+
+// Hard cap on the rendered-video download (bytes) to bound memory / guard
+// against a hostile or misbehaving provider returning an oversized payload.
+const MAX_RENDERED_VIDEO_BYTES = 200 * 1024 * 1024;
 
 // Short-form platforms that accept a vertical (9:16) video: Reels / Shorts / TikTok / FB.
 const VIDEO_PLATFORMS = ['tiktok', 'instagram', 'facebook', 'youtube_shorts'] as const;
@@ -95,7 +103,18 @@ type VideoProviderAdapterService = {
     providerJobId?: string;
     providerPayload?: Record<string, unknown>;
   }>;
+  getPrediction?: (jobId: string) => Promise<{ status: string; videoUrl: string | null }>;
 };
+
+type PollRendersResult = {
+  checked: number;
+  completed: number;
+  failed: number;
+  pending: number;
+};
+
+// Replicate prediction statuses we treat as terminal failures for a render job.
+const TERMINAL_FAILED_RENDER_STATUSES = new Set(['failed', 'canceled']);
 
 type ProviderStatusService = {
   checkProviders: (input: { action: 'video.generate' }) => Promise<{
@@ -110,6 +129,75 @@ const isTruthy = (value: unknown): boolean =>
 
 const getVideoProviderMode = (): string =>
   String(process.env.AICO_VIDEO_PROVIDER_MODE ?? 'disabled').trim().toLowerCase();
+
+// Best-effort extension/mime sniff from a provider URL; default to mp4 which is
+// the universal short-form container.
+const resolveVideoFileMeta = (url: string): { ext: string; mime: string } => {
+  let pathname = '';
+  try {
+    pathname = new URL(url).pathname.toLowerCase();
+  } catch {
+    pathname = url.toLowerCase();
+  }
+  if (pathname.endsWith('.webm')) return { ext: 'webm', mime: 'video/webm' };
+  if (pathname.endsWith('.mov')) return { ext: 'mov', mime: 'video/quicktime' };
+  if (pathname.endsWith('.m4v')) return { ext: 'm4v', mime: 'video/x-m4v' };
+  return { ext: 'mp4', mime: 'video/mp4' };
+};
+
+// Download a rendered video from the (already SSRF-checked) provider URL and
+// upload it into Strapi, mirroring media-generator: bounded download → temp file
+// in public/uploads/tmp → upload service → fileId → cleanup in finally.
+const downloadAndUploadVideo = async (
+  strapi: Strapi,
+  videoUrl: string,
+  asset: VideoAssetRecord
+): Promise<number> => {
+  const response = await axios.get(videoUrl, {
+    responseType: 'arraybuffer',
+    timeout: 120_000,
+    maxContentLength: MAX_RENDERED_VIDEO_BYTES,
+    maxBodyLength: MAX_RENDERED_VIDEO_BYTES,
+  });
+  const buffer = Buffer.from(response.data, 'binary');
+
+  const { ext, mime } = resolveVideoFileMeta(videoUrl);
+  const publicDir = resolveMediaPublicDir();
+  const tmpDir = path.join(publicDir, 'uploads', 'tmp');
+  if (!fs.existsSync(tmpDir)) {
+    fs.mkdirSync(tmpDir, { recursive: true });
+  }
+
+  const filename = `video_${asset.id}_${Date.now()}.${ext}`;
+  const tmpPath = path.join(tmpDir, filename);
+  fs.writeFileSync(tmpPath, buffer);
+
+  try {
+    const uploadService = strapi.plugin('upload').service('upload');
+    const uploadedFiles = await uploadService.upload({
+      data: {
+        fileInfo: {
+          alternativeText: asset.title,
+          caption: asset.title,
+          name: filename,
+        },
+      },
+      files: {
+        filepath: tmpPath,
+        originalFilename: filename,
+        name: filename,
+        type: mime,
+        size: buffer.length,
+      },
+    });
+
+    return uploadedFiles[0].id as number;
+  } finally {
+    if (fs.existsSync(tmpPath)) {
+      fs.unlinkSync(tmpPath);
+    }
+  }
+};
 
 const videoAgent = ({ strapi }: { strapi: Strapi }) => {
   const entityService = getEntityService(strapi);
@@ -304,6 +392,116 @@ const videoAgent = ({ strapi }: { strapi: Strapi }) => {
           },
         },
       });
+    },
+
+    // Render completion sweep: for assets stuck at 'rendering' with a provider job
+    // id, poll the provider, and when the render succeeded download the result +
+    // attach it to the asset so it becomes publishable ('uploaded'). Best-effort
+    // and idempotent — a poll is a read, the download/upload only runs once the
+    // asset flips to 'uploaded', and a transient provider hiccup leaves the asset
+    // 'rendering' for the next tick. Replicate-mode only.
+    async pollRenders(input: { limit?: number } = {}): Promise<PollRendersResult> {
+      const result: PollRendersResult = { checked: 0, completed: 0, failed: 0, pending: 0 };
+
+      if (getVideoProviderMode() !== 'replicate') {
+        return result;
+      }
+
+      const adapter = getPluginService<VideoProviderAdapterService | undefined>(
+        strapi,
+        'video-provider-adapter'
+      );
+      if (!adapter || typeof adapter.getPrediction !== 'function') {
+        return result;
+      }
+
+      const limit = Math.max(1, Math.min(50, Number(input.limit ?? 10)));
+      const assets = await entityService.findMany<VideoAssetRecord>(VIDEO_ASSET_UID, {
+        filters: { status: 'rendering', provider_job_id: { $notNull: true } },
+        sort: [{ updatedAt: 'asc' }],
+        limit,
+      });
+
+      for (const asset of assets) {
+        const jobId = String(asset.provider_job_id ?? '').trim();
+        if (!jobId) {
+          continue;
+        }
+
+        result.checked += 1;
+
+        try {
+          const prediction = await adapter.getPrediction(jobId);
+
+          if (prediction.status === 'succeeded') {
+            const videoUrl = prediction.videoUrl;
+            if (!videoUrl || !isPublicHttpUrl(videoUrl)) {
+              // Succeeded but no usable/public URL — terminal failure so we don't
+              // poll a finished job forever.
+              await entityService.update<VideoAssetRecord>(VIDEO_ASSET_UID, asset.id, {
+                data: {
+                  status: 'failed',
+                  last_error: 'render_succeeded_no_public_url',
+                },
+              });
+              result.failed += 1;
+              continue;
+            }
+
+            const fileId = await downloadAndUploadVideo(strapi, videoUrl, asset);
+            await entityService.update<VideoAssetRecord>(VIDEO_ASSET_UID, asset.id, {
+              data: {
+                asset: fileId,
+                status: 'uploaded',
+                blocked_reason: null,
+                last_error: null,
+              } as never,
+            });
+            result.completed += 1;
+            continue;
+          }
+
+          if (TERMINAL_FAILED_RENDER_STATUSES.has(prediction.status)) {
+            await entityService.update<VideoAssetRecord>(VIDEO_ASSET_UID, asset.id, {
+              data: {
+                status: 'failed',
+                last_error: `render_${prediction.status}`,
+              },
+            });
+            result.failed += 1;
+            continue;
+          }
+
+          // starting / processing / transient — leave as 'rendering'.
+          result.pending += 1;
+        } catch (error) {
+          // Per-item best-effort: never let one asset abort the sweep. Leave it
+          // 'rendering' so it is retried on the next tick.
+          result.pending += 1;
+          strapi.log.warn(
+            `[aico] video render poll failed for asset #${asset.id} (job ${jobId}): ${
+              (error as { message?: string })?.message ?? String(error)
+            }`
+          );
+        }
+      }
+
+      if (result.checked > 0) {
+        await recordSystemAuditEvent(strapi, {
+          action: 'video.renders.poll',
+          outcome: result.failed > 0 ? 'skipped' : 'success',
+          severity: result.failed > 0 ? 'warn' : 'info',
+          resourceUid: VIDEO_ASSET_UID,
+          metadata: {
+            checked: result.checked,
+            completed: result.completed,
+            failed: result.failed,
+            pending: result.pending,
+          },
+        });
+      }
+
+      return result;
     },
 
     // Publish bridge: turn a rendered video asset into social-post-tickets for the
