@@ -3,6 +3,16 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 
 import { api } from '../api';
 import { help } from '../help';
+import {
+  UiAlert,
+  UiBadge,
+  UiButton,
+  UiField,
+  UiSelect,
+  UiStatus,
+  UiTextField,
+  UiTextareaField,
+} from '../components/ui';
 import { WorkflowSocialStep } from './homepage/WorkflowSocialStep';
 import type {
   AuditReport,
@@ -354,6 +364,20 @@ const initialHomepageForm = (): HomepageFormState => ({
 
 const WORKFLOW_STEP_LABELS = ['Podstawy', 'Harmonogram', 'Treść', 'Social', 'Sterowanie'] as const;
 const ADS_STOP_LOSS_CONFIRMATION = 'PAUSE_ACTIVE_ADS';
+
+// Definicje zakładek (klucz + polska etykieta). Kolejność = kolejność w pasku
+// nawigacji oraz porządek nawigacji klawiaturą (strzałki/Home/End).
+const TAB_DEFS: Array<[TabKey, string]> = [
+  ['dashboard', 'Pulpit'],
+  ['workflows', 'Przepływy'],
+  ['topics', 'Kolejka tematów'],
+  ['media', 'Katalog mediów'],
+  ['runs', 'Monitoring'],
+  ['social', 'Social'],
+  ['audit', 'Audyt'],
+  ['growth', 'Wzrost'],
+  ['settings', 'Ustawienia'],
+];
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; color: string }> = {
   idle: { bg: '#f1f5f9', border: '#e2e8f0', color: '#64748b' },
@@ -2494,18 +2518,13 @@ const HomePage = () => {
       footer={
         <>
           {workflowStep > 0 && (
-            <button
-              type="button"
-              style={secondaryButtonStyle}
-              onClick={() => setWorkflowStep((prev) => prev - 1)}
-            >
+            <UiButton variant="secondary" onClick={() => setWorkflowStep((prev) => prev - 1)}>
               Poprzedni krok
-            </button>
+            </UiButton>
           )}
           {workflowStep < WORKFLOW_STEP_LABELS.length - 1 ? (
-            <button
-              type="button"
-              style={primaryButtonStyle}
+            <UiButton
+              variant="primary"
               onClick={() => {
                 // Basic validation for Step 0
                 if (workflowStep === 0 && !workflowForm.name) {
@@ -2520,12 +2539,12 @@ const HomePage = () => {
               }}
             >
               Następny krok
-            </button>
+            </UiButton>
           ) : (
-            <button
-              type="button"
-              style={primaryButtonStyle}
+            <UiButton
+              variant="primary"
               disabled={saving}
+              loading={saving}
               onClick={() => {
                 if (!workflowForm.prompt_template) {
                   showError('Prompt Template jest wymagany.');
@@ -2540,7 +2559,7 @@ const HomePage = () => {
                 : editingWorkflowId
                   ? 'Zaktualizuj Workflow'
                   : 'Utwórz Workflow'}
-            </button>
+            </UiButton>
           )}
         </>
       }
@@ -2592,66 +2611,60 @@ const HomePage = () => {
 
           {workflowStep === 0 && (
             <div style={{ display: 'grid', gap: 20 }}>
-              <Field label="Nazwa">
-                <input
-                  style={inputStyle}
-                  value={workflowForm.name}
-                  placeholder="np. Horoskop Dzienny - Główne Wydanie"
-                  onChange={(e) => setWorkflowForm((prev) => ({ ...prev, name: e.target.value }))}
-                />
-              </Field>
+              <UiTextField
+                label="Nazwa"
+                value={workflowForm.name}
+                placeholder="np. Horoskop Dzienny - Główne Wydanie"
+                onChange={(e) => setWorkflowForm((prev) => ({ ...prev, name: e.target.value }))}
+              />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                <Field label="Typ Workflow">
-                  <select
-                    style={inputStyle}
+                <UiField label="Typ Workflow">
+                  <UiSelect
+                    aria-label="Typ Workflow"
                     value={workflowForm.workflow_type}
-                    onChange={(e) =>
+                    onChange={(value) =>
                       setWorkflowForm((prev) => ({
                         ...prev,
-                        workflow_type: e.target.value as WorkflowFormState['workflow_type'],
+                        workflow_type: value as WorkflowFormState['workflow_type'],
                       }))
                     }
-                  >
-                    <option value="horoscope">Horoskop</option>
-                    <option value="daily_card">Karta dnia</option>
-                    <option value="article">Artykuł</option>
-                  </select>
-                </Field>
-                <Field label="Tryb Tematów">
-                  <select
-                    style={inputStyle}
+                    options={[
+                      { value: 'horoscope', label: 'Horoskop' },
+                      { value: 'daily_card', label: 'Karta dnia' },
+                      { value: 'article', label: 'Artykuł' },
+                    ]}
+                  />
+                </UiField>
+                <UiField label="Tryb Tematów">
+                  <UiSelect
+                    aria-label="Tryb Tematów"
                     value={workflowForm.topic_mode}
-                    onChange={(e) =>
+                    onChange={(value) =>
                       setWorkflowForm((prev) => ({
                         ...prev,
-                        topic_mode: e.target.value as WorkflowFormState['topic_mode'],
+                        topic_mode: value as WorkflowFormState['topic_mode'],
                       }))
                     }
-                  >
-                    <option value="mixed">Mieszany (Auto + Ręczny)</option>
-                    <option value="manual">Tylko Ręczny</option>
-                  </select>
-                </Field>
+                    options={[
+                      { value: 'mixed', label: 'Mieszany (Auto + Ręczny)' },
+                      { value: 'manual', label: 'Tylko Ręczny' },
+                    ]}
+                  />
+                </UiField>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                <Field label="Lokalizacja">
-                  <input
-                    style={inputStyle}
-                    value={workflowForm.locale}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({ ...prev, locale: e.target.value }))
-                    }
-                  />
-                </Field>
-                <Field label="Strefa Czasowa">
-                  <input
-                    style={inputStyle}
-                    value={workflowForm.timezone}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({ ...prev, timezone: e.target.value }))
-                    }
-                  />
-                </Field>
+                <UiTextField
+                  label="Lokalizacja"
+                  value={workflowForm.locale}
+                  onChange={(e) => setWorkflowForm((prev) => ({ ...prev, locale: e.target.value }))}
+                />
+                <UiTextField
+                  label="Strefa Czasowa"
+                  value={workflowForm.timezone}
+                  onChange={(e) =>
+                    setWorkflowForm((prev) => ({ ...prev, timezone: e.target.value }))
+                  }
+                />
               </div>
               <label style={checkboxRowStyle}>
                 <input
@@ -2681,96 +2694,83 @@ const HomePage = () => {
                   godziny 08:00 każdego dnia).
                 </p>
               </div>
-              <Field label="Harmonogram Generowania">
-                <input
-                  style={inputStyle}
-                  value={workflowForm.generate_cron}
-                  onChange={(e) =>
-                    setWorkflowForm((prev) => ({ ...prev, generate_cron: e.target.value }))
-                  }
-                />
-              </Field>
-              <Field label="Harmonogram Publikacji">
-                <input
-                  style={inputStyle}
-                  value={workflowForm.publish_cron}
-                  onChange={(e) =>
-                    setWorkflowForm((prev) => ({ ...prev, publish_cron: e.target.value }))
-                  }
-                />
-              </Field>
+              <UiTextField
+                label="Harmonogram Generowania"
+                value={workflowForm.generate_cron}
+                onChange={(e) =>
+                  setWorkflowForm((prev) => ({ ...prev, generate_cron: e.target.value }))
+                }
+              />
+              <UiTextField
+                label="Harmonogram Publikacji"
+                value={workflowForm.publish_cron}
+                onChange={(e) =>
+                  setWorkflowForm((prev) => ({ ...prev, publish_cron: e.target.value }))
+                }
+              />
             </div>
           )}
 
           {workflowStep === 2 && (
             <div style={{ display: 'grid', gap: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                <Field label="Model LLM">
-                  <input
-                    style={inputStyle}
-                    value={workflowForm.llm_model}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({ ...prev, llm_model: e.target.value }))
-                    }
-                  />
-                </Field>
-                <Field
+                <UiTextField
+                  label="Model LLM"
+                  value={workflowForm.llm_model}
+                  onChange={(e) =>
+                    setWorkflowForm((prev) => ({ ...prev, llm_model: e.target.value }))
+                  }
+                />
+                <UiTextField
                   label={editingWorkflowId ? 'API Token (Zostaw puste aby zachować)' : 'API Token'}
-                >
-                  <input
-                    type="password"
-                    style={inputStyle}
-                    value={workflowForm.apiToken}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({ ...prev, apiToken: e.target.value }))
-                    }
-                  />
-                </Field>
+                  type="password"
+                  value={workflowForm.apiToken}
+                  onChange={(e) =>
+                    setWorkflowForm((prev) => ({ ...prev, apiToken: e.target.value }))
+                  }
+                />
               </div>
 
               {workflowForm.workflow_type === 'horoscope' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                  <Field label="Okres Horoskopu">
-                    <select
-                      style={inputStyle}
+                  <UiField label="Okres Horoskopu">
+                    <UiSelect
+                      aria-label="Okres Horoskopu"
                       value={workflowForm.horoscope_period}
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setWorkflowForm((prev) => ({
                           ...prev,
-                          horoscope_period: e.target.value as WorkflowFormState['horoscope_period'],
+                          horoscope_period: value as WorkflowFormState['horoscope_period'],
                         }))
                       }
-                    >
-                      <option value="Dzienny">Dzienny</option>
-                      <option value="Tygodniowy">Tygodniowy</option>
-                      <option value="Miesięczny">Miesięczny</option>
-                      <option value="Roczny">Roczny</option>
-                    </select>
-                  </Field>
-                  <Field label="Typy Horoskopów (oddzielone przecinkiem)">
-                    <input
-                      style={inputStyle}
-                      value={workflowForm.horoscope_type_values}
-                      onChange={(e) =>
-                        setWorkflowForm((prev) => ({
-                          ...prev,
-                          horoscope_type_values: e.target.value,
-                        }))
-                      }
+                      options={[
+                        { value: 'Dzienny', label: 'Dzienny' },
+                        { value: 'Tygodniowy', label: 'Tygodniowy' },
+                        { value: 'Miesięczny', label: 'Miesięczny' },
+                        { value: 'Roczny', label: 'Roczny' },
+                      ]}
                     />
-                  </Field>
+                  </UiField>
+                  <UiTextField
+                    label="Typy Horoskopów (oddzielone przecinkiem)"
+                    value={workflowForm.horoscope_type_values}
+                    onChange={(e) =>
+                      setWorkflowForm((prev) => ({
+                        ...prev,
+                        horoscope_type_values: e.target.value,
+                      }))
+                    }
+                  />
                 </div>
               )}
 
-              <Field label="Prompt Template (Main Context)">
-                <textarea
-                  style={{ ...inputStyle, minHeight: 200, fontFamily: 'monospace', fontSize: 13 }}
-                  value={workflowForm.prompt_template}
-                  onChange={(e) =>
-                    setWorkflowForm((prev) => ({ ...prev, prompt_template: e.target.value }))
-                  }
-                />
-              </Field>
+              <UiTextareaField
+                label="Prompt Template (Main Context)"
+                value={workflowForm.prompt_template}
+                onChange={(e) =>
+                  setWorkflowForm((prev) => ({ ...prev, prompt_template: e.target.value }))
+                }
+              />
             </div>
           )}
 
@@ -2826,40 +2826,33 @@ const HomePage = () => {
           {workflowStep === 4 && (
             <div style={{ display: 'grid', gap: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-                <Field label="Temperature">
-                  <input
-                    type="number"
-                    step="0.1"
-                    style={inputStyle}
-                    value={workflowForm.temperature}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({ ...prev, temperature: Number(e.target.value) }))
-                    }
-                  />
-                </Field>
-                <Field label="Max Tokens">
-                  <input
-                    type="number"
-                    style={inputStyle}
-                    value={workflowForm.max_completion_tokens}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({
-                        ...prev,
-                        max_completion_tokens: Number(e.target.value),
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Max Retries">
-                  <input
-                    type="number"
-                    style={inputStyle}
-                    value={workflowForm.retry_max}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({ ...prev, retry_max: Number(e.target.value) }))
-                    }
-                  />
-                </Field>
+                <UiTextField
+                  label="Temperature"
+                  type="number"
+                  value={String(workflowForm.temperature)}
+                  onChange={(e) =>
+                    setWorkflowForm((prev) => ({ ...prev, temperature: Number(e.target.value) }))
+                  }
+                />
+                <UiTextField
+                  label="Max Tokens"
+                  type="number"
+                  value={String(workflowForm.max_completion_tokens)}
+                  onChange={(e) =>
+                    setWorkflowForm((prev) => ({
+                      ...prev,
+                      max_completion_tokens: Number(e.target.value),
+                    }))
+                  }
+                />
+                <UiTextField
+                  label="Max Retries"
+                  type="number"
+                  value={String(workflowForm.retry_max)}
+                  onChange={(e) =>
+                    setWorkflowForm((prev) => ({ ...prev, retry_max: Number(e.target.value) }))
+                  }
+                />
               </div>
               <div style={{ display: 'grid', gap: 12 }}>
                 <label style={checkboxRowStyle}>
@@ -2922,28 +2915,24 @@ const HomePage = () => {
                 )}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <Field label="Content cluster">
-                  <input
-                    style={inputStyle}
-                    value={workflowForm.content_cluster}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({ ...prev, content_cluster: e.target.value }))
-                    }
-                    placeholder="np. astrologia-praktyczna"
-                  />
-                </Field>
-                <Field label="Auto-publish guardrails (JSON)">
-                  <textarea
-                    style={{ ...inputStyle, minHeight: 120, fontFamily: 'monospace', fontSize: 12 }}
-                    value={workflowForm.auto_publish_guardrails}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({
-                        ...prev,
-                        auto_publish_guardrails: e.target.value,
-                      }))
-                    }
-                  />
-                </Field>
+                <UiTextField
+                  label="Content cluster"
+                  value={workflowForm.content_cluster}
+                  onChange={(e) =>
+                    setWorkflowForm((prev) => ({ ...prev, content_cluster: e.target.value }))
+                  }
+                  placeholder="np. astrologia-praktyczna"
+                />
+                <UiTextareaField
+                  label="Auto-publish guardrails (JSON)"
+                  value={workflowForm.auto_publish_guardrails}
+                  onChange={(e) =>
+                    setWorkflowForm((prev) => ({
+                      ...prev,
+                      auto_publish_guardrails: e.target.value,
+                    }))
+                  }
+                />
               </div>
             </div>
           )}
@@ -3191,51 +3180,71 @@ const HomePage = () => {
         </div>
 
         <section style={{ ...CARD_STYLE, padding: 8, borderRadius: 12, background: '#fff' }}>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {(
-              [
-                ['dashboard', 'Pulpit'],
-                ['workflows', 'Przepływy'],
-                ['topics', 'Kolejka tematów'],
-                ['media', 'Katalog mediów'],
-                ['runs', 'Monitoring'],
-                ['social', 'Social'],
-                ['audit', 'Audyt'],
-                ['growth', 'Wzrost'],
-                ['settings', 'Ustawienia'],
-              ] as Array<[TabKey, string]>
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setActiveTab(key)}
-                style={{
-                  border: 'none',
-                  background: activeTab === key ? COLORS.primaryLight : 'transparent',
-                  color: activeTab === key ? COLORS.primary : COLORS.textLight,
-                  borderRadius: 10,
-                  padding: '10px 20px',
-                  fontWeight: 700,
-                  fontSize: 14,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <div
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: activeTab === key ? COLORS.primary : 'transparent',
-                    transition: 'all 0.2s',
+          <div
+            role="tablist"
+            aria-label="Nawigacja panelu AICO"
+            style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}
+          >
+            {TAB_DEFS.map(([key, label], index) => {
+              const isActive = activeTab === key;
+              return (
+                <button
+                  key={key}
+                  id={`aico-tab-${key}`}
+                  role="tab"
+                  type="button"
+                  aria-selected={isActive}
+                  aria-controls={`aico-tabpanel-${key}`}
+                  tabIndex={isActive ? 0 : -1}
+                  onClick={() => setActiveTab(key)}
+                  onKeyDown={(event) => {
+                    // Dostępna nawigacja klawiaturą (WAI-ARIA tablist):
+                    // strzałki przełączają zakładkę, Home/End skaczą na skraje.
+                    let nextIndex: number | null = null;
+                    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                      nextIndex = (index + 1) % TAB_DEFS.length;
+                    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                      nextIndex = (index - 1 + TAB_DEFS.length) % TAB_DEFS.length;
+                    } else if (event.key === 'Home') {
+                      nextIndex = 0;
+                    } else if (event.key === 'End') {
+                      nextIndex = TAB_DEFS.length - 1;
+                    }
+                    if (nextIndex !== null) {
+                      event.preventDefault();
+                      const nextKey = TAB_DEFS[nextIndex][0];
+                      setActiveTab(nextKey);
+                      document.getElementById(`aico-tab-${nextKey}`)?.focus();
+                    }
                   }}
-                />
-                {label}
-              </button>
-            ))}
+                  style={{
+                    border: 'none',
+                    background: isActive ? COLORS.primaryLight : 'transparent',
+                    color: isActive ? COLORS.primary : COLORS.textLight,
+                    borderRadius: 10,
+                    padding: '10px 20px',
+                    fontWeight: 700,
+                    fontSize: 14,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: isActive ? COLORS.primary : 'transparent',
+                      transition: 'all 0.2s',
+                    }}
+                  />
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -3277,7 +3286,12 @@ const HomePage = () => {
         ) : null}
 
         {activeTab === 'dashboard' && (
-          <div style={{ display: 'grid', gap: 24 }}>
+          <div
+            id="aico-tabpanel-dashboard"
+            role="tabpanel"
+            aria-labelledby="aico-tab-dashboard"
+            style={{ display: 'grid', gap: 24 }}
+          >
             <section style={CARD_STYLE}>
               <div
                 style={{
@@ -3288,36 +3302,9 @@ const HomePage = () => {
                 }}
               >
                 <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 0 }}>Centrum Dowodzenia</h2>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '4px 12px',
-                    background: diagnostics?.ok ? '#f0fdf4' : '#fff7ed',
-                    borderRadius: 20,
-                    border: `1px solid ${diagnostics?.ok ? '#dcfce7' : '#ffedd5'}`,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: diagnostics?.ok ? COLORS.secondary : COLORS.warning,
-                      boxShadow: `0 0 8px ${diagnostics?.ok ? COLORS.secondary : COLORS.warning}`,
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: diagnostics?.ok ? '#166534' : '#9a3412',
-                    }}
-                  >
-                    {diagnostics?.ok ? 'SYSTEM GOTOWY' : 'WYMAGA UWAGI'}
-                  </span>
-                </div>
+                <UiStatus tone={diagnostics?.ok ? 'success' : 'warning'} size="S">
+                  {diagnostics?.ok ? 'SYSTEM GOTOWY' : 'WYMAGA UWAGI'}
+                </UiStatus>
               </div>
 
               <div
@@ -3397,22 +3384,13 @@ const HomePage = () => {
                 {diagnostics?.workflows.issues.length ? (
                   <div style={{ display: 'grid', gap: 8 }}>
                     {diagnostics.workflows.issues.slice(0, 4).map((issue) => (
-                      <div
+                      <UiAlert
                         key={`${issue.workflowId}-${issue.message}`}
-                        style={{
-                          padding: '10px 12px',
-                          background: '#fef2f2',
-                          border: '1px solid #fee2e2',
-                          borderRadius: 10,
-                          fontSize: 13,
-                          color: '#991b1b',
-                          display: 'flex',
-                          gap: 10,
-                        }}
+                        tone="danger"
+                        title={`#${issue.workflowId}`}
                       >
-                        <span style={{ fontWeight: 700 }}>#{issue.workflowId}</span>
-                        <span>{issue.message}</span>
-                      </div>
+                        {issue.message}
+                      </UiAlert>
                     ))}
                   </div>
                 ) : (
@@ -3450,18 +3428,17 @@ const HomePage = () => {
                   Konfiguruj automatyczne generowanie horoskopów, kart i artykułów.
                 </p>
               </div>
-              <button
-                type="button"
+              <UiButton
+                variant="primary"
                 onClick={() => {
                   setEditingWorkflowId(null);
                   setWorkflowForm(initialWorkflowForm());
                   setWorkflowStep(0);
                   setShowWorkflowModal(true);
                 }}
-                style={primaryButtonStyle}
               >
                 + Nowy Workflow
-              </button>
+              </UiButton>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
@@ -3490,18 +3467,9 @@ const HomePage = () => {
                         <strong style={{ color: COLORS.text }}>{workflow.name}</strong>
                       </Td>
                       <Td>
-                        <span
-                          style={{
-                            fontSize: 12,
-                            padding: '2px 8px',
-                            background: '#f1f5f9',
-                            borderRadius: 6,
-                            color: '#475569',
-                            fontWeight: 600,
-                          }}
-                        >
+                        <UiBadge tone="neutral" size="S">
                           {workflow.workflow_type}
-                        </span>
+                        </UiBadge>
                       </Td>
                       <Td>
                         <StatusPill status={workflow.status} />
@@ -3545,71 +3513,45 @@ const HomePage = () => {
                       </Td>
                       <Td>
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                          <button
-                            type="button"
+                          <UiButton
+                            variant="secondary"
+                            size="S"
                             onClick={() => {
                               onPickWorkflowToEdit(workflow);
                               setShowWorkflowModal(true);
                             }}
-                            style={{
-                              border: `1px solid ${COLORS.border}`,
-                              background: '#fff',
-                              borderRadius: 8,
-                              padding: '6px 12px',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                            }}
                           >
                             Edytuj
-                          </button>
-                          <button
-                            type="button"
+                          </UiButton>
+                          <UiButton
+                            variant="primary"
+                            size="S"
                             onClick={() => void runNow(workflow.id)}
                             disabled={
                               saving ||
                               runningWorkflowIds.includes(workflow.id) ||
                               workflow.status === 'running'
                             }
-                            style={{
-                              background: COLORS.primaryLight,
-                              color: COLORS.primary,
-                              border: 'none',
-                              borderRadius: 8,
-                              padding: '6px 12px',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              opacity:
-                                runningWorkflowIds.includes(workflow.id) ||
-                                workflow.status === 'running'
-                                  ? 0.5
-                                  : 1,
-                            }}
+                            loading={
+                              runningWorkflowIds.includes(workflow.id) ||
+                              workflow.status === 'running'
+                            }
                           >
                             {runningWorkflowIds.includes(workflow.id) ||
                             workflow.status === 'running'
                               ? 'W toku...'
                               : 'Uruchom'}
-                          </button>
-                          <button
-                            type="button"
+                          </UiButton>
+                          <UiButton
+                            variant="secondary"
+                            size="S"
                             onClick={() => {
                               setRunFilters((prev) => ({ ...prev, workflowName: workflow.name }));
                               setActiveTab('runs');
                             }}
-                            style={{
-                              border: `1px solid ${COLORS.border}`,
-                              background: '#fff',
-                              borderRadius: 8,
-                              padding: '6px 12px',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                            }}
                           >
                             Logi
-                          </button>
+                          </UiButton>
                         </div>
                       </Td>
                     </tr>
@@ -3768,30 +3710,30 @@ const HomePage = () => {
                 potrwać i zużywać limity generacji obrazów.
               </p>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
+                <UiButton
+                  variant="primary"
                   disabled={backfillingImages !== null}
-                  style={primaryButtonStyle}
+                  loading={backfillingImages === 'article'}
                   onClick={() => void backfillImages('article')}
                 >
                   {backfillingImages === 'article' ? 'Uzupełniam…' : 'Artykuły'}
-                </button>
-                <button
-                  type="button"
+                </UiButton>
+                <UiButton
+                  variant="primary"
                   disabled={backfillingImages !== null}
-                  style={primaryButtonStyle}
+                  loading={backfillingImages === 'tarot'}
                   onClick={() => void backfillImages('tarot')}
                 >
                   {backfillingImages === 'tarot' ? 'Uzupełniam…' : 'Karty tarota'}
-                </button>
-                <button
-                  type="button"
+                </UiButton>
+                <UiButton
+                  variant="primary"
                   disabled={backfillingImages !== null}
-                  style={primaryButtonStyle}
+                  loading={backfillingImages === 'zodiac'}
                   onClick={() => void backfillImages('zodiac')}
                 >
                   {backfillingImages === 'zodiac' ? 'Uzupełniam…' : 'Znaki zodiaku'}
-                </button>
+                </UiButton>
               </div>
             </section>
 
@@ -3806,22 +3748,21 @@ const HomePage = () => {
               >
                 <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 0 }}>Katalog Mediów</h2>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button
-                    type="button"
+                  <UiButton
+                    variant="secondary"
                     disabled={saving}
-                    style={secondaryButtonStyle}
                     onClick={() => void validateCoverage(false)}
                   >
                     Waliduj pokrycie
-                  </button>
-                  <button
-                    type="button"
+                  </UiButton>
+                  <UiButton
+                    variant="primary"
                     disabled={mediaLibraryLoading}
-                    style={primaryButtonStyle}
+                    loading={mediaLibraryLoading}
                     onClick={() => void refreshMediaGrid()}
                   >
                     Odśwież siatkę
-                  </button>
+                  </UiButton>
                 </div>
               </div>
 
@@ -3837,74 +3778,69 @@ const HomePage = () => {
                   marginBottom: 24,
                 }}
               >
-                <Field label="Szukaj">
-                  <input
-                    style={inputStyle}
-                    value={mediaFilters.search}
-                    onChange={(event) =>
-                      setMediaFilters((prev) => ({ ...prev, search: event.target.value }))
-                    }
-                    placeholder="Nazwa / Klucz / Etykieta"
-                  />
-                </Field>
-                <Field label="Mapowanie">
-                  <select
-                    style={inputStyle}
+                <UiTextField
+                  label="Szukaj"
+                  value={mediaFilters.search}
+                  onChange={(event) =>
+                    setMediaFilters((prev) => ({ ...prev, search: event.target.value }))
+                  }
+                  placeholder="Nazwa / Klucz / Etykieta"
+                />
+                <UiField label="Mapowanie">
+                  <UiSelect
+                    aria-label="Mapowanie"
                     value={mediaFilters.mapped}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setMediaFilters((prev) => ({
                         ...prev,
-                        mapped: event.target.value as MediaFiltersState['mapped'],
+                        mapped: value as MediaFiltersState['mapped'],
                       }))
                     }
-                  >
-                    <option value="all">Wszystkie</option>
-                    <option value="mapped">Zmapowane</option>
-                    <option value="unmapped">Niezmapowane</option>
-                  </select>
-                </Field>
-                <Field label="Przeznaczenie">
-                  <select
-                    style={inputStyle}
+                    options={[
+                      { value: 'all', label: 'Wszystkie' },
+                      { value: 'mapped', label: 'Zmapowane' },
+                      { value: 'unmapped', label: 'Niezmapowane' },
+                    ]}
+                  />
+                </UiField>
+                <UiField label="Przeznaczenie">
+                  <UiSelect
+                    aria-label="Przeznaczenie"
                     value={mediaFilters.purpose}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setMediaFilters((prev) => ({
                         ...prev,
-                        purpose: event.target.value as MediaFiltersState['purpose'],
+                        purpose: value as MediaFiltersState['purpose'],
                       }))
                     }
-                  >
-                    <option value="all">Wszystkie</option>
-                    <option value="blog_article">Artykuł</option>
-                    <option value="daily_card">Karta dnia</option>
-                    <option value="horoscope_sign">Znak zodiaku</option>
-                    <option value="fallback_general">Ogólne</option>
-                  </select>
-                </Field>
-                <Field label="Znak zodiaku">
-                  <select
-                    style={inputStyle}
+                    options={[
+                      { value: 'all', label: 'Wszystkie' },
+                      { value: 'blog_article', label: 'Artykuł' },
+                      { value: 'daily_card', label: 'Karta dnia' },
+                      { value: 'horoscope_sign', label: 'Znak zodiaku' },
+                      { value: 'fallback_general', label: 'Ogólne' },
+                    ]}
+                  />
+                </UiField>
+                <UiField label="Znak zodiaku">
+                  <UiSelect
+                    aria-label="Znak zodiaku"
                     value={mediaFilters.sign}
-                    onChange={(event) =>
-                      setMediaFilters((prev) => ({ ...prev, sign: event.target.value }))
+                    onChange={(value) =>
+                      setMediaFilters((prev) => ({ ...prev, sign: String(value) }))
                     }
-                  >
-                    {signOptions.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+                    options={signOptions.map((item) => ({ value: item, label: item }))}
+                  />
+                </UiField>
                 <div style={{ display: 'flex', alignItems: 'end' }}>
-                  <button
-                    type="button"
-                    style={{ ...primaryButtonStyle, width: '100%', padding: '12px' }}
+                  <UiButton
+                    variant="primary"
+                    fullWidth
                     onClick={() => void loadMediaLibrary({ page: 1 })}
                     disabled={mediaLibraryLoading}
                   >
                     Filtruj
-                  </button>
+                  </UiButton>
                 </div>
               </div>
 
@@ -3951,18 +3887,9 @@ const HomePage = () => {
                         Znaleziono: <strong>{mediaLibraryPagination.total}</strong> plików
                       </span>
                       {bulkSelectedFileIds.length > 0 && (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            background: COLORS.primaryLight,
-                            color: COLORS.primary,
-                            padding: '4px 12px',
-                            borderRadius: 20,
-                            fontWeight: 700,
-                          }}
-                        >
+                        <UiBadge tone="info" size="S">
                           Zaznaczono: {bulkSelectedFileIds.length}
-                        </span>
+                        </UiBadge>
                       )}
                     </div>
 
@@ -4068,20 +3995,18 @@ const HomePage = () => {
                     </div>
 
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12 }}>
-                      <button
-                        type="button"
-                        style={secondaryButtonStyle}
+                      <UiButton
+                        variant="secondary"
                         disabled={mediaLibraryPagination.page <= 1 || mediaLibraryLoading}
                         onClick={() => void goToMediaPage(mediaLibraryPagination.page - 1)}
                       >
                         ← Poprzednia
-                      </button>
+                      </UiButton>
                       <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>
                         {mediaLibraryPagination.page} / {mediaLibraryPagination.pageCount}
                       </span>
-                      <button
-                        type="button"
-                        style={secondaryButtonStyle}
+                      <UiButton
+                        variant="secondary"
                         disabled={
                           mediaLibraryPagination.page >= mediaLibraryPagination.pageCount ||
                           mediaLibraryLoading
@@ -4089,7 +4014,7 @@ const HomePage = () => {
                         onClick={() => void goToMediaPage(mediaLibraryPagination.page + 1)}
                       >
                         Następna →
-                      </button>
+                      </UiButton>
                     </div>
                   </div>
 
@@ -4150,36 +4075,24 @@ const HomePage = () => {
 
                         <div style={{ display: 'grid', gap: 16 }}>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <Field label="Asset Key">
-                              <input
-                                style={{
-                                  ...inputStyle,
-                                  background: '#f8fafc',
-                                  cursor: 'not-allowed',
-                                }}
-                                value={generatedMediaIdentity.asset_key}
-                                readOnly
-                              />
-                            </Field>
-                            <Field label="Etykieta">
-                              <input
-                                style={{
-                                  ...inputStyle,
-                                  background: '#f8fafc',
-                                  cursor: 'not-allowed',
-                                }}
-                                value={generatedMediaIdentity.label}
-                                readOnly
-                              />
-                            </Field>
+                            <UiTextField
+                              label="Asset Key"
+                              value={generatedMediaIdentity.asset_key}
+                              disabled
+                            />
+                            <UiTextField
+                              label="Etykieta"
+                              value={generatedMediaIdentity.label}
+                              disabled
+                            />
                           </div>
 
-                          <Field label="Przeznaczenie (Purpose)">
-                            <select
-                              style={inputStyle}
+                          <UiField label="Przeznaczenie (Purpose)">
+                            <UiSelect
+                              aria-label="Przeznaczenie (Purpose)"
                               value={mediaAssetForm.purpose}
-                              onChange={(event) => {
-                                const purpose = event.target.value as MediaAssetFormState['purpose'];
+                              onChange={(value) => {
+                                const purpose = value as MediaAssetFormState['purpose'];
                                 const fallbackSign =
                                   purpose === 'horoscope_sign'
                                     ? mediaAssetForm.sign_slug.trim() ||
@@ -4193,88 +4106,82 @@ const HomePage = () => {
                                   sign_slug: fallbackSign,
                                 }));
                               }}
-                            >
-                              <option value="blog_article">Artykuł blogowy</option>
-                              <option value="daily_card">Karta dnia</option>
-                              <option value="horoscope_sign">Znak zodiaku</option>
-                              <option value="fallback_general">Ogólny fallback</option>
-                            </select>
-                          </Field>
+                              options={[
+                                { value: 'blog_article', label: 'Artykuł blogowy' },
+                                { value: 'daily_card', label: 'Karta dnia' },
+                                { value: 'horoscope_sign', label: 'Znak zodiaku' },
+                                { value: 'fallback_general', label: 'Ogólny fallback' },
+                              ]}
+                            />
+                          </UiField>
 
                           {mediaAssetForm.purpose === 'horoscope_sign' && (
-                            <Field label="Znak zodiaku">
-                              <select
-                                style={inputStyle}
+                            <UiField label="Znak zodiaku">
+                              <UiSelect
+                                aria-label="Znak zodiaku"
                                 value={mediaAssetForm.sign_slug}
-                                onChange={(event) =>
+                                onChange={(value) =>
                                   setMediaAssetForm((prev) => ({
                                     ...prev,
-                                    sign_slug: event.target.value,
+                                    sign_slug: String(value),
                                   }))
                                 }
-                              >
-                                <option value="">Wybierz znak...</option>
-                                {signOptions
+                                placeholder="Wybierz znak..."
+                                options={signOptions
                                   .filter((s) => s !== 'all')
-                                  .map((item) => (
-                                    <option key={item} value={item.toLowerCase()}>
-                                      {item}
-                                    </option>
-                                  ))}
-                              </select>
-                            </Field>
+                                  .map((item) => ({
+                                    value: item.toLowerCase(),
+                                    label: item,
+                                  }))}
+                              />
+                            </UiField>
                           )}
 
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <Field label="Zasięg czasowy">
-                              <select
-                                style={inputStyle}
+                            <UiField label="Zasięg czasowy">
+                              <UiSelect
+                                aria-label="Zasięg czasowy"
                                 value={mediaAssetForm.period_scope}
-                                onChange={(event) =>
+                                onChange={(value) =>
                                   setMediaAssetForm((prev) => ({
                                     ...prev,
-                                    period_scope: event.target.value as MediaAssetFormState['period_scope'],
+                                    period_scope: value as MediaAssetFormState['period_scope'],
                                   }))
                                 }
-                              >
-                                <option value="any">Dowolny</option>
-                                <option value="daily">Dzienny</option>
-                                <option value="weekly">Tygodniowy</option>
-                                <option value="monthly">Miesięczny</option>
-                              </select>
-                            </Field>
-                            <Field label="Priorytet">
-                              <input
-                                type="number"
-                                style={inputStyle}
-                                value={mediaAssetForm.priority}
-                                onChange={(event) =>
-                                  setMediaAssetForm((prev) => ({
-                                    ...prev,
-                                    priority: Number(event.target.value),
-                                  }))
-                                }
+                                options={[
+                                  { value: 'any', label: 'Dowolny' },
+                                  { value: 'daily', label: 'Dzienny' },
+                                  { value: 'weekly', label: 'Tygodniowy' },
+                                  { value: 'monthly', label: 'Miesięczny' },
+                                ]}
                               />
-                            </Field>
+                            </UiField>
+                            <UiTextField
+                              label="Priorytet"
+                              type="number"
+                              value={String(mediaAssetForm.priority)}
+                              onChange={(event) =>
+                                setMediaAssetForm((prev) => ({
+                                  ...prev,
+                                  priority: Number(event.target.value),
+                                }))
+                              }
+                            />
                           </div>
 
                           <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-                            <button
-                              type="button"
-                              style={{ ...primaryButtonStyle, flex: 1 }}
+                            <UiButton
+                              variant="primary"
+                              fullWidth
                               disabled={saving}
+                              loading={saving}
                               onClick={() => void saveMediaMapping()}
                             >
                               {saving ? 'Zapisywanie...' : 'Zapisz mapowanie'}
-                            </button>
+                            </UiButton>
                             {selectedMediaFile.mapping && (
-                              <button
-                                type="button"
-                                style={{
-                                  ...secondaryButtonStyle,
-                                  color: COLORS.danger,
-                                  borderColor: COLORS.danger,
-                                }}
+                              <UiButton
+                                variant="danger"
                                 disabled={saving}
                                 onClick={() => {
                                   const mappingId = selectedMediaFile.mapping?.id;
@@ -4284,7 +4191,7 @@ const HomePage = () => {
                                 }}
                               >
                                 Usuń
-                              </button>
+                              </UiButton>
                             )}
                           </div>
                         </div>
@@ -4325,22 +4232,20 @@ const HomePage = () => {
                 }}
               >
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    style={secondaryButtonStyle}
+                  <UiButton
+                    variant="secondary"
                     disabled={saving || bulkSelectedFileIds.length === 0}
                     onClick={() => void previewBulkMapping()}
                   >
                     Podgląd zmian ({bulkSelectedFileIds.length})
-                  </button>
-                  <button
-                    type="button"
-                    style={primaryButtonStyle}
+                  </UiButton>
+                  <UiButton
+                    variant="primary"
                     disabled={saving || bulkSelectedFileIds.length === 0}
                     onClick={() => void applyBulkMapping()}
                   >
                     Zastosuj mapowanie masowe
-                  </button>
+                  </UiButton>
                 </div>
 
                 {bulkPreview && (
