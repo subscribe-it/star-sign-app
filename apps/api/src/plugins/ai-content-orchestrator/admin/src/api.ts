@@ -454,24 +454,30 @@ export const api = {
     return data.data;
   },
 
-  async backfillArticleImages(client: FetchClient): Promise<{ updated: number }> {
-    const { data } = await client.post<ApiEnvelope<{ updated: number }>>(
-      `${BASE}/media/backfill/article-images`
-    );
+  async backfillArticleImages(
+    client: FetchClient
+  ): Promise<{ updated: number; attempted: number; skipped: number; failed: number }> {
+    const { data } = await client.post<
+      ApiEnvelope<{ updated: number; attempted: number; skipped: number; failed: number }>
+    >(`${BASE}/media/backfill/article-images`);
     return data.data;
   },
 
-  async backfillTarotCardImages(client: FetchClient): Promise<{ updated: number }> {
-    const { data } = await client.post<ApiEnvelope<{ updated: number }>>(
-      `${BASE}/media/backfill/tarot-card-images`
-    );
+  async backfillTarotCardImages(
+    client: FetchClient
+  ): Promise<{ updated: number; attempted: number; skipped: number; failed: number }> {
+    const { data } = await client.post<
+      ApiEnvelope<{ updated: number; attempted: number; skipped: number; failed: number }>
+    >(`${BASE}/media/backfill/tarot-card-images`);
     return data.data;
   },
 
-  async backfillZodiacSignImages(client: FetchClient): Promise<{ updated: number }> {
-    const { data } = await client.post<ApiEnvelope<{ updated: number }>>(
-      `${BASE}/media/backfill/zodiac-sign-images`
-    );
+  async backfillZodiacSignImages(
+    client: FetchClient
+  ): Promise<{ updated: number; attempted: number; skipped: number; failed: number }> {
+    const { data } = await client.post<
+      ApiEnvelope<{ updated: number; attempted: number; skipped: number; failed: number }>
+    >(`${BASE}/media/backfill/zodiac-sign-images`);
     return data.data;
   },
 

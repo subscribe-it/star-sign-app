@@ -3,6 +3,7 @@ import type { Context } from 'koa';
 import { TOPIC_QUEUE_UID } from '../constants';
 import type { Strapi } from '../types';
 import { recordAdminAuditEvent } from '../utils/audit-trail';
+import { getEntityService } from '../utils/entity-service';
 import { toSafeErrorMessage } from '../utils/json';
 
 const topicsController = ({ strapi }: { strapi: Strapi }) => ({
@@ -115,6 +116,39 @@ const topicsController = ({ strapi }: { strapi: Strapi }) => ({
         severity: 'error',
         resourceUid: TOPIC_QUEUE_UID,
         resourceId: ctx.params.id,
+        metadata: { error: message },
+      });
+      ctx.badRequest(message);
+    }
+  },
+
+  async delete(ctx: Context): Promise<void> {
+    const id = Number(ctx.params.id);
+
+    if (!Number.isFinite(id)) {
+      ctx.badRequest('Niepoprawny identyfikator tematu.');
+      return;
+    }
+
+    try {
+      await getEntityService(strapi).delete(TOPIC_QUEUE_UID, id);
+
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'topic.delete',
+        outcome: 'success',
+        resourceUid: TOPIC_QUEUE_UID,
+        resourceId: id,
+        metadata: { deleted: true },
+      });
+      ctx.body = { data: { id } };
+    } catch (error) {
+      const message = toSafeErrorMessage(error);
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'topic.delete',
+        outcome: 'failure',
+        severity: 'error',
+        resourceUid: TOPIC_QUEUE_UID,
+        resourceId: id,
         metadata: { error: message },
       });
       ctx.badRequest(message);
