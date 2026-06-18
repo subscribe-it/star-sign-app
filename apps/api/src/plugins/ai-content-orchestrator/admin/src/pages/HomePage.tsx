@@ -20,6 +20,7 @@ import { MediaTab } from './homepage/MediaTab';
 import { RunsTab } from './homepage/RunsTab';
 import { SettingsTab } from './homepage/SettingsTab';
 import { SocialTab } from './homepage/SocialTab';
+import VideoTab, { type VideoJobPayload } from './homepage/VideoTab';
 import { TopicsTab } from './homepage/TopicsTab';
 import { WorkflowSocialStep } from './homepage/WorkflowSocialStep';
 import { WorkflowsTab } from './homepage/WorkflowsTab';
@@ -67,6 +68,7 @@ type TabKey =
   | 'media'
   | 'runs'
   | 'social'
+  | 'video'
   | 'audit'
   | 'growth'
   | 'settings';
@@ -382,6 +384,7 @@ const TAB_DEFS: Array<[TabKey, string]> = [
   ['media', 'Katalog mediów'],
   ['runs', 'Monitoring'],
   ['social', 'Social'],
+  ['video', 'Wideo'],
   ['audit', 'Audyt'],
   ['growth', 'Wzrost'],
   ['settings', 'Ustawienia'],
@@ -1035,6 +1038,9 @@ const HomePage = () => {
   const [autonomyStatus, setAutonomyStatus] = useState<AutonomyStatus | null>(null);
   const [generationJobs, setGenerationJobs] = useState<GenerationJob[]>([]);
   const [videoAssets, setVideoAssets] = useState<VideoAsset[]>([]);
+  const [videoLoading, setVideoLoading] = useState<boolean>(false);
+  const [videoCreating, setVideoCreating] = useState<boolean>(false);
+  const [videoBusyAssetId, setVideoBusyAssetId] = useState<number | null>(null);
   const [adCampaignPlans, setAdCampaignPlans] = useState<AdCampaignPlan[]>([]);
   const [growthExperiments, setGrowthExperiments] = useState<GrowthExperiment[]>([]);
   const [providerStatuses, setProviderStatuses] = useState<ProviderCredentialStatus[]>([]);
@@ -2094,6 +2100,60 @@ const HomePage = () => {
       showError(`Provider preflight nie powiódł się: ${String(error)}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const refreshVideoAssets = async (): Promise<void> => {
+    setVideoLoading(true);
+    try {
+      const items = await api.getVideoAssets(client, { limit: 50 });
+      setVideoAssets(items);
+    } catch (error) {
+      showError(`Nie udało się pobrać materiałów wideo: ${getErrorMessage(error)}`);
+    } finally {
+      setVideoLoading(false);
+    }
+  };
+
+  const createVideoJob = async (payload: VideoJobPayload): Promise<void> => {
+    setVideoCreating(true);
+    try {
+      await api.createVideoJob(client, payload);
+      showSuccess('Zlecenie wideo zostało utworzone.');
+      await refreshVideoAssets();
+    } catch (error) {
+      showError(`Nie udało się utworzyć zlecenia wideo: ${getErrorMessage(error)}`);
+    } finally {
+      setVideoCreating(false);
+    }
+  };
+
+  const renderVideo = async (id: number): Promise<void> => {
+    setVideoBusyAssetId(id);
+    try {
+      await api.renderVideoAsset(client, id);
+      showSuccess(`Renderowanie materiału #${id} zostało uruchomione.`);
+      await refreshVideoAssets();
+    } catch (error) {
+      showError(`Nie udało się wyrenderować materiału #${id}: ${getErrorMessage(error)}`);
+    } finally {
+      setVideoBusyAssetId(null);
+    }
+  };
+
+  const publishVideo = async (id: number): Promise<void> => {
+    setVideoBusyAssetId(id);
+    try {
+      const result = await api.publishVideoAsset(client, id);
+      const blockedSuffix = result.blocked ? `, zablokowano: ${result.blocked}` : '';
+      showSuccess(
+        `Opublikowano: utworzono ${result.created}, pominięto ${result.skipped}${blockedSuffix}`
+      );
+      await refreshVideoAssets();
+    } catch (error) {
+      showError(`Nie udało się opublikować materiału #${id}: ${getErrorMessage(error)}`);
+    } finally {
+      setVideoBusyAssetId(null);
     }
   };
 
@@ -3451,6 +3511,30 @@ const HomePage = () => {
             onCancelTicket={(ticketId) => {
               void cancelSocialTicket(ticketId);
             }}
+          />
+        )}
+
+        {activeTab === 'video' && (
+          <VideoTab
+            assets={videoAssets}
+            loading={videoLoading}
+            creating={videoCreating}
+            busyAssetId={videoBusyAssetId}
+            onRefresh={() => {
+              void refreshVideoAssets();
+            }}
+            onCreateJob={(payload) => {
+              void createVideoJob(payload);
+            }}
+            onRender={(id) => {
+              void renderVideo(id);
+            }}
+            onPublish={(id) => {
+              void publishVideo(id);
+            }}
+            cardStyle={CARD_STYLE}
+            sectionTitleStyle={SECTION_TITLE_STYLE}
+            colors={COLORS}
           />
         )}
 
