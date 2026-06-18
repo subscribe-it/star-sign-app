@@ -18,8 +18,14 @@ import {
   SingleSelect,
   SingleSelectOption,
   Status,
+  Table,
+  Tbody,
+  Td,
   Textarea,
   TextInput,
+  Th,
+  Thead,
+  Tr,
 } from '@strapi/design-system';
 import * as React from 'react';
 
@@ -357,4 +363,105 @@ export const UiAlert = ({
   >
     {children}
   </Alert>
+);
+
+// ——————————————————————————————————————————————————————————————————————————
+// Tabele danych — cienka nakładka na prymitywy DS Table (v2.2.0):
+//   Table, Thead, Tbody, Tr, Th, Td.
+//
+// Cel (Etap 3): dać tabelom DOSTĘPNĄ semantykę i nawigację klawiaturą z DS
+// (rola grid, aria-rowindex/colindex, kontekst RawTable), ZACHOWUJĄC dokładnie
+// dotychczasowy, markowy wygląd komórek (jasnoszare nagłówki UPPERCASE,
+// delikatne linie, padding). Dlatego UiTh/UiTd wstrzykują te same style inline
+// co poprzednie, ręczne helpery `Th`/`Td` w HomePage — inline style wygrywa nad
+// domyślnym stylowaniem DS dla ustawionych właściwości.
+//
+// DS `Table` WYMAGA `colCount` i `rowCount` (liczbowo) — służą nawigacji
+// klawiaturą. UiTable przyjmuje je jawnie oraz opcjonalny `minWidth`
+// i otacza tabelę kontenerem z poziomym przewijaniem (jak dotychczas).
+//
+// Kolory zdublowane lokalnie (jak w CARD_STYLE) — odpowiadają COLORS z
+// HomePage.tsx; nie zmieniamy wyglądu.
+// ——————————————————————————————————————————————————————————————————————————
+const TABLE_COLORS = {
+  text: '#1e293b',
+  textLight: '#64748b',
+  border: '#e2e8f0',
+  theadBg: '#fcfcfd',
+};
+
+const TH_STYLE: React.CSSProperties = {
+  textAlign: 'left',
+  padding: '12px 16px',
+  fontSize: 12,
+  fontWeight: 700,
+  color: TABLE_COLORS.textLight,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  borderBottom: `2px solid ${TABLE_COLORS.border}`,
+  background: TABLE_COLORS.theadBg,
+};
+
+const TD_STYLE: React.CSSProperties = {
+  padding: '16px 16px',
+  fontSize: 14,
+  color: TABLE_COLORS.text,
+  borderBottom: `1px solid ${TABLE_COLORS.border}`,
+  verticalAlign: 'middle',
+};
+
+// UiTable — kontener przewijania + DS Table (wymaga colCount/rowCount).
+// `minWidth` mapuje na dawne `style={{ minWidth: N }}` na <table>.
+export type UiTableProps = {
+  children?: React.ReactNode;
+  colCount: number;
+  rowCount: number;
+  minWidth?: number;
+  style?: React.CSSProperties;
+};
+
+export const UiTable = ({ children, colCount, rowCount, minWidth, style }: UiTableProps) => (
+  <div style={{ overflowX: 'auto', ...style }}>
+    <Table colCount={colCount} rowCount={rowCount} style={minWidth ? { minWidth } : undefined}>
+      {children}
+    </Table>
+  </div>
+);
+
+// UiThead / UiTbody / UiTr — cienkie pass-through na prymitywy DS.
+export const UiThead = ({ children }: { children?: React.ReactNode }) => <Thead>{children}</Thead>;
+
+export const UiTbody = ({ children }: { children?: React.ReactNode }) => <Tbody>{children}</Tbody>;
+
+export type UiTrProps = {
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+};
+
+export const UiTr = ({ children, style }: UiTrProps) => <Tr style={style}>{children}</Tr>;
+
+// UiTh / UiTd — komórki DS ze wstrzykniętym markowym stylem.
+// `style` z zewnątrz dokleja się NA KOŃCU (nadpisuje, np. textAlign:'right').
+export type UiThProps = {
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+};
+
+export const UiTh = ({ children, style }: UiThProps) => (
+  <Th style={{ ...TH_STYLE, ...style }}>
+    {/* DS Th wymaga children; pusta komórka (np. kolumna na przełącznik) -> spacja */}
+    {children ?? ' '}
+  </Th>
+);
+
+export type UiTdProps = {
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+  colSpan?: number;
+};
+
+export const UiTd = ({ children, style, colSpan }: UiTdProps) => (
+  <Td colSpan={colSpan} style={{ ...TD_STYLE, ...style }}>
+    {children}
+  </Td>
 );
