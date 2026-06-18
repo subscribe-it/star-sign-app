@@ -81,14 +81,22 @@ test.describe('Star Sign - Main Flow', () => {
   }) => {
     const emailInput = page.locator('[data-test="home-newsletter-input"]');
     const submitButton = page.locator('[data-test="home-newsletter-submit"]');
-
-    // Invalid email
-    await emailInput.fill('invalid-email');
-    await submitButton.click();
-
-    // In a real app, we'd check for a validation message
-    // For now, let's assume it doesn't show success
+    const consentCheckbox = page.locator(
+      '[data-test="home-newsletter-consent"]',
+    );
     const successMsg = page.locator('[data-test="home-newsletter-success"]');
+
+    // GDPR: the submit button stays disabled until the marketing-consent
+    // checkbox is ticked, regardless of the email value.
+    await emailInput.fill('invalid-email');
+    await expect(submitButton).toBeDisabled();
+
+    // Giving consent enables the button...
+    await consentCheckbox.check();
+    await expect(submitButton).toBeEnabled();
+
+    // ...but an invalid email is still rejected client-side: no success state.
+    await submitButton.click();
     await expect(successMsg).not.toBeVisible();
   });
 
