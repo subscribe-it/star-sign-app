@@ -21,6 +21,8 @@
             [srcset]="currentSign.image | strapiSrcset"
             sizes="(max-width: 768px) 192px, 256px"
             [alt]="currentSign.name"
+            fetchpriority="high"
+            decoding="async"
             class="w-full h-full object-contain filter drop-shadow-2xl"
           />
           <div

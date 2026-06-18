@@ -46,6 +46,7 @@ describe('BlogDetail', () => {
     seoService = {
       absoluteUrl: vi.fn((path: string) => `https://star-sign.pl${path}`),
       updateSeo: vi.fn(),
+      setBreadcrumbsJsonLd: vi.fn(),
     };
 
     authService = {

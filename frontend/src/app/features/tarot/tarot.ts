@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
@@ -7,6 +7,7 @@ import {
   heroHeart,
   heroLockClosed,
 } from '@ng-icons/heroicons/outline';
+import { SeoService } from '../../core/services/seo.service';
 
 @Component({
   selector: 'app-tarot',
@@ -19,6 +20,8 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Tarot {
+  private readonly seoService = inject(SeoService);
+
   public readonly spreads = [
     {
       id: 'karta-dnia',
@@ -27,7 +30,7 @@ export class Tarot {
         'Poznaj swoje jednokartowe przesłanie na dzisiaj. Idealny punkt startowy na każdy poranek.',
       icon: 'heroSparkles',
       locked: false,
-      link: '/tarot/karta-dnia',
+      link: '/tarot/karta-dnia' as string | null,
     },
     {
       id: 'rozkad-milosny',
@@ -36,7 +39,7 @@ export class Tarot {
         'Zgłęb tajemnice swojego życia uczuciowego za pomocą klasycznego rozkładu trzech kart.',
       icon: 'heroHeart',
       locked: true,
-      link: null,
+      link: null as string | null,
     },
     {
       id: 'tarot-ksiezycowy',
@@ -45,7 +48,34 @@ export class Tarot {
         'Przesłanie połączone z obecną fazą Księżyca. Odkryj co skrywa podświadomość.',
       icon: 'heroMoon',
       locked: true,
-      link: null,
+      link: null as string | null,
     },
   ];
+
+  constructor() {
+    const canonicalUrl = this.seoService.absoluteUrl('/tarot');
+    this.seoService.updateSeo(
+      'Tarot online — wybierz rozkład',
+      'Odkryj głęboki wgląd Tarota w Star Sign. Wybierz rozkład, wylosuj Kartę Dnia i poznaj swoje przesłanie na dziś.',
+      {
+        canonicalUrl,
+        jsonLd: {
+          '@context': 'https://schema.org',
+          '@type': 'CollectionPage',
+          name: 'Tarot Star Sign',
+          description:
+            'Rozkłady Tarota w Star Sign: Karta Dnia, rozkład miłosny i wróżba księżycowa.',
+          url: canonicalUrl,
+          hasPart: this.spreads.map((spread) => ({
+            '@type': 'CreativeWork',
+            name: spread.name,
+            description: spread.description,
+            url: spread.link
+              ? this.seoService.absoluteUrl(spread.link)
+              : canonicalUrl,
+          })),
+        },
+      },
+    );
+  }
 }

@@ -1,4 +1,9 @@
-import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
+import {
+  Component,
+  ChangeDetectionStrategy,
+  inject,
+  effect,
+} from '@angular/core';
 import {
   ActivatedRouteSnapshot,
   NavigationEnd,
@@ -8,6 +13,7 @@ import {
 } from '@angular/router';
 import { filter, map, startWith } from 'rxjs/operators';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { SeoService } from '../../../core/services/seo.service';
 
 interface Breadcrumb {
   label: string;
@@ -59,6 +65,7 @@ interface Breadcrumb {
 })
 export class BreadcrumbsComponent {
   private readonly router = inject(Router);
+  private readonly seoService = inject(SeoService);
 
   public readonly breadcrumbs = toSignal(
     this.router.events.pipe(
@@ -68,6 +75,26 @@ export class BreadcrumbsComponent {
     ),
     { initialValue: [] as Breadcrumb[] },
   );
+
+  constructor() {
+    // Emit a schema.org BreadcrumbList for richer search results. The visible
+    // trail always begins with the "Start" (home) link, so we mirror that as
+    // the first list item. SSR-safe: the SeoService writes via the injected
+    // DOCUMENT, never touching window/document directly.
+    effect(() => {
+      const trail = this.breadcrumbs();
+
+      if (trail.length === 0) {
+        this.seoService.setBreadcrumbsJsonLd([]);
+        return;
+      }
+
+      this.seoService.setBreadcrumbsJsonLd([
+        { name: 'Start', url: '/' },
+        ...trail.map((crumb) => ({ name: crumb.label, url: crumb.url })),
+      ]);
+    });
+  }
 
   private buildBreadcrumbs(
     route: ActivatedRouteSnapshot,

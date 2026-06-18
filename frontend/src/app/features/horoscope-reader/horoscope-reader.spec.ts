@@ -39,7 +39,11 @@ describe('HoroscopeReader', () => {
         { provide: AccountService, useValue: accountService },
         {
           provide: SeoService,
-          useValue: { updateSeo: vi.fn(), absoluteUrl: (p: string) => `https://star-sign.pl${p}` },
+          useValue: {
+            updateSeo: vi.fn(),
+            absoluteUrl: (p: string) => `https://star-sign.pl${p}`,
+            setBreadcrumbsJsonLd: vi.fn(),
+          },
         },
         {
           provide: AnalyticsService,

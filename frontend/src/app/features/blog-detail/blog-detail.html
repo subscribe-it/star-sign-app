@@ -96,6 +96,8 @@
         [srcset]="currentArticle.image | strapiSrcset"
         sizes="(max-width: 1024px) 100vw, 1200px"
         [alt]="currentArticle.image.alternativeText || currentArticle.title"
+        fetchpriority="high"
+        decoding="async"
         class="absolute inset-0 w-full h-full object-cover"
       />
       <div
@@ -265,6 +267,8 @@
           <img
             [src]="item.image?.url | strapiImage"
             [alt]="item.title"
+            loading="lazy"
+            decoding="async"
             class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
           <div class="absolute top-4 left-4 flex flex-col gap-2">
