@@ -121,6 +121,58 @@ export class SeoService {
     this.document.head.appendChild(script);
   }
 
+  /**
+   * Emits sitewide schema.org Organization + WebSite JSON-LD as a single
+   * @graph payload. Intended to be called once during root initialization so
+   * Google can build the brand/knowledge panel and (when a search route
+   * exists) a sitelinks searchbox.
+   *
+   * Uses a dedicated <script> id so it coexists with the page-level JSON-LD
+   * (setJsonLd) and the breadcrumb JSON-LD (setBreadcrumbsJsonLd) without
+   * clobbering them. SSR-safe (uses the injected DOCUMENT). Idempotent: calling
+   * it again refreshes the same script element rather than duplicating it.
+   */
+  public setSiteJsonLd(): void {
+    const scriptId = 'star-sign-site-json-ld';
+    const siteUrl = this.absoluteUrl('/');
+
+    const organization = {
+      '@type': 'Organization',
+      '@id': `${siteUrl}#organization`,
+      name: 'Star Sign',
+      url: siteUrl,
+      logo: this.absoluteUrl('/assets/icons/icon-512.png'),
+      description:
+        'Star Sign to portal o astrologii: horoskopy, znaki zodiaku, tarot, numerologia i kosmogram.',
+    };
+
+    const website = {
+      '@type': 'WebSite',
+      '@id': `${siteUrl}#website`,
+      name: 'Star Sign',
+      url: siteUrl,
+      inLanguage: 'pl-PL',
+      publisher: { '@id': `${siteUrl}#organization` },
+    };
+
+    const payload = {
+      '@context': 'https://schema.org',
+      '@graph': [organization, website],
+    };
+
+    const existing = this.document.getElementById(scriptId);
+    if (existing) {
+      existing.textContent = JSON.stringify(payload);
+      return;
+    }
+
+    const script = this.document.createElement('script');
+    script.id = scriptId;
+    script.type = 'application/ld+json';
+    script.text = JSON.stringify(payload);
+    this.document.head.appendChild(script);
+  }
+
   private setCanonical(url: string): void {
     const existing = this.document.querySelector<HTMLLinkElement>(
       'link[rel="canonical"]',
