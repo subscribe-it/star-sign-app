@@ -1,19 +1,93 @@
 import {
+  DEFAULT_TIMEZONE,
   PUBLICATION_TICKET_UID,
   RUN_LOG_UID,
   TOPIC_QUEUE_UID,
+  USAGE_DAILY_UID,
   WORKFLOW_UID,
   WORKFLOW_STATUS,
   SOCIAL_POST_TICKET_UID,
 } from '../constants';
-import type { RunLogRecord, Strapi } from '../types';
+import type {
+  AutonomyPolicyRecord,
+  RunLogRecord,
+  Strapi,
+  UsageDailyRecord,
+} from '../types';
+import { formatDateInZone } from '../utils/date-time';
 import { getEntityService } from '../utils/entity-service';
+import { getPluginService } from '../utils/plugin';
 import { sanitizeRunRecordForAdmin } from '../utils/diagnostic-redaction';
+
+type AutonomyPolicyCounts = {
+  mediaJobsToday: number;
+  llmRequestsToday: number;
+  adsSpendTodayPln: number;
+};
+
+type AutonomyPolicyService = {
+  getPolicy: () => Promise<AutonomyPolicyRecord>;
+  getCounts: () => Promise<AutonomyPolicyCounts>;
+};
+
+// Today's spend/usage snapshot for the operator-facing "Budżet i zużycie (dziś)"
+// card. Read-only and cheap: one count-bounded usage-daily query plus a reuse of
+// the autonomy-policy service (single getPolicy + getCounts), no heavy scans.
+type DashboardUsageSummary = {
+  llm: { requests: number; tokens: number; requestsCap: number };
+  media: { jobsToday: number; cap: number };
+  ads: { spentPln: number; capPln: number };
+};
+
+const toNumber = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 const dashboard = ({ strapi }: { strapi: Strapi }) => {
   const entityService = getEntityService(strapi);
 
+  const getTodayUsageSummary = async (): Promise<DashboardUsageSummary> => {
+    const autonomy = getPluginService<AutonomyPolicyService | undefined>(strapi, 'autonomy-policy');
+    // Align with the workflow business day so LLM rows match the same `day` the
+    // usage service writes (usage-daily stores the local business-day string).
+    const businessDay = formatDateInZone(new Date(), DEFAULT_TIMEZONE);
+
+    // Caps/counts come from the autonomy-policy service; degrade gracefully (zeros)
+    // if it is unavailable so this read-only card never breaks the dashboard.
+    const [policy, counts, usageRows] = await Promise.all([
+      autonomy?.getPolicy ? autonomy.getPolicy() : Promise.resolve(null),
+      autonomy?.getCounts ? autonomy.getCounts() : Promise.resolve(null),
+      entityService.findMany<UsageDailyRecord>(USAGE_DAILY_UID, {
+        filters: { day: businessDay },
+        fields: ['request_count', 'total_tokens'],
+        limit: 500,
+      }),
+    ]);
+
+    const llmRequests = usageRows.reduce((sum, row) => sum + toNumber(row.request_count), 0);
+    const llmTokens = usageRows.reduce((sum, row) => sum + toNumber(row.total_tokens), 0);
+
+    return {
+      llm: {
+        requests: llmRequests,
+        tokens: llmTokens,
+        requestsCap: toNumber(policy?.daily_llm_request_limit),
+      },
+      media: {
+        jobsToday: toNumber(counts?.mediaJobsToday),
+        cap: toNumber(policy?.daily_media_job_limit),
+      },
+      ads: {
+        spentPln: toNumber(counts?.adsSpendTodayPln),
+        capPln: toNumber(policy?.daily_ads_budget_pln),
+      },
+    };
+  };
+
   return {
+    getTodayUsageSummary,
+
     async getSummary(): Promise<Record<string, unknown>> {
       const [
         workflowsTotal,
@@ -28,6 +102,7 @@ const dashboard = ({ strapi }: { strapi: Strapi }) => {
         socialScheduled,
         socialFailed,
         socialPublished,
+        usage,
       ] = await Promise.all([
         entityService.count(WORKFLOW_UID),
         entityService.count(WORKFLOW_UID, { filters: { enabled: true } }),
@@ -45,6 +120,7 @@ const dashboard = ({ strapi }: { strapi: Strapi }) => {
         entityService.count(SOCIAL_POST_TICKET_UID, { filters: { status: 'scheduled' } }),
         entityService.count(SOCIAL_POST_TICKET_UID, { filters: { status: 'failed' } }),
         entityService.count(SOCIAL_POST_TICKET_UID, { filters: { status: 'published' } }),
+        getTodayUsageSummary(),
       ]);
 
       return {
@@ -70,6 +146,7 @@ const dashboard = ({ strapi }: { strapi: Strapi }) => {
           failed: socialFailed,
           published: socialPublished,
         },
+        usage,
       };
     },
   };

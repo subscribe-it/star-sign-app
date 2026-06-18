@@ -345,6 +345,25 @@ export type DashboardSummary = {
     failed: number;
     published: number;
   };
+  // Dzisiejsze zużycie kosztowe (LLM / media / reklamy) względem dziennych
+  // limitów autonomii. Read-only, prezentowane na karcie "Budżet i zużycie (dziś)".
+  usage?: DashboardUsageSummary;
+};
+
+export type DashboardUsageSummary = {
+  llm: {
+    requests: number;
+    tokens: number;
+    requestsCap: number;
+  };
+  media: {
+    jobsToday: number;
+    cap: number;
+  };
+  ads: {
+    spentPln: number;
+    capPln: number;
+  };
 };
 
 export type DiagnosticsSummary = {
