@@ -11,8 +11,10 @@ import {
   UiSelect,
   UiStatus,
   UiTextField,
+  UiTextInput,
   UiTextareaField,
 } from '../components/ui';
+import type { UiTone } from '../components/ui';
 import { WorkflowSocialStep } from './homepage/WorkflowSocialStep';
 import type {
   AuditReport,
@@ -2800,9 +2802,7 @@ const HomePage = () => {
                 socialConnectionResult={socialConnectionResult}
                 socialDryRunResult={socialDryRunResult}
                 validationIssues={socialStepValidationIssues}
-                inputStyle={inputStyle}
                 checkboxRowStyle={checkboxRowStyle}
-                secondaryButtonStyle={secondaryButtonStyle}
                 textColor={COLORS.text}
                 textLightColor={COLORS.textLight}
                 borderColor={COLORS.border}
@@ -3668,22 +3668,13 @@ const HomePage = () => {
                       </Td>
                       <Td>
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                          <button
-                            type="button"
+                          <UiButton
+                            variant="danger"
+                            size="S"
                             onClick={() => void deleteTopic(topic.id)}
-                            style={{
-                              border: `1px solid ${COLORS.border}`,
-                              background: '#fff',
-                              borderRadius: 8,
-                              padding: '6px 12px',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: COLORS.danger,
-                              cursor: 'pointer',
-                            }}
                           >
                             Usuń
-                          </button>
+                          </UiButton>
                         </div>
                       </Td>
                     </tr>
@@ -4474,26 +4465,26 @@ const HomePage = () => {
               }}
             >
               <Field label="Status">
-                <select
-                  style={inputStyle}
+                <UiSelect
+                  aria-label="Status"
                   value={runFilters.status}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setRunFilters((prev) => ({
                       ...prev,
-                      status: event.target.value as RunFiltersState['status'],
+                      status: value as RunFiltersState['status'],
                     }))
                   }
-                >
-                  <option value="all">all</option>
-                  <option value="running">running</option>
-                  <option value="success">success</option>
-                  <option value="failed">failed</option>
-                  <option value="blocked_budget">blocked_budget</option>
-                </select>
+                  options={[
+                    { value: 'all', label: 'all' },
+                    { value: 'running', label: 'running' },
+                    { value: 'success', label: 'success' },
+                    { value: 'failed', label: 'failed' },
+                    { value: 'blocked_budget', label: 'blocked_budget' },
+                  ]}
+                />
               </Field>
               <Field label="Workflow name">
-                <input
-                  style={inputStyle}
+                <UiTextInput
                   value={runFilters.workflowName}
                   onChange={(event) =>
                     setRunFilters((prev) => ({ ...prev, workflowName: event.target.value }))
@@ -4501,9 +4492,8 @@ const HomePage = () => {
                 />
               </Field>
               <Field label="From">
-                <input
+                <UiTextInput
                   type="date"
-                  style={inputStyle}
                   value={runFilters.fromDate}
                   onChange={(event) =>
                     setRunFilters((prev) => ({ ...prev, fromDate: event.target.value }))
@@ -4511,9 +4501,8 @@ const HomePage = () => {
                 />
               </Field>
               <Field label="To">
-                <input
+                <UiTextInput
                   type="date"
-                  style={inputStyle}
                   value={runFilters.toDate}
                   onChange={(event) =>
                     setRunFilters((prev) => ({ ...prev, toDate: event.target.value }))
@@ -4521,13 +4510,12 @@ const HomePage = () => {
                 />
               </Field>
               <div style={{ display: 'flex', alignItems: 'end', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  style={secondaryButtonStyle}
+                <UiButton
+                  variant="secondary"
                   onClick={() => setRunFilters(initialRunFilters())}
                 >
                   Clear
-                </button>
+                </UiButton>
                 <button
                   type="button"
                   style={primaryButtonStyle}
@@ -4643,23 +4631,14 @@ const HomePage = () => {
                           </Td>
                           <Td>
                             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                              <button
-                                type="button"
+                              <UiButton
+                                variant="secondary"
+                                size="S"
                                 disabled={saving || run.status === 'running'}
                                 onClick={() => void retryRun(run.id)}
-                                style={{
-                                  border: `1px solid ${COLORS.border}`,
-                                  background: '#fff',
-                                  borderRadius: 8,
-                                  padding: '6px 12px',
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  cursor: 'pointer',
-                                  opacity: saving || run.status === 'running' ? 0.5 : 1,
-                                }}
                               >
                                 Ponów
-                              </button>
+                              </UiButton>
                             </div>
                           </Td>
                         </tr>
@@ -4938,34 +4917,19 @@ const HomePage = () => {
             </div>
 
             {socialOpsState !== 'ready' ? (
-              <div
-                style={{
-                  marginBottom: 14,
-                  padding: 12,
-                  borderRadius: 10,
-                  border:
+              <div style={{ marginBottom: 14 }}>
+                <UiAlert
+                  tone={
                     socialOpsState === 'blocked'
-                      ? '1px solid #fecaca'
+                      ? 'danger'
                       : socialOpsState === 'degraded'
-                        ? '1px solid #bfdbfe'
-                        : '1px solid #facc15',
-                  background:
-                    socialOpsState === 'blocked'
-                      ? '#fef2f2'
-                      : socialOpsState === 'degraded'
-                        ? '#eff6ff'
-                        : '#fefce8',
-                  color:
-                    socialOpsState === 'blocked'
-                      ? '#991b1b'
-                      : socialOpsState === 'degraded'
-                        ? '#1e40af'
-                        : '#854d0e',
-                  fontSize: 12,
-                }}
-              >
-                Status: <strong>{socialOpsState}</strong>.{' '}
-                {socialOpsMessage || 'Sprawdź RBAC i konfigurację endpointów social.'}
+                        ? 'info'
+                        : 'warning'
+                  }
+                  title={`Status: ${socialOpsState}`}
+                >
+                  {socialOpsMessage || 'Sprawdź RBAC i konfigurację endpointów social.'}
+                </UiAlert>
               </div>
             ) : null}
 
@@ -4978,45 +4942,46 @@ const HomePage = () => {
               }}
             >
               <Field label="Platform">
-                <select
-                  style={inputStyle}
+                <UiSelect
+                  aria-label="Platform"
                   value={socialFilters.platform}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setSocialFilters((prev) => ({
                       ...prev,
-                      platform: event.target.value as typeof socialFilters.platform,
+                      platform: value as typeof socialFilters.platform,
                     }))
                   }
-                >
-                  <option value="all">all</option>
-                  <option value="facebook">facebook</option>
-                  <option value="instagram">instagram</option>
-                  <option value="twitter">twitter</option>
-                  <option value="tiktok">tiktok draft-only</option>
-                </select>
+                  options={[
+                    { value: 'all', label: 'all' },
+                    { value: 'facebook', label: 'facebook' },
+                    { value: 'instagram', label: 'instagram' },
+                    { value: 'twitter', label: 'twitter' },
+                    { value: 'tiktok', label: 'tiktok draft-only' },
+                  ]}
+                />
               </Field>
               <Field label="Status">
-                <select
-                  style={inputStyle}
+                <UiSelect
+                  aria-label="Status"
                   value={socialFilters.status}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setSocialFilters((prev) => ({
                       ...prev,
-                      status: event.target.value as typeof socialFilters.status,
+                      status: value as typeof socialFilters.status,
                     }))
                   }
-                >
-                  <option value="all">all</option>
-                  <option value="scheduled">scheduled</option>
-                  <option value="pending">pending</option>
-                  <option value="published">published</option>
-                  <option value="failed">failed</option>
-                  <option value="canceled">canceled</option>
-                </select>
+                  options={[
+                    { value: 'all', label: 'all' },
+                    { value: 'scheduled', label: 'scheduled' },
+                    { value: 'pending', label: 'pending' },
+                    { value: 'published', label: 'published' },
+                    { value: 'failed', label: 'failed' },
+                    { value: 'canceled', label: 'canceled' },
+                  ]}
+                />
               </Field>
               <Field label="Workflow ID">
-                <input
-                  style={inputStyle}
+                <UiTextInput
                   value={socialFilters.workflow}
                   onChange={(event) =>
                     setSocialFilters((prev) => ({ ...prev, workflow: event.target.value }))
@@ -5025,13 +4990,12 @@ const HomePage = () => {
                 />
               </Field>
               <div style={{ display: 'flex', alignItems: 'end', gap: 8 }}>
-                <button
-                  type="button"
-                  style={secondaryButtonStyle}
+                <UiButton
+                  variant="secondary"
                   onClick={() => setSocialFilters({ platform: 'all', status: 'all', workflow: '' })}
                 >
                   Clear
-                </button>
+                </UiButton>
               </div>
             </div>
 
@@ -5078,9 +5042,9 @@ const HomePage = () => {
                       </Td>
                       <Td>
                         <div style={{ display: 'flex', gap: 8 }}>
-                          <button
-                            type="button"
-                            style={secondaryButtonStyle}
+                          <UiButton
+                            variant="secondary"
+                            size="S"
                             disabled={
                               saving ||
                               ticket.status === 'published' ||
@@ -5091,10 +5055,10 @@ const HomePage = () => {
                             }}
                           >
                             Retry
-                          </button>
-                          <button
-                            type="button"
-                            style={secondaryButtonStyle}
+                          </UiButton>
+                          <UiButton
+                            variant="danger"
+                            size="S"
                             disabled={
                               saving ||
                               ticket.status === 'published' ||
@@ -5105,7 +5069,7 @@ const HomePage = () => {
                             }}
                           >
                             Cancel
-                          </button>
+                          </UiButton>
                         </div>
                       </Td>
                     </tr>
@@ -5135,16 +5099,15 @@ const HomePage = () => {
                 Audyt produkcyjny (Go/No-Go)
               </h2>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  type="button"
-                  style={secondaryButtonStyle}
+                <UiButton
+                  variant="secondary"
                   disabled={saving}
                   onClick={() => {
                     void runPreflightAudit(false);
                   }}
                 >
                   Sprawdź (łagodnie)
-                </button>
+                </UiButton>
                 <button
                   type="button"
                   style={primaryButtonStyle}
@@ -5159,34 +5122,19 @@ const HomePage = () => {
             </div>
 
             {auditOpsState !== 'ready' ? (
-              <div
-                style={{
-                  marginBottom: 14,
-                  padding: 12,
-                  borderRadius: 10,
-                  border:
+              <div style={{ marginBottom: 14 }}>
+                <UiAlert
+                  tone={
                     auditOpsState === 'blocked'
-                      ? '1px solid #fecaca'
+                      ? 'danger'
                       : auditOpsState === 'degraded'
-                        ? '1px solid #bfdbfe'
-                        : '1px solid #facc15',
-                  background:
-                    auditOpsState === 'blocked'
-                      ? '#fef2f2'
-                      : auditOpsState === 'degraded'
-                        ? '#eff6ff'
-                        : '#fefce8',
-                  color:
-                    auditOpsState === 'blocked'
-                      ? '#991b1b'
-                      : auditOpsState === 'degraded'
-                        ? '#1e40af'
-                        : '#854d0e',
-                  fontSize: 12,
-                }}
-              >
-                Status: <strong>{auditOpsState}</strong>.{' '}
-                {auditOpsMessage || 'Sprawdź autoryzację i endpoint preflight.'}
+                        ? 'info'
+                        : 'warning'
+                  }
+                >
+                  Status: <strong>{auditOpsState}</strong>.{' '}
+                  {auditOpsMessage || 'Sprawdź autoryzację i endpoint preflight.'}
+                </UiAlert>
               </div>
             ) : null}
 
@@ -5431,16 +5379,15 @@ const HomePage = () => {
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
+                  <UiButton
+                    variant="secondary"
                     disabled={saving}
-                    style={secondaryButtonStyle}
                     onClick={() => {
                       void refreshGrowthData();
                     }}
                   >
                     Odśwież dane
-                  </button>
+                  </UiButton>
                   <button
                     type="button"
                     disabled={saving}
@@ -5641,21 +5588,22 @@ const HomePage = () => {
                 </div>
 
                 <Field label={help('autonomy_mode').label} hint={help('autonomy_mode').hint}>
-                  <select
-                    style={inputStyle}
-                    defaultValue={autonomyMode}
-                    onChange={(event) =>
+                  <UiSelect
+                    aria-label={help('autonomy_mode').label}
+                    value={autonomyMode}
+                    onChange={(value) =>
                       void saveAutonomyPatch(
-                        { autonomy_mode: event.target.value },
+                        { autonomy_mode: String(value) },
                         'Zmieniono tryb autonomii.'
                       )
                     }
-                  >
-                    <option value="off">Wyłączony</option>
-                    <option value="draft_only">Tylko szkice</option>
-                    <option value="guarded">Strzeżony</option>
-                    <option value="full">Pełny</option>
-                  </select>
+                    options={[
+                      { value: 'off', label: 'Wyłączony' },
+                      { value: 'draft_only', label: 'Tylko szkice' },
+                      { value: 'guarded', label: 'Strzeżony' },
+                      { value: 'full', label: 'Pełny' },
+                    ]}
+                  />
                 </Field>
 
                 <Field label={help('global_kill_switch').label} hint={help('global_kill_switch').hint}>
@@ -5793,12 +5741,10 @@ const HomePage = () => {
                 }}
               >
                 <Field label="Potwierdzenie kontrolowanego uruchomienia">
-                  <input
-                    style={inputStyle}
+                  <UiTextInput
                     value={runNowConfirmation}
                     onChange={(event) => setRunNowConfirmation(event.target.value)}
                     placeholder={RUN_NOW_CONFIRMATION}
-                    autoComplete="off"
                   />
                 </Field>
                 <button
@@ -6012,12 +5958,10 @@ const HomePage = () => {
                     }}
                   >
                     <Field label="Ads stop-loss confirmation">
-                      <input
-                        style={inputStyle}
+                      <UiTextInput
                         value={adsStopLossConfirmation}
                         onChange={(event) => setAdsStopLossConfirmation(event.target.value)}
                         placeholder={ADS_STOP_LOSS_CONFIRMATION}
-                        autoComplete="off"
                       />
                     </Field>
                     <button
@@ -6098,9 +6042,8 @@ const HomePage = () => {
                 }}
               >
                 <Field label="Start tygodnia">
-                  <input
+                  <UiTextInput
                     type="date"
-                    style={inputStyle}
                     value={strategyForm.weekStart}
                     onChange={(event) =>
                       setStrategyForm((prev) => ({ ...prev, weekStart: event.target.value }))
@@ -6108,34 +6051,31 @@ const HomePage = () => {
                   />
                 </Field>
                 <Field label="Limit">
-                  <input
+                  <UiTextInput
                     type="number"
-                    min={1}
-                    max={30}
-                    style={inputStyle}
-                    value={strategyForm.limit}
+                    value={String(strategyForm.limit)}
                     onChange={(event) =>
                       setStrategyForm((prev) => ({ ...prev, limit: Number(event.target.value) }))
                     }
                   />
                 </Field>
                 <Field label="Workflow article">
-                  <select
-                    style={inputStyle}
+                  <UiSelect
+                    aria-label="Workflow article"
                     value={strategyForm.workflowId}
-                    onChange={(event) =>
-                      setStrategyForm((prev) => ({ ...prev, workflowId: event.target.value }))
+                    onChange={(value) =>
+                      setStrategyForm((prev) => ({ ...prev, workflowId: String(value) }))
                     }
-                  >
-                    <option value="">Wszystkie aktywne</option>
-                    {workflows
-                      .filter((workflow) => workflow.workflow_type === 'article')
-                      .map((workflow) => (
-                        <option key={workflow.id} value={workflow.id}>
-                          #{workflow.id} {workflow.name}
-                        </option>
-                      ))}
-                  </select>
+                    options={[
+                      { value: '', label: 'Wszystkie aktywne' },
+                      ...workflows
+                        .filter((workflow) => workflow.workflow_type === 'article')
+                        .map((workflow) => ({
+                          value: String(workflow.id),
+                          label: `#${workflow.id} ${workflow.name}`,
+                        })),
+                    ]}
+                  />
                 </Field>
                 <label style={{ ...checkboxRowStyle, alignSelf: 'end', minHeight: 46 }}>
                   <input
@@ -6200,16 +6140,15 @@ const HomePage = () => {
                 >
                   Wygeneruj plan
                 </button>
-                <button
-                  type="button"
+                <UiButton
+                  variant="secondary"
                   disabled={saving}
-                  style={secondaryButtonStyle}
                   onClick={() => {
                     void approveStrategyPlan();
                   }}
                 >
                   Zatwierdź do Topic Queue
-                </button>
+                </UiButton>
               </div>
               {strategyGenerateResult || strategyApproveResult ? (
                 <div
@@ -6303,9 +6242,8 @@ const HomePage = () => {
                 }}
               >
                 <Field label="Dzień snapshotu">
-                  <input
+                  <UiTextInput
                     type="date"
-                    style={inputStyle}
                     value={performanceForm.day}
                     onChange={(event) =>
                       setPerformanceForm((prev) => ({ ...prev, day: event.target.value }))
@@ -6313,12 +6251,9 @@ const HomePage = () => {
                   />
                 </Field>
                 <Field label="Limit artykułów">
-                  <input
+                  <UiTextInput
                     type="number"
-                    min={1}
-                    max={500}
-                    style={inputStyle}
-                    value={performanceForm.limit}
+                    value={String(performanceForm.limit)}
                     onChange={(event) =>
                       setPerformanceForm((prev) => ({ ...prev, limit: Number(event.target.value) }))
                     }
@@ -6413,12 +6348,9 @@ const HomePage = () => {
                 }}
               >
                 <Field label="Limit rekomendacji">
-                  <input
+                  <UiTextInput
                     type="number"
-                    min={1}
-                    max={50}
-                    style={inputStyle}
-                    value={homepageForm.limit}
+                    value={String(homepageForm.limit)}
                     onChange={(event) =>
                       setHomepageForm((prev) => ({ ...prev, limit: Number(event.target.value) }))
                     }
@@ -6534,9 +6466,11 @@ const HomePage = () => {
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>
                   Konfiguracja Regionalna
                 </h3>
-                <Field label="Strefa czasowa (Timezone)">
-                  <input
-                    style={inputStyle}
+                <Field
+                  label="Strefa czasowa (Timezone)"
+                  hint="Strefa używana do planowania publikacji i raportów (np. Europe/Warsaw)."
+                >
+                  <UiTextInput
                     value={settings.timezone}
                     onChange={(event) =>
                       setSettings((prev) => ({ ...prev, timezone: event.target.value }))
@@ -6544,9 +6478,11 @@ const HomePage = () => {
                     placeholder="UTC / Europe/Warsaw"
                   />
                 </Field>
-                <Field label="Lokalizacja (Locale)">
-                  <input
-                    style={inputStyle}
+                <Field
+                  label="Lokalizacja (Locale)"
+                  hint="Język i format treści generowanych przez agenta (np. pl lub en)."
+                >
+                  <UiTextInput
                     value={settings.locale}
                     onChange={(event) =>
                       setSettings((prev) => ({ ...prev, locale: event.target.value }))
@@ -6633,9 +6569,11 @@ const HomePage = () => {
                   )}
                 </div>
 
-                <Field label="Model AI do generowania grafik">
-                  <input
-                    style={inputStyle}
+                <Field
+                  label="Model AI do generowania grafik"
+                  hint="Identyfikator modelu używanego do autonomicznego tworzenia grafik (np. openai/gpt-image-2)."
+                >
+                  <UiTextInput
                     value={settings.image_gen_model}
                     onChange={(event) =>
                       setSettings((prev) => ({ ...prev, image_gen_model: event.target.value }))
@@ -6765,29 +6703,41 @@ const Field = ({
   );
 };
 
-const StatusPill = ({ status }: { status: string }) => {
-  const colors = STATUS_COLORS[status] ?? STATUS_COLORS.idle;
+// Mapowanie kluczy statusu (te same, co w STATUS_COLORS) na semantyczne tony DS.
+// Dzięki temu StatusPill renderuje dostępny, otonowany UiBadge, zachowując
+// jednocześnie ten sam zestaw stanów i ten sam (wielkimi literami) tekst PL/EN.
+const STATUS_TONE: Record<string, UiTone> = {
+  idle: 'neutral',
+  pending: 'neutral',
+  disabled: 'neutral',
+  ready: 'success',
+  GO: 'success',
+  pass: 'success',
+  success: 'success',
+  enabled: 'success',
+  GO_WITH_WARNINGS: 'warning',
+  warn: 'warning',
+  needs_action: 'warning',
+  blocked_budget: 'warning',
+  NO_GO: 'danger',
+  fail: 'danger',
+  failed: 'danger',
+  blocked: 'danger',
+  degraded: 'info',
+  running: 'info',
+};
 
+const StatusPill = ({ status }: { status: string }) => {
+  const tone = STATUS_TONE[status] ?? 'neutral';
+
+  // UiBadge (DS Badge): dostępny, otonowany chip statusu. Wymuszamy wielkie
+  // litery na samym tekście, aby zachować dotychczasowy wygląd pigułki.
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '4px 12px',
-        borderRadius: 20,
-        background: colors.bg,
-        color: colors.color,
-        fontSize: 11,
-        fontWeight: 700,
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        whiteSpace: 'nowrap',
-        border: `1px solid ${colors.border}`,
-      }}
-    >
-      {status}
-    </span>
+    <UiBadge tone={tone}>
+      <span style={{ textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+        {status}
+      </span>
+    </UiBadge>
   );
 };
 
