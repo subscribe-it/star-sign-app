@@ -427,6 +427,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
         }
         await this.processStrategyAutomationTick(now);
         await this.processInsightsTick(now);
+        await this.processVideoRendersTick();
         await this.processAdsStopLossTick();
         await this.processGenerationTick(now);
         await this.processPublicationTick(now);
@@ -561,6 +562,23 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
         }
       } catch (error) {
         strapi.log.warn(`[AICO] Insights tick failed: ${toSafeErrorMessage(error)}`);
+      }
+    },
+
+    // Complete short-form video renders: poll provider jobs that finished and
+    // attach the downloaded result so the asset becomes publishable. Cheap +
+    // non-fatal — no-ops unless the video-agent exposes pollRenders (Replicate
+    // mode), and any failure is swallowed so it never breaks the tick.
+    async processVideoRendersTick(): Promise<void> {
+      try {
+        const videoAgent = getPluginService<
+          { pollRenders?: (input?: { limit?: number }) => Promise<unknown> } | undefined
+        >(strapi, 'video-agent');
+        if (videoAgent && typeof videoAgent.pollRenders === 'function') {
+          await videoAgent.pollRenders();
+        }
+      } catch (error) {
+        strapi.log.warn(`[AICO] Video renders tick failed: ${toSafeErrorMessage(error)}`);
       }
     },
 
