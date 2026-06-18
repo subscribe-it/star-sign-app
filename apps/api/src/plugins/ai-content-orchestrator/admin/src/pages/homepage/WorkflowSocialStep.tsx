@@ -1,5 +1,6 @@
 import type React from 'react';
 
+import { UiAlert, UiButton, UiTextInput } from '../../components/ui';
 import type { SocialConnectionResult, SocialDryRunResult, SocialPlatform } from '../../types';
 
 type WorkflowSocialForm = {
@@ -26,9 +27,7 @@ type WorkflowSocialStepProps = {
   socialConnectionResult: SocialConnectionResult | null;
   socialDryRunResult: SocialDryRunResult | null;
   validationIssues: string[];
-  inputStyle: React.CSSProperties;
   checkboxRowStyle: React.CSSProperties;
-  secondaryButtonStyle: React.CSSProperties;
   textColor: string;
   textLightColor: string;
   borderColor: string;
@@ -45,9 +44,7 @@ export const WorkflowSocialStep = ({
   socialConnectionResult,
   socialDryRunResult,
   validationIssues,
-  inputStyle,
   checkboxRowStyle,
-  secondaryButtonStyle,
   textColor,
   textLightColor,
   borderColor,
@@ -58,22 +55,11 @@ export const WorkflowSocialStep = ({
 }: WorkflowSocialStepProps): React.ReactNode => (
   <div style={{ display: 'grid', gap: 20 }}>
     {validationIssues.length > 0 ? (
-      <div
-        style={{
-          padding: 12,
-          borderRadius: 10,
-          border: '1px solid #fecaca',
-          background: '#fef2f2',
-        }}
-      >
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#b91c1c', marginBottom: 8 }}>
-          Uzupełnij konfigurację social przed przejściem dalej:
-        </div>
+      <UiAlert tone="danger" title="Uzupełnij konfigurację social przed przejściem dalej:">
         <ul
           style={{
             margin: 0,
             paddingLeft: 18,
-            color: '#7f1d1d',
             fontSize: 12,
             display: 'grid',
             gap: 4,
@@ -83,7 +69,7 @@ export const WorkflowSocialStep = ({
             <li key={item}>{item}</li>
           ))}
         </ul>
-      </div>
+      </UiAlert>
     ) : null}
 
     <div style={{ display: 'grid', gap: 10 }}>
@@ -119,8 +105,7 @@ export const WorkflowSocialStep = ({
 
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
       <Field label="Facebook Page ID">
-        <input
-          style={inputStyle}
+        <UiTextInput
           value={workflowForm.fb_page_id}
           onChange={(event) =>
             onWorkflowFormChange({
@@ -132,9 +117,8 @@ export const WorkflowSocialStep = ({
       <Field
         label={editingWorkflowId ? 'FB Page Access Token (opcjonalnie)' : 'FB Page Access Token'}
       >
-        <input
+        <UiTextInput
           type="password"
-          style={inputStyle}
           value={workflowForm.fbAccessToken}
           onChange={(event) =>
             onWorkflowFormChange({
@@ -147,8 +131,7 @@ export const WorkflowSocialStep = ({
 
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
       <Field label="Instagram User ID">
-        <input
-          style={inputStyle}
+        <UiTextInput
           value={workflowForm.ig_user_id}
           onChange={(event) =>
             onWorkflowFormChange({
@@ -158,9 +141,8 @@ export const WorkflowSocialStep = ({
         />
       </Field>
       <Field label={editingWorkflowId ? 'IG Access Token (opcjonalnie)' : 'IG Access Token'}>
-        <input
+        <UiTextInput
           type="password"
-          style={inputStyle}
           value={workflowForm.igAccessToken}
           onChange={(event) =>
             onWorkflowFormChange({
@@ -185,8 +167,7 @@ export const WorkflowSocialStep = ({
       </h4>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <Field label="X API Key">
-          <input
-            style={inputStyle}
+          <UiTextInput
             value={workflowForm.x_api_key}
             onChange={(event) =>
               onWorkflowFormChange({
@@ -196,9 +177,8 @@ export const WorkflowSocialStep = ({
           />
         </Field>
         <Field label={editingWorkflowId ? 'X API Secret (opcjonalnie)' : 'X API Secret'}>
-          <input
+          <UiTextInput
             type="password"
-            style={inputStyle}
             value={workflowForm.xApiSecret}
             onChange={(event) =>
               onWorkflowFormChange({
@@ -208,9 +188,8 @@ export const WorkflowSocialStep = ({
           />
         </Field>
         <Field label={editingWorkflowId ? 'X Access Token (opcjonalnie)' : 'X Access Token'}>
-          <input
+          <UiTextInput
             type="password"
-            style={inputStyle}
             value={workflowForm.xAccessToken}
             onChange={(event) =>
               onWorkflowFormChange({
@@ -224,9 +203,8 @@ export const WorkflowSocialStep = ({
             editingWorkflowId ? 'X Access Token Secret (opcjonalnie)' : 'X Access Token Secret'
           }
         >
-          <input
+          <UiTextInput
             type="password"
-            style={inputStyle}
             value={workflowForm.xAccessTokenSecret}
             onChange={(event) =>
               onWorkflowFormChange({
@@ -239,17 +217,12 @@ export const WorkflowSocialStep = ({
     </div>
 
     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-      <button
-        type="button"
-        style={secondaryButtonStyle}
-        disabled={saving}
-        onClick={onTestConnection}
-      >
+      <UiButton variant="secondary" disabled={saving} onClick={onTestConnection}>
         Test Connection
-      </button>
-      <button type="button" style={secondaryButtonStyle} disabled={saving} onClick={onDryRun}>
+      </UiButton>
+      <UiButton variant="secondary" disabled={saving} onClick={onDryRun}>
         Dry Run Publish
-      </button>
+      </UiButton>
     </div>
 
     {socialConnectionResult && (
