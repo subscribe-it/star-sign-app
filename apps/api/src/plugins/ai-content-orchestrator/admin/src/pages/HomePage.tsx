@@ -7,7 +7,10 @@ import {
   UiAlert,
   UiBadge,
   UiButton,
+  UiCheckbox,
+  UiEmptyState,
   UiField,
+  UiLoader,
   UiSelect,
   UiStatus,
   UiTable,
@@ -2674,16 +2677,12 @@ const HomePage = () => {
                   }
                 />
               </div>
-              <label style={checkboxRowStyle}>
-                <input
-                  type="checkbox"
-                  checked={workflowForm.enabled}
-                  onChange={(e) =>
-                    setWorkflowForm((prev) => ({ ...prev, enabled: e.target.checked }))
-                  }
-                />
-                Włączony (Active)
-              </label>
+              <UiCheckbox
+                checked={workflowForm.enabled}
+                onChange={(checked) => setWorkflowForm((prev) => ({ ...prev, enabled: checked }))}
+              >
+                Włączony (aktywny)
+              </UiCheckbox>
             </div>
           )}
 
@@ -2773,7 +2772,7 @@ const HomePage = () => {
               )}
 
               <UiTextareaField
-                label="Prompt Template (Main Context)"
+                label="Szablon promptu (główny kontekst)"
                 value={workflowForm.prompt_template}
                 onChange={(e) =>
                   setWorkflowForm((prev) => ({ ...prev, prompt_template: e.target.value }))
@@ -2793,12 +2792,12 @@ const HomePage = () => {
                 }}
               >
                 <h4 style={{ fontSize: 14, fontWeight: 700, color: '#0369a1', marginBottom: 8 }}>
-                  Guided Social Onboarding (FB / IG / X)
+                  Konfiguracja kanałów social (FB / IG / X)
                 </h4>
                 <p style={{ margin: 0, fontSize: 12, color: '#0c4a6e', lineHeight: 1.5 }}>
-                  Kroki: wybierz kanały, uzupełnij credentials, uruchom{' '}
-                  <strong>Test Connection</strong> i<strong> Dry Run</strong>, dopiero potem aktywuj
-                  auto-publish.
+                  Kroki: wybierz kanały, uzupełnij dane dostępowe, uruchom{' '}
+                  <strong>Testuj połączenie</strong> i <strong>Próbną publikację</strong>, dopiero
+                  potem włącz automatyczną publikację.
                 </p>
               </div>
               <WorkflowSocialStep
@@ -2808,7 +2807,6 @@ const HomePage = () => {
                 socialConnectionResult={socialConnectionResult}
                 socialDryRunResult={socialDryRunResult}
                 validationIssues={socialStepValidationIssues}
-                checkboxRowStyle={checkboxRowStyle}
                 textColor={COLORS.text}
                 textLightColor={COLORS.textLight}
                 borderColor={COLORS.border}
@@ -2833,7 +2831,7 @@ const HomePage = () => {
             <div style={{ display: 'grid', gap: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
                 <UiTextField
-                  label="Temperature"
+                  label="Temperatura"
                   type="number"
                   value={String(workflowForm.temperature)}
                   onChange={(e) =>
@@ -2841,7 +2839,7 @@ const HomePage = () => {
                   }
                 />
                 <UiTextField
-                  label="Max Tokens"
+                  label="Maks. tokenów"
                   type="number"
                   value={String(workflowForm.max_completion_tokens)}
                   onChange={(e) =>
@@ -2852,7 +2850,7 @@ const HomePage = () => {
                   }
                 />
                 <UiTextField
-                  label="Max Retries"
+                  label="Maks. ponowień"
                   type="number"
                   value={String(workflowForm.retry_max)}
                   onChange={(e) =>
@@ -2861,68 +2859,58 @@ const HomePage = () => {
                 />
               </div>
               <div style={{ display: 'grid', gap: 12 }}>
-                <label style={checkboxRowStyle}>
-                  <input
-                    type="checkbox"
-                    checked={workflowForm.auto_publish}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({ ...prev, auto_publish: e.target.checked }))
-                    }
-                  />
+                <UiCheckbox
+                  checked={workflowForm.auto_publish}
+                  onChange={(checked) =>
+                    setWorkflowForm((prev) => ({ ...prev, auto_publish: checked }))
+                  }
+                >
                   Automatyczna publikacja (pomiń moderację)
-                </label>
-                <label style={checkboxRowStyle}>
-                  <input
-                    type="checkbox"
-                    checked={workflowForm.strategy_enabled}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({
-                        ...prev,
-                        strategy_enabled: e.target.checked,
-                      }))
-                    }
-                  />
-                  Strategy Agent może planować tematy dla tego workflow
-                </label>
-                <label style={checkboxRowStyle}>
-                  <input
-                    type="checkbox"
-                    checked={workflowForm.performance_feedback_enabled}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({
-                        ...prev,
-                        performance_feedback_enabled: e.target.checked,
-                      }))
-                    }
-                  />
-                  Używaj feedbacku SEO/performance przy planowaniu
-                </label>
-                <label style={checkboxRowStyle}>
-                  <input
-                    type="checkbox"
-                    checked={workflowForm.force_regenerate}
-                    onChange={(e) =>
-                      setWorkflowForm((prev) => ({ ...prev, force_regenerate: e.target.checked }))
-                    }
-                  />
+                </UiCheckbox>
+                <UiCheckbox
+                  checked={workflowForm.strategy_enabled}
+                  onChange={(checked) =>
+                    setWorkflowForm((prev) => ({
+                      ...prev,
+                      strategy_enabled: checked,
+                    }))
+                  }
+                >
+                  Agent strategii może planować tematy dla tego workflow
+                </UiCheckbox>
+                <UiCheckbox
+                  checked={workflowForm.performance_feedback_enabled}
+                  onChange={(checked) =>
+                    setWorkflowForm((prev) => ({
+                      ...prev,
+                      performance_feedback_enabled: checked,
+                    }))
+                  }
+                >
+                  Używaj danych SEO/skuteczności przy planowaniu
+                </UiCheckbox>
+                <UiCheckbox
+                  checked={workflowForm.force_regenerate}
+                  onChange={(checked) =>
+                    setWorkflowForm((prev) => ({ ...prev, force_regenerate: checked }))
+                  }
+                >
                   Wymuś regenerację (nawet jeśli treść istnieje)
-                </label>
+                </UiCheckbox>
                 {workflowForm.workflow_type === 'horoscope' && (
-                  <label style={checkboxRowStyle}>
-                    <input
-                      type="checkbox"
-                      checked={workflowForm.all_signs}
-                      onChange={(e) =>
-                        setWorkflowForm((prev) => ({ ...prev, all_signs: e.target.checked }))
-                      }
-                    />
+                  <UiCheckbox
+                    checked={workflowForm.all_signs}
+                    onChange={(checked) =>
+                      setWorkflowForm((prev) => ({ ...prev, all_signs: checked }))
+                    }
+                  >
                     Generuj dla wszystkich 12 znaków zodiaku
-                  </label>
+                  </UiCheckbox>
                 )}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <UiTextField
-                  label="Content cluster"
+                  label="Klaster treści"
                   value={workflowForm.content_cluster}
                   onChange={(e) =>
                     setWorkflowForm((prev) => ({ ...prev, content_cluster: e.target.value }))
@@ -2930,7 +2918,7 @@ const HomePage = () => {
                   placeholder="np. astrologia-praktyczna"
                 />
                 <UiTextareaField
-                  label="Auto-publish guardrails (JSON)"
+                  label="Zabezpieczenia auto-publikacji (JSON)"
                   value={workflowForm.auto_publish_guardrails}
                   onChange={(e) =>
                     setWorkflowForm((prev) => ({
@@ -3103,7 +3091,7 @@ const HomePage = () => {
               {selectedRun.error_message}
             </div>
           )}
-          <Field label="Details (JSON)">
+          <Field label="Szczegóły (JSON)">
             <pre
               style={{
                 margin: 0,
@@ -3329,7 +3317,7 @@ const HomePage = () => {
                   label="Zaplanowane Publikacje"
                   value={summary?.publications.scheduled ?? 0}
                 />
-                <StatTile label="Błędy Wykonań (Total)" value={summary?.runs.failed ?? 0} />
+                <StatTile label="Błędy Wykonań (łącznie)" value={summary?.runs.failed ?? 0} />
                 <StatTile
                   label="Social Media"
                   value={`${summary?.social?.published ?? 0} ok / ${summary?.social?.scheduled ?? 0} zaplan.`}
@@ -3890,6 +3878,8 @@ const HomePage = () => {
                       )}
                     </div>
 
+                    {mediaLibraryLoading ? <UiLoader small>Ładowanie plików…</UiLoader> : null}
+
                     <div
                       style={{
                         display: 'grid',
@@ -4073,7 +4063,7 @@ const HomePage = () => {
                         <div style={{ display: 'grid', gap: 16 }}>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <UiTextField
-                              label="Asset Key"
+                              label="Klucz zasobu"
                               value={generatedMediaIdentity.asset_key}
                               disabled
                             />
@@ -4084,9 +4074,9 @@ const HomePage = () => {
                             />
                           </div>
 
-                          <UiField label="Przeznaczenie (Purpose)">
+                          <UiField label="Przeznaczenie">
                             <UiSelect
-                              aria-label="Przeznaczenie (Purpose)"
+                              aria-label="Przeznaczenie"
                               value={mediaAssetForm.purpose}
                               onChange={(value) => {
                                 const purpose = value as MediaAssetFormState['purpose'];
@@ -4107,7 +4097,7 @@ const HomePage = () => {
                                 { value: 'blog_article', label: 'Artykuł blogowy' },
                                 { value: 'daily_card', label: 'Karta dnia' },
                                 { value: 'horoscope_sign', label: 'Znak zodiaku' },
-                                { value: 'fallback_general', label: 'Ogólny fallback' },
+                                { value: 'fallback_general', label: 'Ogólny (zapasowy)' },
                               ]}
                             />
                           </UiField>
@@ -4484,7 +4474,7 @@ const HomePage = () => {
                     }))
                   }
                   options={[
-                    { value: 'all', label: 'all' },
+                    { value: 'all', label: 'Wszystkie' },
                     { value: 'running', label: 'running' },
                     { value: 'success', label: 'success' },
                     { value: 'failed', label: 'failed' },
@@ -4492,7 +4482,7 @@ const HomePage = () => {
                   ]}
                 />
               </Field>
-              <Field label="Workflow name">
+              <Field label="Nazwa workflow">
                 <UiTextInput
                   value={runFilters.workflowName}
                   onChange={(event) =>
@@ -4500,7 +4490,7 @@ const HomePage = () => {
                   }
                 />
               </Field>
-              <Field label="From">
+              <Field label="Od">
                 <UiTextInput
                   type="date"
                   value={runFilters.fromDate}
@@ -4509,7 +4499,7 @@ const HomePage = () => {
                   }
                 />
               </Field>
-              <Field label="To">
+              <Field label="Do">
                 <UiTextInput
                   type="date"
                   value={runFilters.toDate}
@@ -4523,7 +4513,7 @@ const HomePage = () => {
                   variant="secondary"
                   onClick={() => setRunFilters(initialRunFilters())}
                 >
-                  Clear
+                  Wyczyść
                 </UiButton>
                 <button
                   type="button"
@@ -4532,7 +4522,7 @@ const HomePage = () => {
                     void refreshMonitoringData(true);
                   }}
                 >
-                  Refresh
+                  Odśwież
                 </button>
               </div>
             </div>
@@ -4669,7 +4659,7 @@ const HomePage = () => {
                                 }}
                               >
                                 <div style={{ overflowX: 'auto' }}>
-                                  <strong style={{ fontSize: 13 }}>Steps</strong>
+                                  <strong style={{ fontSize: 13 }}>Kroki</strong>
                                   <table
                                     style={{
                                       width: '100%',
@@ -4705,7 +4695,7 @@ const HomePage = () => {
                                   </table>
                                 </div>
                                 <div>
-                                  <strong style={{ fontSize: 13 }}>Details</strong>
+                                  <strong style={{ fontSize: 13 }}>Szczegóły</strong>
                                   <div
                                     style={{
                                       display: 'grid',
@@ -4716,20 +4706,20 @@ const HomePage = () => {
                                       marginBottom: 8,
                                     }}
                                   >
-                                    <span>Started: {formatDateTime(run.started_at)}</span>
-                                    <span>Finished: {formatDateTime(run.finished_at)}</span>
-                                    <span>Prompt tokens: {run.usage_prompt_tokens ?? 0}</span>
+                                    <span>Rozpoczęto: {formatDateTime(run.started_at)}</span>
+                                    <span>Zakończono: {formatDateTime(run.finished_at)}</span>
+                                    <span>Tokeny promptu: {run.usage_prompt_tokens ?? 0}</span>
                                     <span>
-                                      Completion tokens: {run.usage_completion_tokens ?? 0}
+                                      Tokeny odpowiedzi: {run.usage_completion_tokens ?? 0}
                                     </span>
-                                    <span>Total tokens: {run.usage_total_tokens ?? 0}</span>
+                                    <span>Tokeny łącznie: {run.usage_total_tokens ?? 0}</span>
                                   </div>
 
                                   <ErrorInsight error={run.error_message} />
                                   <AutonomousIntelligence run={run} />
 
                                   <div style={{ marginTop: 16 }}>
-                                    <strong style={{ fontSize: 13 }}>LLM trace</strong>
+                                    <strong style={{ fontSize: 13 }}>Zapis LLM (trace)</strong>
                                   </div>
                                   {llmTraces.length === 0 ? (
                                     <div
@@ -4870,7 +4860,7 @@ const HomePage = () => {
                                       ))}
                                     </div>
                                   )}
-                                  <strong style={{ fontSize: 13 }}>Raw details</strong>
+                                  <strong style={{ fontSize: 13 }}>Surowe szczegóły</strong>
                                   <pre
                                     style={{
                                       background: '#f3f5fb',
@@ -4950,9 +4940,9 @@ const HomePage = () => {
                 marginBottom: 16,
               }}
             >
-              <Field label="Platform">
+              <Field label="Platforma">
                 <UiSelect
-                  aria-label="Platform"
+                  aria-label="Platforma"
                   value={socialFilters.platform}
                   onChange={(value) =>
                     setSocialFilters((prev) => ({
@@ -4961,11 +4951,11 @@ const HomePage = () => {
                     }))
                   }
                   options={[
-                    { value: 'all', label: 'all' },
+                    { value: 'all', label: 'Wszystkie' },
                     { value: 'facebook', label: 'facebook' },
                     { value: 'instagram', label: 'instagram' },
                     { value: 'twitter', label: 'twitter' },
-                    { value: 'tiktok', label: 'tiktok draft-only' },
+                    { value: 'tiktok', label: 'tiktok (tylko szkic)' },
                   ]}
                 />
               </Field>
@@ -4980,7 +4970,7 @@ const HomePage = () => {
                     }))
                   }
                   options={[
-                    { value: 'all', label: 'all' },
+                    { value: 'all', label: 'Wszystkie' },
                     { value: 'scheduled', label: 'scheduled' },
                     { value: 'pending', label: 'pending' },
                     { value: 'published', label: 'published' },
@@ -4989,7 +4979,7 @@ const HomePage = () => {
                   ]}
                 />
               </Field>
-              <Field label="Workflow ID">
+              <Field label="ID workflow">
                 <UiTextInput
                   value={socialFilters.workflow}
                   onChange={(event) =>
@@ -5003,7 +4993,7 @@ const HomePage = () => {
                   variant="secondary"
                   onClick={() => setSocialFilters({ platform: 'all', status: 'all', workflow: '' })}
                 >
-                  Clear
+                  Wyczyść
                 </UiButton>
               </div>
             </div>
@@ -5063,7 +5053,7 @@ const HomePage = () => {
                               void retrySocialTicket(ticket.id);
                             }}
                           >
-                            Retry
+                            Ponów
                           </UiButton>
                           <UiButton
                             variant="danger"
@@ -5077,7 +5067,7 @@ const HomePage = () => {
                               void cancelSocialTicket(ticket.id);
                             }}
                           >
-                            Cancel
+                            Anuluj
                           </UiButton>
                         </div>
                       </UiTd>
@@ -5087,7 +5077,7 @@ const HomePage = () => {
               </UiTable>
               {filteredSocialTickets.length === 0 ? (
                 <div style={{ padding: 14, color: '#606477', fontSize: 13 }}>
-                  Brak ticketów social dla filtrów.
+                  Brak zleceń social dla wybranych filtrów.
                 </div>
               ) : null}
             </div>
@@ -5163,11 +5153,11 @@ const HomePage = () => {
                   }}
                 >
                   <div style={{ fontSize: 16, fontWeight: 800 }}>
-                    Decision: {auditReport.decision}
+                    Decyzja: {auditReport.decision}
                   </div>
                   <div style={{ fontSize: 12, color: COLORS.textLight, marginTop: 4 }}>
-                    Critical failures: {auditReport.summary.criticalFailures} | Warnings:{' '}
-                    {auditReport.summary.warnings} | Generated:{' '}
+                    Błędy krytyczne: {auditReport.summary.criticalFailures} | Ostrzeżenia:{' '}
+                    {auditReport.summary.warnings} | Wygenerowano:{' '}
                     {formatDateTime(auditReport.generatedAt)}
                   </div>
                 </div>
@@ -5217,7 +5207,7 @@ const HomePage = () => {
                     }}
                   >
                     <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-                      Failed Flows
+                      Nieudane przepływy
                     </div>
                     {auditReport.failed_flows.length === 0 ? (
                       <div style={{ fontSize: 12, color: COLORS.textLight }}>
@@ -5250,7 +5240,7 @@ const HomePage = () => {
                     }}
                   >
                     <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-                      Failed Access Checks
+                      Nieudane kontrole dostępu
                     </div>
                     {auditReport.failed_access_checks.length === 0 ? (
                       <div style={{ fontSize: 12, color: COLORS.textLight }}>
@@ -5287,7 +5277,7 @@ const HomePage = () => {
                     <div
                       style={{ fontSize: 12, fontWeight: 700, color: '#991b1b', marginBottom: 8 }}
                     >
-                      Critical Findings
+                      Ustalenia krytyczne
                     </div>
                     {auditReport.critical_findings.length === 0 ? (
                       <div style={{ fontSize: 12, color: COLORS.textLight }}>
@@ -5310,7 +5300,7 @@ const HomePage = () => {
                             </div>
                             <div style={{ fontSize: 12, marginTop: 4 }}>{finding.message}</div>
                             <div style={{ fontSize: 12, color: '#9f1239', marginTop: 6 }}>
-                              Remediation: {finding.remediation}
+                              Naprawa: {finding.remediation}
                             </div>
                           </div>
                         ))}
@@ -5329,7 +5319,7 @@ const HomePage = () => {
                     <div
                       style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8 }}
                     >
-                      Non-Critical Findings
+                      Ustalenia niekrytyczne
                     </div>
                     {auditReport.non_critical_findings.length === 0 ? (
                       <div style={{ fontSize: 12, color: COLORS.textLight }}>Brak warningów.</div>
@@ -5350,7 +5340,7 @@ const HomePage = () => {
                             </div>
                             <div style={{ fontSize: 12, marginTop: 4 }}>{finding.message}</div>
                             <div style={{ fontSize: 12, color: '#92400e', marginTop: 6 }}>
-                              Remediation: {finding.remediation}
+                              Naprawa: {finding.remediation}
                             </div>
                           </div>
                         ))}
@@ -5428,10 +5418,10 @@ const HomePage = () => {
                 }}
               >
                 <StatTile label="Pozycje planu" value={strategyPlan.length} />
-                <StatTile label="Snapshoty performance" value={performanceSnapshots.length} />
-                <StatTile label="Rekomendacje homepage" value={homepageRecommendations.length} />
+                <StatTile label="Migawki skuteczności" value={performanceSnapshots.length} />
+                <StatTile label="Rekomendacje strony głównej" value={homepageRecommendations.length} />
                 <StatTile
-                  label="PROD readiness"
+                  label="Gotowość produkcyjna"
                   value={productionDecision}
                   color={
                     productionDecision === 'GO'
@@ -5442,22 +5432,22 @@ const HomePage = () => {
                   }
                 />
                 <StatTile
-                  label="Provider readiness"
+                  label="Gotowość dostawców"
                   value={`${readyProviderCount}/${providerReadiness.length || 0}`}
                   color={blockedProviderCount > 0 ? COLORS.danger : COLORS.secondary}
                 />
                 <StatTile
-                  label="Autonomy mode"
+                  label="Tryb autonomii"
                   value={killSwitch ? 'KILL' : autonomyMode}
                   color={killSwitch ? COLORS.danger : undefined}
                 />
                 <StatTile
-                  label="Dry-run blokady"
+                  label="Blokady próbnego uruchomienia"
                   value={blockedDryRunStepCount}
                   color={blockedDryRunStepCount > 0 ? COLORS.warning : COLORS.secondary}
                 />
                 <StatTile
-                  label="Global auto-publish"
+                  label="Globalna auto-publikacja"
                   value={settings.aico_auto_publish_enabled === false ? 'OFF' : 'ON'}
                   color={settings.aico_auto_publish_enabled === false ? COLORS.warning : undefined}
                 />
@@ -5496,22 +5486,22 @@ const HomePage = () => {
                     }}
                   >
                     <StatTile
-                      label="Blockery"
+                      label="Blokery"
                       value={productionReadiness.blockers.length}
                       color={productionReadiness.blockers.length > 0 ? COLORS.danger : COLORS.secondary}
                     />
                     <StatTile
-                      label="Warningi"
+                      label="Ostrzeżenia"
                       value={productionReadiness.warnings.length}
                       color={productionReadiness.warnings.length > 0 ? COLORS.warning : COLORS.secondary}
                     />
                     <StatTile
-                      label="Live effects"
+                      label="Działania na żywo"
                       value={productionReadiness.liveEffectsAllowed ? 'ON' : 'OFF'}
                       color={productionReadiness.liveEffectsAllowed ? COLORS.danger : COLORS.textLight}
                     />
                     <StatTile
-                      label="Providerzy wymagani"
+                      label="Wymagani dostawcy"
                       value={productionReadiness.requiredProviders.length}
                     />
                   </div>
@@ -5543,7 +5533,7 @@ const HomePage = () => {
                 </div>
               ) : (
                 <div style={{ padding: 24, color: COLORS.textLight, textAlign: 'center' }}>
-                  Brak raportu production readiness.
+                  Brak raportu gotowości produkcyjnej.
                 </div>
               )}
             </section>
@@ -5559,19 +5549,19 @@ const HomePage = () => {
                 }}
               >
                 <StatTile
-                  label="Daily ads cap"
+                  label="Dzienny limit reklam"
                   value={String(autonomyPolicy.daily_ads_budget_pln ?? '-')}
                 />
                 <StatTile
-                  label="LLM requests dziś"
+                  label="Zapytania LLM dziś"
                   value={String(autonomyStatus?.counts?.llmRequestsToday ?? '-')}
                 />
                 <StatTile
-                  label="Media jobs dziś"
+                  label="Zadania graficzne dziś"
                   value={String(autonomyStatus?.counts?.mediaJobsToday ?? '-')}
                 />
                 <StatTile
-                  label="Ads mutations dziś"
+                  label="Zmiany reklam dziś"
                   value={String(autonomyStatus?.counts?.adsMutationsToday ?? '-')}
                 />
               </div>
@@ -5788,9 +5778,9 @@ const HomePage = () => {
                     color: COLORS.textLight,
                   }}
                 >
-                  Ostatni provider preflight: {providerProbeResult.results.length} providerów,
-                  connectivity {providerProbeResult.includeConnectivity ? 'ON' : 'OFF'}, live effects{' '}
-                  {providerProbeResult.liveEffects ? 'ON' : 'OFF'}.
+                  Ostatni preflight dostawców: {providerProbeResult.results.length} dostawców,
+                  łączność {providerProbeResult.includeConnectivity ? 'ON' : 'OFF'}, działania na
+                  żywo {providerProbeResult.liveEffects ? 'ON' : 'OFF'}.
                 </div>
               ) : null}
 
@@ -5829,7 +5819,7 @@ const HomePage = () => {
                 </UiTable>
                 {providerReadiness.length === 0 ? (
                   <div style={{ padding: 24, color: COLORS.textLight, textAlign: 'center' }}>
-                    Brak macierzy provider readiness.
+                    Brak macierzy gotowości dostawców.
                   </div>
                 ) : null}
               </div>
@@ -5871,7 +5861,7 @@ const HomePage = () => {
                 </UiTable>
                 {dryRunSteps.length === 0 ? (
                   <div style={{ padding: 24, color: COLORS.textLight, textAlign: 'center' }}>
-                    Brak dry-run preview autopilota.
+                    Brak podglądu próbnego uruchomienia autopilota.
                   </div>
                 ) : null}
               </div>
@@ -5887,11 +5877,11 @@ const HomePage = () => {
                   marginBottom: 16,
                 }}
               >
-                <StatTile label="Generation jobs" value={generationJobs.length} />
-                <StatTile label="Video assets" value={videoAssets.length} />
-                <StatTile label="Ad plans" value={adCampaignPlans.length} />
-                <StatTile label="Experiments" value={growthExperiments.length} />
-                <StatTile label="Provider records" value={providerStatuses.length} />
+                <StatTile label="Zadania generowania" value={generationJobs.length} />
+                <StatTile label="Zasoby wideo" value={videoAssets.length} />
+                <StatTile label="Plany reklam" value={adCampaignPlans.length} />
+                <StatTile label="Eksperymenty" value={growthExperiments.length} />
+                <StatTile label="Wpisy dostawców" value={providerStatuses.length} />
               </div>
 
               <div style={{ marginBottom: 18 }}>
@@ -5920,9 +5910,11 @@ const HomePage = () => {
                   </UiTbody>
                 </UiTable>
                 {generationJobs.length === 0 ? (
-                  <div style={{ padding: 18, color: COLORS.textLight, textAlign: 'center' }}>
-                    Brak generation jobs.
-                  </div>
+                  <UiEmptyState
+                    compact
+                    title="Brak zadań generowania"
+                    description="Zadania pojawią się tu po uruchomieniu generowania treści lub grafik."
+                  />
                 ) : null}
               </div>
 
@@ -5934,7 +5926,7 @@ const HomePage = () => {
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Video assets</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Zasoby wideo</div>
                   <UiTable colCount={3} rowCount={videoAssets.slice(0, 8).length + 1}>
                     <UiThead>
                       <UiTr>
@@ -5955,10 +5947,13 @@ const HomePage = () => {
                       ))}
                     </UiTbody>
                   </UiTable>
+                  {videoAssets.length === 0 ? (
+                    <UiEmptyState compact title="Brak zasobów wideo" />
+                  ) : null}
                 </div>
 
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Ad plans</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>Plany reklam</div>
                   <div
                     style={{
                       display: 'grid',
@@ -5968,7 +5963,7 @@ const HomePage = () => {
                       marginBottom: 12,
                     }}
                   >
-                    <Field label="Ads stop-loss confirmation">
+                    <Field label="Potwierdzenie stop-loss reklam">
                       <UiTextInput
                         value={adsStopLossConfirmation}
                         onChange={(event) => setAdsStopLossConfirmation(event.target.value)}
@@ -5989,7 +5984,7 @@ const HomePage = () => {
                         void runAdsStopLoss();
                       }}
                     >
-                      Pause active ads
+                      Wstrzymaj aktywne reklamy
                     </button>
                   </div>
                   <UiTable colCount={4} rowCount={adCampaignPlans.slice(0, 8).length + 1}>
@@ -6014,6 +6009,9 @@ const HomePage = () => {
                       ))}
                     </UiTbody>
                   </UiTable>
+                  {adCampaignPlans.length === 0 ? (
+                    <UiEmptyState compact title="Brak planów reklam" />
+                  ) : null}
                 </div>
 
                 <div>
@@ -6038,6 +6036,9 @@ const HomePage = () => {
                       ))}
                     </UiTbody>
                   </UiTable>
+                  {growthExperiments.length === 0 ? (
+                    <UiEmptyState compact title="Brak eksperymentów" />
+                  ) : null}
                 </div>
               </div>
             </section>
@@ -6088,19 +6089,26 @@ const HomePage = () => {
                     ]}
                   />
                 </Field>
-                <label style={{ ...checkboxRowStyle, alignSelf: 'end', minHeight: 46 }}>
-                  <input
-                    type="checkbox"
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    alignSelf: 'end',
+                    minHeight: 46,
+                  }}
+                >
+                  <UiCheckbox
                     checked={strategyForm.autoApprove}
-                    onChange={(event) =>
+                    onChange={(checked) =>
                       setStrategyForm((prev) => ({
                         ...prev,
-                        autoApprove: event.target.checked,
+                        autoApprove: checked,
                       }))
                     }
-                  />
-                  Auto-approve plan
-                </label>
+                  >
+                    Automatycznie zatwierdź plan
+                  </UiCheckbox>
+                </div>
                 <label
                   style={{
                     ...checkboxRowStyle,
@@ -6124,7 +6132,7 @@ const HomePage = () => {
                     }
                   />
                   <span>
-                    Strategy autopilot
+                    Autopilot strategii
                     <span
                       style={{
                         display: 'block',
@@ -6134,7 +6142,7 @@ const HomePage = () => {
                         lineHeight: 1.5,
                       }}
                     >
-                      Włączenie pozwala AICO samodzielnie uzupełniać plan treści według guardrails.
+                      Włączenie pozwala AICO samodzielnie uzupełniać plan treści według zabezpieczeń.
                       Domyślnie pozostaje wyłączone.
                     </span>
                   </span>
@@ -6183,7 +6191,7 @@ const HomePage = () => {
                   ) : null}
                   {strategyApproveResult ? (
                     <span>
-                      Ostatnie zatwierdzenie: {strategyApproveResult.queued} queued,{' '}
+                      Ostatnie zatwierdzenie: {strategyApproveResult.queued} w kolejce,{' '}
                       {strategyApproveResult.skipped} pominięto.
                     </span>
                   ) : null}
@@ -6195,7 +6203,7 @@ const HomePage = () => {
                     <UiTr>
                       <UiTh>Tytuł</UiTh>
                       <UiTh>Status</UiTh>
-                      <UiTh>SEO cluster</UiTh>
+                      <UiTh>Klaster SEO</UiTh>
                       <UiTh>Priorytet</UiTh>
                       <UiTh>Publikacja</UiTh>
                       <UiTh>Uzasadnienie</UiTh>

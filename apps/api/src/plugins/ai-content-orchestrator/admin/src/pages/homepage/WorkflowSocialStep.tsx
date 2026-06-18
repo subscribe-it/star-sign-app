@@ -1,6 +1,6 @@
 import type React from 'react';
 
-import { UiAlert, UiButton, UiTextInput } from '../../components/ui';
+import { UiAlert, UiButton, UiCheckbox, UiTextInput } from '../../components/ui';
 import type { SocialConnectionResult, SocialDryRunResult, SocialPlatform } from '../../types';
 
 type WorkflowSocialForm = {
@@ -27,7 +27,6 @@ type WorkflowSocialStepProps = {
   socialConnectionResult: SocialConnectionResult | null;
   socialDryRunResult: SocialDryRunResult | null;
   validationIssues: string[];
-  checkboxRowStyle: React.CSSProperties;
   textColor: string;
   textLightColor: string;
   borderColor: string;
@@ -44,7 +43,6 @@ export const WorkflowSocialStep = ({
   socialConnectionResult,
   socialDryRunResult,
   validationIssues,
-  checkboxRowStyle,
   textColor,
   textLightColor,
   borderColor,
@@ -80,25 +78,24 @@ export const WorkflowSocialStep = ({
       </div>
       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
         {(['facebook', 'instagram', 'twitter', 'tiktok'] as SocialPlatform[]).map((channel) => (
-          <label key={channel} style={checkboxRowStyle}>
-            <input
-              type="checkbox"
-              checked={workflowForm.enabled_channels.includes(channel)}
-              onChange={(event) => {
-                const next = new Set(workflowForm.enabled_channels);
-                if (event.target.checked) {
-                  next.add(channel);
-                } else {
-                  next.delete(channel);
-                }
-                onWorkflowFormChange({
-                  enabled_channels: Array.from(next) as SocialPlatform[],
-                });
-              }}
-            />
+          <UiCheckbox
+            key={channel}
+            checked={workflowForm.enabled_channels.includes(channel)}
+            onChange={(checked) => {
+              const next = new Set(workflowForm.enabled_channels);
+              if (checked) {
+                next.add(channel);
+              } else {
+                next.delete(channel);
+              }
+              onWorkflowFormChange({
+                enabled_channels: Array.from(next) as SocialPlatform[],
+              });
+            }}
+          >
             {channel}
-            {channel === 'tiktok' ? ' (draft-only)' : ''}
-          </label>
+            {channel === 'tiktok' ? ' (tylko szkic)' : ''}
+          </UiCheckbox>
         ))}
       </div>
     </div>
@@ -218,10 +215,10 @@ export const WorkflowSocialStep = ({
 
     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
       <UiButton variant="secondary" disabled={saving} onClick={onTestConnection}>
-        Test Connection
+        Testuj połączenie
       </UiButton>
       <UiButton variant="secondary" disabled={saving} onClick={onDryRun}>
-        Dry Run Publish
+        Próbna publikacja (bez wysyłki)
       </UiButton>
     </div>
 
@@ -237,7 +234,7 @@ export const WorkflowSocialStep = ({
         }}
       >
         <div style={{ fontSize: 12, fontWeight: 700 }}>
-          Connection Status:{' '}
+          Status połączenia:{' '}
           <span
             style={{ color: socialConnectionResult.overall === 'ready' ? '#16a34a' : '#dc2626' }}
           >
@@ -264,7 +261,7 @@ export const WorkflowSocialStep = ({
         }}
       >
         <div style={{ fontSize: 12, fontWeight: 700 }}>
-          Dry Run Result:{' '}
+          Wynik próbnej publikacji:{' '}
           <span style={{ color: socialDryRunResult.overall === 'ready' ? '#16a34a' : '#c2410c' }}>
             {socialDryRunResult.overall}
           </span>
