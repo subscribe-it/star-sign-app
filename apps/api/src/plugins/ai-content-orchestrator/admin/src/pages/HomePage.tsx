@@ -4,7 +4,6 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { help } from '../help';
 import {
-  UiAlert,
   UiBadge,
   UiButton,
   UiCheckbox,
@@ -12,7 +11,6 @@ import {
   UiField,
   UiLoader,
   UiSelect,
-  UiStatus,
   UiTable,
   UiTbody,
   UiTd,
@@ -24,6 +22,10 @@ import {
   UiTr,
 } from '../components/ui';
 import type { UiTone } from '../components/ui';
+import { AuditTab } from './homepage/AuditTab';
+import { DashboardTab } from './homepage/DashboardTab';
+import { SocialTab } from './homepage/SocialTab';
+import { TopicsTab } from './homepage/TopicsTab';
 import { WorkflowSocialStep } from './homepage/WorkflowSocialStep';
 import type {
   AuditReport,
@@ -988,9 +990,9 @@ const HomePage = () => {
   const [showRunModal, setShowRunModal] = useState(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
-  const [backfillingImages, setBackfillingImages] = useState<
-    'article' | 'tarot' | 'zodiac' | null
-  >(null);
+  const [backfillingImages, setBackfillingImages] = useState<'article' | 'tarot' | 'zodiac' | null>(
+    null
+  );
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
@@ -1041,9 +1043,12 @@ const HomePage = () => {
   const [adCampaignPlans, setAdCampaignPlans] = useState<AdCampaignPlan[]>([]);
   const [growthExperiments, setGrowthExperiments] = useState<GrowthExperiment[]>([]);
   const [providerStatuses, setProviderStatuses] = useState<ProviderCredentialStatus[]>([]);
-  const [providerProbeResult, setProviderProbeResult] = useState<ProviderProbeRunResult | null>(null);
-  const [productionReadiness, setProductionReadiness] =
-    useState<ProductionReadinessReport | null>(null);
+  const [providerProbeResult, setProviderProbeResult] = useState<ProviderProbeRunResult | null>(
+    null
+  );
+  const [productionReadiness, setProductionReadiness] = useState<ProductionReadinessReport | null>(
+    null
+  );
   const [runNowConfirmation, setRunNowConfirmation] = useState<string>('');
   const [adsStopLossConfirmation, setAdsStopLossConfirmation] = useState<string>('');
   const [socialConnectionResult, setSocialConnectionResult] =
@@ -2443,12 +2448,6 @@ const HomePage = () => {
     }
   };
 
-  const getTopicWorkflowName = (topic: Topic, workflowList: Workflow[]): string => {
-    if (!topic.workflow) return '-';
-    const wf = workflowList.find((w) => w.id === topic.workflow);
-    return wf ? wf.name : '-';
-  };
-
   const goToMediaPage = async (page: number): Promise<void> => {
     await loadMediaLibrary({ page });
   };
@@ -3280,128 +3279,14 @@ const HomePage = () => {
         ) : null}
 
         {activeTab === 'dashboard' && (
-          <div
-            id="aico-tabpanel-dashboard"
-            role="tabpanel"
-            aria-labelledby="aico-tab-dashboard"
-            style={{ display: 'grid', gap: 24 }}
-          >
-            <section style={CARD_STYLE}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 24,
-                }}
-              >
-                <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 0 }}>Centrum Dowodzenia</h2>
-                <UiStatus tone={diagnostics?.ok ? 'success' : 'warning'} size="S">
-                  {diagnostics?.ok ? 'SYSTEM GOTOWY' : 'WYMAGA UWAGI'}
-                </UiStatus>
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: 20,
-                }}
-              >
-                <StatTile
-                  label="Aktywne Workflows"
-                  value={`${summary?.workflows.enabled ?? 0} / ${summary?.workflows.total ?? 0}`}
-                />
-                <StatTile label="Oczekujące Tematy" value={summary?.topics.pending ?? 0} />
-                <StatTile
-                  label="Zaplanowane Publikacje"
-                  value={summary?.publications.scheduled ?? 0}
-                />
-                <StatTile label="Błędy Wykonań (łącznie)" value={summary?.runs.failed ?? 0} />
-                <StatTile
-                  label="Social Media"
-                  value={`${summary?.social?.published ?? 0} ok / ${summary?.social?.scheduled ?? 0} zaplan.`}
-                  subValue={summary?.social?.failed ? `${summary.social.failed} błędów` : undefined}
-                  color={summary?.social?.failed ? COLORS.danger : undefined}
-                />
-              </div>
-            </section>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-              <section style={CARD_STYLE}>
-                <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Status Zasobów</h3>
-                <div style={{ display: 'grid', gap: 16 }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      padding: '12px 16px',
-                      background: '#f8fafc',
-                      borderRadius: 12,
-                    }}
-                  >
-                    <span style={{ fontSize: 14, color: COLORS.textLight }}>
-                      Media aktywne / Razem
-                    </span>
-                    <strong style={{ fontSize: 14, color: COLORS.text }}>
-                      {diagnostics?.media.linkedActive ?? 0} / {diagnostics?.media.total ?? 0}
-                    </strong>
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      padding: '12px 16px',
-                      background: '#f8fafc',
-                      borderRadius: 12,
-                    }}
-                  >
-                    <span style={{ fontSize: 14, color: COLORS.textLight }}>
-                      Nieprzypisane tematy
-                    </span>
-                    <strong
-                      style={{
-                        fontSize: 14,
-                        color: diagnostics?.topics.unassignedPending
-                          ? COLORS.warning
-                          : COLORS.secondary,
-                      }}
-                    >
-                      {diagnostics?.topics.unassignedPending ?? 0}
-                    </strong>
-                  </div>
-                </div>
-              </section>
-
-              <section style={CARD_STYLE}>
-                <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Ostatnie Problemy</h3>
-                {diagnostics?.workflows.issues.length ? (
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    {diagnostics.workflows.issues.slice(0, 4).map((issue) => (
-                      <UiAlert
-                        key={`${issue.workflowId}-${issue.message}`}
-                        tone="danger"
-                        title={`#${issue.workflowId}`}
-                      >
-                        {issue.message}
-                      </UiAlert>
-                    ))}
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      padding: '20px',
-                      textAlign: 'center',
-                      color: COLORS.secondary,
-                      fontWeight: 600,
-                    }}
-                  >
-                    ✅ Wszystkie systemy sprawne
-                  </div>
-                )}
-              </section>
-            </div>
-          </div>
+          <DashboardTab
+            summary={summary}
+            diagnostics={diagnostics}
+            cardStyle={CARD_STYLE}
+            sectionTitleStyle={SECTION_TITLE_STYLE}
+            colors={COLORS}
+            StatTile={StatTile}
+          />
         )}
 
         {activeTab === 'workflows' && (
@@ -3562,126 +3447,23 @@ const HomePage = () => {
         )}
 
         {activeTab === 'topics' && (
-          <section style={{ ...CARD_STYLE, padding: 0, overflow: 'hidden' }}>
-            <div
-              style={{
-                padding: '24px 28px',
-                borderBottom: `1px solid ${COLORS.border}`,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: '#fcfcfd',
-              }}
-            >
-              <div>
-                <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 4 }}>Kolejka Tematów</h2>
-                <p style={{ fontSize: 13, color: COLORS.textLight, margin: 0 }}>
-                  Zarządzaj ręcznymi tematami i planuj generowanie treści.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setTopicForm(initialTopicForm());
-                  setShowTopicModal(true);
-                }}
-                style={primaryButtonStyle}
-              >
-                + Nowy Temat
-              </button>
-            </div>
-
-            <div>
-              <UiTable colCount={7} rowCount={topics.length + 1}>
-                <UiThead>
-                  <UiTr>
-                    <UiTh>ID</UiTh>
-                    <UiTh>Tytuł / Brief</UiTh>
-                    <UiTh>Workflow</UiTh>
-                    <UiTh>Status</UiTh>
-                    <UiTh>Planowany</UiTh>
-                    <UiTh>Grafika</UiTh>
-                    <UiTh style={{ textAlign: 'right' }}>Akcje</UiTh>
-                  </UiTr>
-                </UiThead>
-                <UiTbody>
-                  {topics.map((topic) => (
-                    <UiTr key={topic.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                      <UiTd>
-                        <span style={{ color: COLORS.textLight, fontWeight: 700 }}>
-                          #{topic.id}
-                        </span>
-                      </UiTd>
-                      <UiTd>
-                        <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 2 }}>
-                          {topic.title}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: COLORS.textLight,
-                            maxWidth: 300,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {topic.brief}
-                        </div>
-                      </UiTd>
-                      <UiTd>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>
-                          {getTopicWorkflowName(topic, workflows)}
-                        </span>
-                      </UiTd>
-                      <UiTd>
-                        <StatusPill status={topic.status} />
-                      </UiTd>
-                      <UiTd>
-                        <div style={{ fontSize: 11, color: COLORS.textLight }}>
-                          {topic.scheduled_for ? formatDateTime(topic.scheduled_for) : '-'}
-                        </div>
-                      </UiTd>
-                      <UiTd>
-                        {topic.image_asset_key ? (
-                          <span
-                            style={{
-                              fontSize: 11,
-                              padding: '2px 6px',
-                              background: '#eef2ff',
-                              borderRadius: 4,
-                              color: COLORS.primary,
-                              fontWeight: 600,
-                            }}
-                          >
-                            {topic.image_asset_key}
-                          </span>
-                        ) : (
-                          '-'
-                        )}
-                      </UiTd>
-                      <UiTd>
-                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                          <UiButton
-                            variant="danger"
-                            size="S"
-                            onClick={() => void deleteTopic(topic.id)}
-                          >
-                            Usuń
-                          </UiButton>
-                        </div>
-                      </UiTd>
-                    </UiTr>
-                  ))}
-                </UiTbody>
-              </UiTable>
-              {topics.length === 0 && (
-                <div style={{ padding: 40, textAlign: 'center', color: COLORS.textLight }}>
-                  Brak tematów w kolejce.
-                </div>
-              )}
-            </div>
-          </section>
+          <TopicsTab
+            topics={topics}
+            workflows={workflows}
+            cardStyle={CARD_STYLE}
+            sectionTitleStyle={SECTION_TITLE_STYLE}
+            primaryButtonStyle={primaryButtonStyle}
+            colors={COLORS}
+            formatDateTime={formatDateTime}
+            StatusPill={StatusPill}
+            onAddTopic={() => {
+              setTopicForm(initialTopicForm());
+              setShowTopicModal(true);
+            }}
+            onDeleteTopic={(id) => {
+              void deleteTopic(id);
+            }}
+          />
         )}
 
         {activeTab === 'media' && (
@@ -4509,10 +4291,7 @@ const HomePage = () => {
                 />
               </Field>
               <div style={{ display: 'flex', alignItems: 'end', gap: 8, flexWrap: 'wrap' }}>
-                <UiButton
-                  variant="secondary"
-                  onClick={() => setRunFilters(initialRunFilters())}
-                >
+                <UiButton variant="secondary" onClick={() => setRunFilters(initialRunFilters())}>
                   Wyczyść
                 </UiButton>
                 <button
@@ -4785,7 +4564,9 @@ const HomePage = () => {
                                                   : '.'}
                                               </div>
                                             ) : null}
-                                            <Field label={trace.redacted ? 'Prompt summary' : 'Prompt'}>
+                                            <Field
+                                              label={trace.redacted ? 'Prompt summary' : 'Prompt'}
+                                            >
                                               <textarea
                                                 readOnly
                                                 style={{
@@ -4894,467 +4675,49 @@ const HomePage = () => {
         )}
 
         {activeTab === 'social' && (
-          <section style={CARD_STYLE}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 20,
-              }}
-            >
-              <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 0 }}>Zlecenia social media</h2>
-              <button
-                type="button"
-                style={primaryButtonStyle}
-                onClick={() => {
-                  void refreshSocialTickets();
-                }}
-              >
-                Odśwież
-              </button>
-            </div>
-
-            {socialOpsState !== 'ready' ? (
-              <div style={{ marginBottom: 14 }}>
-                <UiAlert
-                  tone={
-                    socialOpsState === 'blocked'
-                      ? 'danger'
-                      : socialOpsState === 'degraded'
-                        ? 'info'
-                        : 'warning'
-                  }
-                  title={`Status: ${socialOpsState}`}
-                >
-                  {socialOpsMessage || 'Sprawdź RBAC i konfigurację endpointów social.'}
-                </UiAlert>
-              </div>
-            ) : null}
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                gap: 12,
-                marginBottom: 16,
-              }}
-            >
-              <Field label="Platforma">
-                <UiSelect
-                  aria-label="Platforma"
-                  value={socialFilters.platform}
-                  onChange={(value) =>
-                    setSocialFilters((prev) => ({
-                      ...prev,
-                      platform: value as typeof socialFilters.platform,
-                    }))
-                  }
-                  options={[
-                    { value: 'all', label: 'Wszystkie' },
-                    { value: 'facebook', label: 'facebook' },
-                    { value: 'instagram', label: 'instagram' },
-                    { value: 'twitter', label: 'twitter' },
-                    { value: 'tiktok', label: 'tiktok (tylko szkic)' },
-                  ]}
-                />
-              </Field>
-              <Field label="Status">
-                <UiSelect
-                  aria-label="Status"
-                  value={socialFilters.status}
-                  onChange={(value) =>
-                    setSocialFilters((prev) => ({
-                      ...prev,
-                      status: value as typeof socialFilters.status,
-                    }))
-                  }
-                  options={[
-                    { value: 'all', label: 'Wszystkie' },
-                    { value: 'scheduled', label: 'scheduled' },
-                    { value: 'pending', label: 'pending' },
-                    { value: 'published', label: 'published' },
-                    { value: 'failed', label: 'failed' },
-                    { value: 'canceled', label: 'canceled' },
-                  ]}
-                />
-              </Field>
-              <Field label="ID workflow">
-                <UiTextInput
-                  value={socialFilters.workflow}
-                  onChange={(event) =>
-                    setSocialFilters((prev) => ({ ...prev, workflow: event.target.value }))
-                  }
-                  placeholder="np. 3"
-                />
-              </Field>
-              <div style={{ display: 'flex', alignItems: 'end', gap: 8 }}>
-                <UiButton
-                  variant="secondary"
-                  onClick={() => setSocialFilters({ platform: 'all', status: 'all', workflow: '' })}
-                >
-                  Wyczyść
-                </UiButton>
-              </div>
-            </div>
-
-            <div>
-              <UiTable colCount={9} rowCount={filteredSocialTickets.length + 1} minWidth={1080}>
-                <UiThead>
-                  <UiTr>
-                    <UiTh>ID</UiTh>
-                    <UiTh>Platforma</UiTh>
-                    <UiTh>Status</UiTh>
-                    <UiTh>Przepływ</UiTh>
-                    <UiTh>Zaplanowano</UiTh>
-                    <UiTh>Próba</UiTh>
-                    <UiTh>Kolejna próba</UiTh>
-                    <UiTh>Ostatni błąd</UiTh>
-                    <UiTh>Akcja</UiTh>
-                  </UiTr>
-                </UiThead>
-                <UiTbody>
-                  {filteredSocialTickets.map((ticket) => (
-                    <UiTr key={ticket.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                      <UiTd>#{ticket.id}</UiTd>
-                      <UiTd>{ticket.platform}</UiTd>
-                      <UiTd>
-                        <StatusPill status={ticket.status} />
-                      </UiTd>
-                      <UiTd>{getWorkflowId(ticket.workflow) ?? '-'}</UiTd>
-                      <UiTd>{formatDateTime(ticket.scheduled_at)}</UiTd>
-                      <UiTd>{ticket.attempt_count ?? 0}</UiTd>
-                      <UiTd>
-                        {ticket.next_attempt_at ? formatDateTime(ticket.next_attempt_at) : '-'}
-                      </UiTd>
-                      <UiTd>
-                        <div
-                          style={{
-                            maxWidth: 320,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {ticket.last_error || ticket.blocked_reason || '-'}
-                        </div>
-                      </UiTd>
-                      <UiTd>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <UiButton
-                            variant="secondary"
-                            size="S"
-                            disabled={
-                              saving ||
-                              ticket.status === 'published' ||
-                              ticket.status === 'canceled'
-                            }
-                            onClick={() => {
-                              void retrySocialTicket(ticket.id);
-                            }}
-                          >
-                            Ponów
-                          </UiButton>
-                          <UiButton
-                            variant="danger"
-                            size="S"
-                            disabled={
-                              saving ||
-                              ticket.status === 'published' ||
-                              ticket.status === 'canceled'
-                            }
-                            onClick={() => {
-                              void cancelSocialTicket(ticket.id);
-                            }}
-                          >
-                            Anuluj
-                          </UiButton>
-                        </div>
-                      </UiTd>
-                    </UiTr>
-                  ))}
-                </UiTbody>
-              </UiTable>
-              {filteredSocialTickets.length === 0 ? (
-                <div style={{ padding: 14, color: '#606477', fontSize: 13 }}>
-                  Brak zleceń social dla wybranych filtrów.
-                </div>
-              ) : null}
-            </div>
-          </section>
+          <SocialTab
+            socialOpsState={socialOpsState}
+            socialOpsMessage={socialOpsMessage}
+            socialFilters={socialFilters}
+            setSocialFilters={setSocialFilters}
+            filteredSocialTickets={filteredSocialTickets}
+            saving={saving}
+            cardStyle={CARD_STYLE}
+            sectionTitleStyle={SECTION_TITLE_STYLE}
+            primaryButtonStyle={primaryButtonStyle}
+            colors={COLORS}
+            formatDateTime={formatDateTime}
+            getWorkflowId={getWorkflowId}
+            StatusPill={StatusPill}
+            Field={Field}
+            onRefresh={() => {
+              void refreshSocialTickets();
+            }}
+            onRetryTicket={(ticketId) => {
+              void retrySocialTicket(ticketId);
+            }}
+            onCancelTicket={(ticketId) => {
+              void cancelSocialTicket(ticketId);
+            }}
+          />
         )}
 
         {activeTab === 'audit' && (
-          <section style={CARD_STYLE}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 20,
-              }}
-            >
-              <h2 style={{ ...SECTION_TITLE_STYLE, marginBottom: 0 }}>
-                Audyt produkcyjny (Go/No-Go)
-              </h2>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <UiButton
-                  variant="secondary"
-                  disabled={saving}
-                  onClick={() => {
-                    void runPreflightAudit(false);
-                  }}
-                >
-                  Sprawdź (łagodnie)
-                </UiButton>
-                <button
-                  type="button"
-                  style={primaryButtonStyle}
-                  disabled={saving}
-                  onClick={() => {
-                    void runPreflightAudit(true);
-                  }}
-                >
-                  Sprawdź rygorystycznie
-                </button>
-              </div>
-            </div>
-
-            {auditOpsState !== 'ready' ? (
-              <div style={{ marginBottom: 14 }}>
-                <UiAlert
-                  tone={
-                    auditOpsState === 'blocked'
-                      ? 'danger'
-                      : auditOpsState === 'degraded'
-                        ? 'info'
-                        : 'warning'
-                  }
-                >
-                  Status: <strong>{auditOpsState}</strong>.{' '}
-                  {auditOpsMessage || 'Sprawdź autoryzację i endpoint preflight.'}
-                </UiAlert>
-              </div>
-            ) : null}
-
-            {auditReport ? (
-              <div style={{ display: 'grid', gap: 14 }}>
-                <div
-                  style={{
-                    padding: 14,
-                    borderRadius: 12,
-                    border: `1px solid ${auditReport.decision === 'NO_GO' ? '#fecaca' : auditReport.decision === 'GO_WITH_WARNINGS' ? '#fde68a' : '#86efac'}`,
-                    background:
-                      auditReport.decision === 'NO_GO'
-                        ? '#fef2f2'
-                        : auditReport.decision === 'GO_WITH_WARNINGS'
-                          ? '#fffbeb'
-                          : '#f0fdf4',
-                  }}
-                >
-                  <div style={{ fontSize: 16, fontWeight: 800 }}>
-                    Decyzja: {auditReport.decision}
-                  </div>
-                  <div style={{ fontSize: 12, color: COLORS.textLight, marginTop: 4 }}>
-                    Błędy krytyczne: {auditReport.summary.criticalFailures} | Ostrzeżenia:{' '}
-                    {auditReport.summary.warnings} | Wygenerowano:{' '}
-                    {formatDateTime(auditReport.generatedAt)}
-                  </div>
-                </div>
-
-                <div>
-                  <UiTable colCount={5} rowCount={auditReport.checks.length + 1} minWidth={940}>
-                    <UiThead>
-                      <UiTr>
-                        <UiTh>Obszar</UiTh>
-                        <UiTh>ID</UiTh>
-                        <UiTh>Waga</UiTh>
-                        <UiTh>Status</UiTh>
-                        <UiTh>Komunikat</UiTh>
-                      </UiTr>
-                    </UiThead>
-                    <UiTbody>
-                      {auditReport.checks.map((check) => (
-                        <UiTr key={check.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                          <UiTd>{check.area}</UiTd>
-                          <UiTd>{check.id}</UiTd>
-                          <UiTd>{check.severity}</UiTd>
-                          <UiTd>
-                            <StatusPill
-                              status={
-                                check.status === 'pass'
-                                  ? 'success'
-                                  : check.status === 'warn'
-                                    ? 'blocked_budget'
-                                    : 'failed'
-                              }
-                            />
-                          </UiTd>
-                          <UiTd>{check.message}</UiTd>
-                        </UiTr>
-                      ))}
-                    </UiTbody>
-                  </UiTable>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div
-                    style={{
-                      border: `1px solid ${COLORS.border}`,
-                      borderRadius: 10,
-                      padding: 12,
-                      background: '#fff',
-                    }}
-                  >
-                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-                      Nieudane przepływy
-                    </div>
-                    {auditReport.failed_flows.length === 0 ? (
-                      <div style={{ fontSize: 12, color: COLORS.textLight }}>
-                        Brak krytycznych błędów flow.
-                      </div>
-                    ) : (
-                      <ul
-                        style={{
-                          margin: 0,
-                          paddingLeft: 18,
-                          fontSize: 12,
-                          color: COLORS.text,
-                          display: 'grid',
-                          gap: 6,
-                        }}
-                      >
-                        {auditReport.failed_flows.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-
-                  <div
-                    style={{
-                      border: `1px solid ${COLORS.border}`,
-                      borderRadius: 10,
-                      padding: 12,
-                      background: '#fff',
-                    }}
-                  >
-                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-                      Nieudane kontrole dostępu
-                    </div>
-                    {auditReport.failed_access_checks.length === 0 ? (
-                      <div style={{ fontSize: 12, color: COLORS.textLight }}>
-                        Brak krytycznych braków RBAC/route.
-                      </div>
-                    ) : (
-                      <ul
-                        style={{
-                          margin: 0,
-                          paddingLeft: 18,
-                          fontSize: 12,
-                          color: COLORS.text,
-                          display: 'grid',
-                          gap: 6,
-                        }}
-                      >
-                        {auditReport.failed_access_checks.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div
-                    style={{
-                      border: '1px solid #fecaca',
-                      borderRadius: 10,
-                      padding: 12,
-                      background: '#fff7f7',
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: 12, fontWeight: 700, color: '#991b1b', marginBottom: 8 }}
-                    >
-                      Ustalenia krytyczne
-                    </div>
-                    {auditReport.critical_findings.length === 0 ? (
-                      <div style={{ fontSize: 12, color: COLORS.textLight }}>
-                        Brak krytycznych findingów.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'grid', gap: 8 }}>
-                        {auditReport.critical_findings.map((finding) => (
-                          <div
-                            key={finding.id}
-                            style={{
-                              padding: 10,
-                              border: '1px solid #fecaca',
-                              borderRadius: 8,
-                              background: '#fff',
-                            }}
-                          >
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#7f1d1d' }}>
-                              {finding.area} · {finding.id}
-                            </div>
-                            <div style={{ fontSize: 12, marginTop: 4 }}>{finding.message}</div>
-                            <div style={{ fontSize: 12, color: '#9f1239', marginTop: 6 }}>
-                              Naprawa: {finding.remediation}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div
-                    style={{
-                      border: '1px solid #fde68a',
-                      borderRadius: 10,
-                      padding: 12,
-                      background: '#fffbeb',
-                    }}
-                  >
-                    <div
-                      style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8 }}
-                    >
-                      Ustalenia niekrytyczne
-                    </div>
-                    {auditReport.non_critical_findings.length === 0 ? (
-                      <div style={{ fontSize: 12, color: COLORS.textLight }}>Brak warningów.</div>
-                    ) : (
-                      <div style={{ display: 'grid', gap: 8 }}>
-                        {auditReport.non_critical_findings.map((finding) => (
-                          <div
-                            key={finding.id}
-                            style={{
-                              padding: 10,
-                              border: '1px solid #fde68a',
-                              borderRadius: 8,
-                              background: '#fff',
-                            }}
-                          >
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#78350f' }}>
-                              {finding.area} · {finding.id}
-                            </div>
-                            <div style={{ fontSize: 12, marginTop: 4 }}>{finding.message}</div>
-                            <div style={{ fontSize: 12, color: '#92400e', marginTop: 6 }}>
-                              Naprawa: {finding.remediation}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ color: COLORS.textLight, fontSize: 13 }}>
-                Brak raportu audytu. Uruchom preflight, aby otrzymać decyzję GO/NO-GO.
-              </div>
-            )}
-          </section>
+          <AuditTab
+            auditReport={auditReport}
+            auditOpsState={auditOpsState}
+            auditOpsMessage={auditOpsMessage}
+            saving={saving}
+            cardStyle={CARD_STYLE}
+            sectionTitleStyle={SECTION_TITLE_STYLE}
+            primaryButtonStyle={primaryButtonStyle}
+            colors={COLORS}
+            formatDateTime={formatDateTime}
+            StatusPill={StatusPill}
+            onRunPreflightAudit={(strict) => {
+              void runPreflightAudit(strict);
+            }}
+          />
         )}
 
         {activeTab === 'growth' && (
@@ -5419,7 +4782,10 @@ const HomePage = () => {
               >
                 <StatTile label="Pozycje planu" value={strategyPlan.length} />
                 <StatTile label="Migawki skuteczności" value={performanceSnapshots.length} />
-                <StatTile label="Rekomendacje strony głównej" value={homepageRecommendations.length} />
+                <StatTile
+                  label="Rekomendacje strony głównej"
+                  value={homepageRecommendations.length}
+                />
                 <StatTile
                   label="Gotowość produkcyjna"
                   value={productionDecision}
@@ -5470,7 +4836,8 @@ const HomePage = () => {
                     PROD GO / NO-GO
                   </h3>
                   <div style={{ fontSize: 12, color: COLORS.textLight }}>
-                    Raport produkcyjnej gotowości agreguje policy, provider readiness, audit i live gates.
+                    Raport produkcyjnej gotowości agreguje policy, provider readiness, audit i live
+                    gates.
                   </div>
                 </div>
                 <StatusPill status={productionDecision} />
@@ -5488,17 +4855,23 @@ const HomePage = () => {
                     <StatTile
                       label="Blokery"
                       value={productionReadiness.blockers.length}
-                      color={productionReadiness.blockers.length > 0 ? COLORS.danger : COLORS.secondary}
+                      color={
+                        productionReadiness.blockers.length > 0 ? COLORS.danger : COLORS.secondary
+                      }
                     />
                     <StatTile
                       label="Ostrzeżenia"
                       value={productionReadiness.warnings.length}
-                      color={productionReadiness.warnings.length > 0 ? COLORS.warning : COLORS.secondary}
+                      color={
+                        productionReadiness.warnings.length > 0 ? COLORS.warning : COLORS.secondary
+                      }
                     />
                     <StatTile
                       label="Działania na żywo"
                       value={productionReadiness.liveEffectsAllowed ? 'ON' : 'OFF'}
-                      color={productionReadiness.liveEffectsAllowed ? COLORS.danger : COLORS.textLight}
+                      color={
+                        productionReadiness.liveEffectsAllowed ? COLORS.danger : COLORS.textLight
+                      }
                     />
                     <StatTile
                       label="Wymagani dostawcy"
@@ -5581,7 +4954,14 @@ const HomePage = () => {
               >
                 <div style={{ gridColumn: '1 / -1', fontWeight: 700, color: COLORS.text }}>
                   Ustawienia autonomii
-                  <span style={{ fontWeight: 400, color: COLORS.textLight, marginLeft: 8, fontSize: 12 }}>
+                  <span
+                    style={{
+                      fontWeight: 400,
+                      color: COLORS.textLight,
+                      marginLeft: 8,
+                      fontSize: 12,
+                    }}
+                  >
                     Zmiany zapisują się automatycznie. Najedź na „?", aby zobaczyć opis.
                   </span>
                 </div>
@@ -5605,7 +4985,10 @@ const HomePage = () => {
                   />
                 </Field>
 
-                <Field label={help('global_kill_switch').label} hint={help('global_kill_switch').hint}>
+                <Field
+                  label={help('global_kill_switch').label}
+                  hint={help('global_kill_switch').hint}
+                >
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     <input
                       type="checkbox"
@@ -5623,9 +5006,7 @@ const HomePage = () => {
                         }
                         void saveAutonomyPatch(
                           { global_kill_switch: checked },
-                          checked
-                            ? 'Włączono wyłącznik awaryjny.'
-                            : 'Wyłączono wyłącznik awaryjny.'
+                          checked ? 'Włączono wyłącznik awaryjny.' : 'Wyłączono wyłącznik awaryjny.'
                         );
                       }}
                     />
@@ -5752,9 +5133,7 @@ const HomePage = () => {
                   style={{
                     ...primaryButtonStyle,
                     background:
-                      canRunControlledAutonomyTick && !saving
-                        ? COLORS.danger
-                        : COLORS.textLight,
+                      canRunControlledAutonomyTick && !saving ? COLORS.danger : COLORS.textLight,
                     boxShadow: 'none',
                     minWidth: 180,
                   }}
@@ -5868,7 +5247,9 @@ const HomePage = () => {
             </section>
 
             <section style={CARD_STYLE}>
-              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>Kolejki, wideo, reklamy, eksperymenty</h3>
+              <h3 style={{ ...SECTION_TITLE_STYLE, fontSize: 16 }}>
+                Kolejki, wideo, reklamy, eksperymenty
+              </h3>
               <div
                 style={{
                   display: 'grid',
@@ -5975,8 +5356,7 @@ const HomePage = () => {
                       disabled={saving || !canRunAdsStopLoss}
                       style={{
                         ...primaryButtonStyle,
-                        background:
-                          canRunAdsStopLoss && !saving ? COLORS.danger : COLORS.textLight,
+                        background: canRunAdsStopLoss && !saving ? COLORS.danger : COLORS.textLight,
                         boxShadow: 'none',
                         minWidth: 180,
                       }}
@@ -6142,8 +5522,8 @@ const HomePage = () => {
                         lineHeight: 1.5,
                       }}
                     >
-                      Włączenie pozwala AICO samodzielnie uzupełniać plan treści według zabezpieczeń.
-                      Domyślnie pozostaje wyłączone.
+                      Włączenie pozwala AICO samodzielnie uzupełniać plan treści według
+                      zabezpieczeń. Domyślnie pozostaje wyłączone.
                     </span>
                   </span>
                 </label>
