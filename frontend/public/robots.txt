@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /panel
+Disallow: /logowanie
+Disallow: /rejestracja
 
 Sitemap: https://star-sign.pl/sitemap.xml

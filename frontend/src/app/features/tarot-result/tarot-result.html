@@ -142,6 +142,19 @@
           Udostępnij
         </button>
       </div>
+
+      <!-- Social Share -->
+      <div class="mt-10 pt-8 border-t border-white/10 flex flex-col items-center gap-4">
+        <span
+          class="text-white/50 text-[10px] uppercase tracking-[0.2em] font-medium"
+          >Podziel się kartą</span
+        >
+        <app-social-share
+          [url]="getCardShareUrl()"
+          [title]="getCardShareTitle(item)"
+          [excerpt]="item.meaning_upright || ''"
+        />
+      </div>
     </div>
 
     <div class="max-w-3xl w-full">

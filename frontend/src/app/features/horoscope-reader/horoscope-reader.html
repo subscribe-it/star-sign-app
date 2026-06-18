@@ -114,6 +114,33 @@
           />
         </div>
 
+        <!-- Share -->
+        <div
+          class="mt-16 pt-8 border-t border-mystic-rose/10 flex flex-col sm:flex-row sm:items-center justify-between gap-6"
+        >
+          <span
+            class="text-mystic-cocoa text-sm uppercase tracking-widest font-medium"
+            >Podziel się przesłaniem</span
+          >
+          <app-social-share
+            [url]="
+              getSiteUrl() +
+              '/horoskopy/' +
+              currentData?.type +
+              '/' +
+              currentData?.sign
+            "
+            [title]="
+              'Horoskop ' +
+              getTypeLabel(currentData?.type).toLowerCase() +
+              ' dla znaku ' +
+              (currentData?.sign | titlecase) +
+              ' ✦ Star Sign'
+            "
+            [excerpt]="currentData?.horoscope?.content || ''"
+          />
+        </div>
+
         <!-- Bottom Ad / CTA -->
         <div class="mt-20 pt-10 border-t border-mystic-rose/10 text-center">
           <p class="text-mystic-cocoa text-sm mb-6 font-light italic">
@@ -144,6 +171,38 @@
           <a routerLink="/tarot/karta-dnia" class="btn-outline"
             >Wylosuj kartę dnia</a
           >
+        </div>
+      </div>
+      } @let related = relatedHoroscopes(); @if (related.length > 0) {
+      <!-- Inne horoskopy dla tego znaku -->
+      <div class="mt-16">
+        <h2
+          class="serif-display text-2xl text-mystic-cocoa mb-8 flex items-center gap-3"
+        >
+          <span class="text-mystic-gold">✦</span>
+          Inne horoskopy dla znaku {{ currentData?.sign | titlecase }}
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          @for (item of related; track item.type) {
+          <a
+            [routerLink]="['/horoskopy', item.type, item.sign]"
+            class="group flex items-center justify-between gap-4 p-5 rounded-2xl bg-white/60 border border-mystic-rose/10 hover:bg-white hover:shadow-lg transition-all"
+          >
+            <div class="flex min-w-0 flex-col">
+              <span
+                class="font-medium tracking-wide text-sm uppercase text-mystic-cocoa"
+                >Horoskop {{ item.label }}</span
+              >
+              <span class="text-xs text-mystic-cocoa/60 font-light"
+                >{{ item.description }}</span
+              >
+            </div>
+            <span
+              class="text-mystic-rose opacity-0 group-hover:opacity-100 transition-opacity"
+              >→</span
+            >
+          </a>
+          }
         </div>
       </div>
       } @if (adsEnabled) {

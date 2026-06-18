@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   inject,
   signal,
+  computed,
 } from '@angular/core';
 import { RouterLink, ActivatedRoute } from '@angular/router';
 import { TitleCasePipe } from '@angular/common';
@@ -28,6 +29,7 @@ import { effect } from '@angular/core';
 import { Skeleton } from '../../shared/components/skeleton/skeleton';
 import { BreadcrumbsComponent } from '../../shared/components/breadcrumbs/breadcrumbs';
 import { PremiumPreviewBlock } from '../../shared/components/premium-preview-block/premium-preview-block';
+import { SocialShare } from '../../shared/components/social-share';
 
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { featureFlags } from '../../core/feature-flags';
@@ -48,6 +50,7 @@ type HoroscopeReaderState = {
     TitleCasePipe,
     BreadcrumbsComponent,
     PremiumPreviewBlock,
+    SocialShare,
   ],
   viewProviders: [provideIcons({ heroSparkles, heroCalendar, heroArrowLeft })],
   templateUrl: './horoscope-reader.html',
@@ -98,14 +101,19 @@ export class HoroscopeReader {
         const typeLabel = this.getTypeLabel(state.type);
         const title = `Horoskop ${typeLabel.toLowerCase()} ${signName}`;
         const description = `Sprawdź swój horoskop ${state.type} dla znaku ${signName}. Poznaj wskazówki gwiazd na dziś.`;
+        const canonicalUrl = this.seoService.absoluteUrl(
+          `/horoskopy/${state.type}/${state.sign}`,
+        );
 
         this.seoService.updateSeo(title, description, {
+          canonicalUrl,
           jsonLd: {
             '@context': 'https://schema.org',
             '@type': 'Article',
             headline: title,
             description: description,
             datePublished: new Date().toISOString(),
+            mainEntityOfPage: canonicalUrl,
           },
         });
 
@@ -170,6 +178,51 @@ export class HoroscopeReader {
       default:
         return 'Astrologiczny';
     }
+  }
+
+  private readonly horoscopeTypes: ReadonlyArray<{
+    type: string;
+    label: string;
+    description: string;
+  }> = [
+    {
+      type: 'dzienny',
+      label: 'Dzienny',
+      description: 'Co przyniesie dzisiejszy dzień.',
+    },
+    {
+      type: 'tygodniowy',
+      label: 'Tygodniowy',
+      description: 'Spojrzenie na nadchodzące dni.',
+    },
+    {
+      type: 'miesieczny',
+      label: 'Miesięczny',
+      description: 'Prognoza na cały miesiąc.',
+    },
+    {
+      type: 'roczny',
+      label: 'Roczny',
+      description: 'Szeroki obraz całego roku.',
+    },
+  ];
+
+  public readonly relatedHoroscopes = computed(() => {
+    const state = this.data();
+    if (!state?.sign) {
+      return [];
+    }
+
+    return this.horoscopeTypes
+      .filter((entry) => entry.type !== state.type)
+      .map((entry) => ({
+        ...entry,
+        sign: state.sign,
+      }));
+  });
+
+  public getSiteUrl(): string {
+    return this.seoService.absoluteUrl('/').replace(/\/$/, '');
   }
 
   public hasPremiumExtension(horoscope: HoroscopeEntry | undefined): boolean {

@@ -126,6 +126,7 @@ export class HomeComponent {
   public readonly newsletterSent = signal(false);
   public readonly newsletterError = signal<string | null>(null);
   public readonly newsletterLoading = signal(false);
+  public readonly newsletterConsent = signal(false);
   public readonly newsletterTurnstileToken = signal('');
   public readonly newsletterTurnstileRequired = computed(() =>
     this.runtimeConfig.turnstileEnabled(),
@@ -149,6 +150,13 @@ export class HomeComponent {
       return;
     }
 
+    if (!this.newsletterConsent()) {
+      this.newsletterError.set(
+        'Zaznacz zgodę na otrzymywanie newslettera, aby kontynuować.',
+      );
+      return;
+    }
+
     if (
       this.newsletterTurnstileRequired() &&
       !this.newsletterTurnstileToken()
@@ -163,7 +171,7 @@ export class HomeComponent {
     this.newsletterService
       .subscribe({
         email,
-        marketingConsent: true,
+        marketingConsent: this.newsletterConsent(),
         source: 'home-newsletter',
         turnstileToken: this.newsletterTurnstileToken() || undefined,
       })
@@ -178,6 +186,7 @@ export class HomeComponent {
             'Dziękujemy za zapis! Sprawdź swoją skrzynkę e-mail, aby potwierdzić subskrypcję. ✦',
           );
           emailInput.value = '';
+          this.newsletterConsent.set(false);
           this.resetNewsletterTurnstile();
         },
         error: (error) => {

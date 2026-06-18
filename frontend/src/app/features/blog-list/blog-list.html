@@ -123,8 +123,10 @@
         <p
           class="text-xs text-mystic-rose mb-4 font-bold uppercase tracking-[0.2em]"
         >
-          {{ hero.read_time_minutes || 5 }} min czytania ✦ Opublikowano {{
-          hero.publishedAt | date:'longDate' }}
+          @if (hero.read_time_minutes) {
+          {{ hero.read_time_minutes }} min czytania ✦
+          }
+          Opublikowano {{ hero.publishedAt | date:'longDate' }}
         </p>
         <h2
           class="serif-display text-3xl sm:text-4xl md:text-5xl text-mystic-cocoa mb-6 group-hover:text-mystic-rose transition-colors leading-tight break-words"
@@ -199,11 +201,13 @@
           </div>
         </div>
         <div class="flex-grow">
+          @if (article.read_time_minutes) {
           <p
             class="text-[10px] text-mystic-rose mb-3 font-bold uppercase tracking-[0.2em]"
           >
-            {{ article.read_time_minutes || 5 }} min czytania
+            {{ article.read_time_minutes }} min czytania
           </p>
+          }
           <h3
             class="serif-display text-2xl text-mystic-cocoa mb-4 group-hover:text-mystic-rose transition-colors leading-snug"
           >

@@ -23,6 +23,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { AccountService } from '../../core/services/account.service';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { Article } from '@star-sign-monorepo/shared-types';
+import { environment } from '../../../environments/environment';
 import { featureFlags } from '../../core/feature-flags';
 import { StrapiImagePipe } from '../../core/pipes/strapi-image-pipe';
 import { StrapiSrcsetPipe } from '../../core/pipes/strapi-srcset-pipe';
@@ -126,11 +127,14 @@ export class BlogDetail {
           article.excerpt || 'Czytaj więcej na blogu Star Sign.',
           {
             canonicalUrl,
+            type: 'article',
+            imageUrl: this.articleImageUrl(article),
             jsonLd: {
               '@context': 'https://schema.org',
               '@type': 'Article',
               headline: article.title,
               description: article.excerpt || '',
+              image: this.articleImageUrl(article),
               datePublished: article.publishedAt,
               author: article.author
                 ? { '@type': 'Person', name: article.author }
@@ -162,6 +166,27 @@ export class BlogDetail {
 
   public getSiteUrl(): string {
     return this.seoService.absoluteUrl('/').replace(/\/$/, '');
+  }
+
+  /**
+   * Builds an absolute URL to the article cover image so social shares
+   * (Open Graph / Twitter Card) use the per-article image instead of the
+   * default site image. Returns undefined when the article has no image,
+   * letting the SEO service fall back to the default OG image.
+   */
+  private articleImageUrl(article: Article): string | undefined {
+    const url = article.image?.url;
+    if (!url) {
+      return undefined;
+    }
+
+    // Match StrapiImagePipe: relative Strapi paths are served under apiUrl,
+    // then absoluteUrl() resolves them against siteUrl for crawlers.
+    const resolved = url.startsWith('http')
+      ? url
+      : `${environment.apiUrl}${url}`;
+
+    return this.seoService.absoluteUrl(resolved);
   }
 
   public shareArticle(): void {
