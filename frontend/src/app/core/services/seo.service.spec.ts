@@ -22,6 +22,7 @@ describe('SeoService', () => {
   afterEach(() => {
     document.querySelector('link[rel="canonical"]')?.remove();
     document.getElementById('star-sign-json-ld')?.remove();
+    document.getElementById('star-sign-site-json-ld')?.remove();
   });
 
   it('should be created', () => {
@@ -90,6 +91,44 @@ describe('SeoService', () => {
       'meta[name="robots"]',
     ) as HTMLMetaElement;
     expect(tag.content).toBe('noindex,nofollow');
+  });
+
+  it('should emit sitewide Organization + WebSite JSON-LD under a dedicated id', () => {
+    service.setSiteJsonLd();
+
+    const script = document.getElementById('star-sign-site-json-ld');
+    expect(script).toBeTruthy();
+    expect(script?.getAttribute('type')).toBe('application/ld+json');
+
+    const payload = JSON.parse(script?.textContent ?? '{}');
+    expect(payload['@context']).toBe('https://schema.org');
+
+    const types = (payload['@graph'] as { '@type': string }[]).map(
+      (node) => node['@type'],
+    );
+    expect(types).toContain('Organization');
+    expect(types).toContain('WebSite');
+
+    // No site search route exists, so WebSite must not advertise a SearchAction.
+    expect(script?.textContent).not.toContain('SearchAction');
+  });
+
+  it('should refresh the sitewide JSON-LD in place without duplicating it', () => {
+    service.setSiteJsonLd();
+    service.setSiteJsonLd();
+
+    const scripts = document.querySelectorAll('#star-sign-site-json-ld');
+    expect(scripts.length).toBe(1);
+  });
+
+  it('should keep sitewide JSON-LD separate from page-level JSON-LD', () => {
+    service.setSiteJsonLd();
+    service.updateSeo('T', 'D', {
+      jsonLd: { '@context': 'https://schema.org', '@type': 'WebPage' },
+    });
+
+    expect(document.getElementById('star-sign-site-json-ld')).toBeTruthy();
+    expect(document.getElementById('star-sign-json-ld')).toBeTruthy();
   });
 
   it('should resolve absolute URLs from site URL', () => {

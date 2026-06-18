@@ -66,6 +66,10 @@ describe('App', () => {
     }).compileComponents();
   });
 
+  afterEach(() => {
+    document.getElementById('star-sign-site-json-ld')?.remove();
+  });
+
   it('should create the app and initialize analytics', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();

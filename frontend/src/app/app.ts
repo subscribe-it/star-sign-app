@@ -24,6 +24,7 @@ import { featureFlags } from './core/feature-flags';
 import { CookieBanner } from './core/components/cookie-banner/cookie-banner';
 import { LoadingBar } from './core/components/loading-bar/loading-bar';
 import { AnalyticsService } from './core/services/analytics.service';
+import { SeoService } from './core/services/seo.service';
 import {
   AppSettingsService,
   DEFAULT_PUBLIC_APP_SETTINGS,
@@ -50,6 +51,7 @@ export class App implements OnInit {
   private readonly checkoutService = inject(CheckoutService);
   private readonly analyticsService = inject(AnalyticsService);
   private readonly appSettingsService = inject(AppSettingsService);
+  private readonly seoService = inject(SeoService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly appSettings = toSignal<
@@ -84,6 +86,7 @@ export class App implements OnInit {
 
   public ngOnInit(): void {
     this.analyticsService.init();
+    this.seoService.setSiteJsonLd();
     this.router.events
       .pipe(
         filter(

@@ -1,6 +1,7 @@
 import type { Context } from 'koa';
 
-import type { Strapi } from '../types';
+import { AUTONOMY_POLICY_UID } from '../constants';
+import type { AutonomyPolicyRecord, Strapi } from '../types';
 import { recordAdminAuditEvent } from '../utils/audit-trail';
 import { toSafeErrorMessage } from '../utils/json';
 
@@ -8,6 +9,37 @@ const isTruthy = (value: unknown): boolean =>
   ['1', 'true', 'yes', 'on'].includes(String(value ?? '').toLowerCase());
 
 const RUN_NOW_CONFIRMATION = 'RUN_AICO_CONTROLLED_TICK';
+
+// Fields excluded from the audit diff: identity/timestamps that are not part of
+// the governance policy the admin is changing, and never-dump blobs.
+const POLICY_DIFF_IGNORED_KEYS = new Set([
+  'id',
+  'policy_key',
+  'createdAt',
+  'updatedAt',
+]);
+
+// Compute a compact before/after diff for governance-sensitive policy changes.
+// Only keys present in the request payload that actually changed are recorded;
+// values are JSON-comparable scalars/arrays/objects from the policy record.
+const diffPolicyChanges = (
+  before: AutonomyPolicyRecord,
+  after: AutonomyPolicyRecord,
+  payload: Record<string, unknown>
+): Record<string, { from: unknown; to: unknown }> => {
+  const changed: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of Object.keys(payload)) {
+    if (POLICY_DIFF_IGNORED_KEYS.has(key)) {
+      continue;
+    }
+    const from = (before as Record<string, unknown>)[key];
+    const to = (after as Record<string, unknown>)[key];
+    if (JSON.stringify(from) !== JSON.stringify(to)) {
+      changed[key] = { from, to };
+    }
+  }
+  return changed;
+};
 
 const autonomyController = ({ strapi }: { strapi: Strapi }) => ({
   async status(ctx: Context): Promise<void> {
@@ -28,25 +60,40 @@ const autonomyController = ({ strapi }: { strapi: Strapi }) => ({
   async updatePolicy(ctx: Context): Promise<void> {
     try {
       const payload = (ctx.request.body ?? {}) as Record<string, unknown>;
-      const policy = await strapi
-        .plugin('ai-content-orchestrator')
-        .service('autonomy-policy')
-        .updatePolicy(payload);
+      const policyService = strapi.plugin('ai-content-orchestrator').service('autonomy-policy');
+
+      // Capture the current governance policy BEFORE applying the update so the
+      // audit trail can record a precise before/after diff of changed fields.
+      const previousPolicy = await policyService.getPolicy();
+      const policy = await policyService.updatePolicy(payload);
+
+      const changed = diffPolicyChanges(previousPolicy, policy, payload);
 
       await recordAdminAuditEvent(strapi, ctx, {
         action: 'autonomy.policy.update',
         outcome: 'success',
+        // Governance-sensitive change (money/automation limits): elevate severity.
+        severity: 'warn',
+        resourceUid: AUTONOMY_POLICY_UID,
         resourceId: policy.id,
         metadata: {
+          changed,
+          changedKeys: Object.keys(changed),
           autonomy_mode: policy.autonomy_mode,
-          global_kill_switch: policy.global_kill_switch,
-          daily_ads_budget_pln: policy.daily_ads_budget_pln,
         },
       });
 
       ctx.body = { data: policy };
     } catch (error) {
-      ctx.badRequest(toSafeErrorMessage(error));
+      const message = toSafeErrorMessage(error);
+      await recordAdminAuditEvent(strapi, ctx, {
+        action: 'autonomy.policy.update',
+        outcome: 'failure',
+        severity: 'error',
+        resourceUid: AUTONOMY_POLICY_UID,
+        metadata: { error: message },
+      });
+      ctx.badRequest(message);
     }
   },
 
