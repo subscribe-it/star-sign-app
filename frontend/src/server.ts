@@ -6,9 +6,27 @@ import {
 } from '@angular/ssr/node';
 import express from 'express';
 import { join } from 'node:path';
+import {
+  STATIC_SITEMAP_PATHS,
+  articlesToEntries,
+  buildSitemapXml,
+  mergeSitemapEntries,
+  normalizeOrigin,
+  productsToEntries,
+  zodiacSignsToEntries,
+  type SitemapEntry,
+} from './sitemap';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
-const siteUrl = process.env['FRONTEND_URL'] || 'http://localhost:4200';
+/**
+ * Canonical production origin used for absolute <loc> values in sitemap.xml.
+ * Prefer an explicit env var; fall back to the production domain.
+ */
+const sitemapOrigin = normalizeOrigin(
+  process.env['PRODUCTION_DOMAIN'] ||
+    process.env['FRONTEND_DOMAIN'] ||
+    'star-sign.pl',
+);
 const strapiApiUrl = process.env['API_URL'] || 'http://localhost:1337/api';
 const strapiApiBaseUrl = strapiApiUrl.endsWith('/')
   ? strapiApiUrl.slice(0, -1)
@@ -44,16 +62,12 @@ type StrapiCollectionResponse<T> = {
   };
 };
 
-const escapeXml = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-
-const fetchAll = async <T>(resource: string): Promise<T[]> => {
-  const pageSize = 100;
+const fetchAll = async <T>(
+  resource: string,
+  options: { signal?: AbortSignal; pageSize?: number; maxPages?: number } = {},
+): Promise<T[]> => {
+  const pageSize = options.pageSize ?? 100;
+  const maxPages = options.maxPages ?? Number.POSITIVE_INFINITY;
   let page = 1;
   let pageCount = 1;
   const results: T[] = [];
@@ -61,7 +75,7 @@ const fetchAll = async <T>(resource: string): Promise<T[]> => {
   do {
     const separator = resource.includes('?') ? '&' : '?';
     const url = `${strapiApiUrl}/${resource}${separator}pagination[page]=${page}&pagination[pageSize]=${pageSize}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: options.signal });
     if (!response.ok) {
       break;
     }
@@ -70,7 +84,7 @@ const fetchAll = async <T>(resource: string): Promise<T[]> => {
     results.push(...payload.data);
     pageCount = payload.meta?.pagination?.pageCount ?? 1;
     page += 1;
-  } while (page <= pageCount);
+  } while (page <= pageCount && page <= maxPages);
 
   return results;
 };
@@ -681,108 +695,87 @@ app.get('/healthz', (_req, res) => {
 
 app.get('/robots.txt', (_req, res) => {
   res.type('text/plain');
-  res.send(`User-agent: *\nAllow: /\nSitemap: ${siteUrl}/sitemap.xml\n`);
+  res.send(`User-agent: *\nAllow: /\nSitemap: ${sitemapOrigin}/sitemap.xml\n`);
 });
+
+/**
+ * Dynamic sitemap. Always returns 200 with at least the static public pages,
+ * even when the backend API is slow, down, or returns errors. Dynamic slugs
+ * (articles, zodiac signs, optionally shop products) are fetched with a short
+ * timeout and a capped page count so this route can never hang the SSR server.
+ */
+const SITEMAP_FETCH_TIMEOUT_MS = 4000;
+const SITEMAP_MAX_PAGES = 50;
+
+const fetchDynamicSitemapEntries = async (
+  signal: AbortSignal,
+): Promise<SitemapEntry[]> => {
+  const fetchOptions = {
+    signal,
+    pageSize: 100,
+    maxPages: SITEMAP_MAX_PAGES,
+  };
+
+  const [articles, signs, products] = await Promise.all([
+    fetchAll<{ slug?: string; updatedAt?: string; publishedAt?: string }>(
+      'articles?fields[0]=slug&fields[1]=updatedAt&fields[2]=publishedAt',
+      fetchOptions,
+    ),
+    fetchAll<{ slug?: string; updatedAt?: string; publishedAt?: string }>(
+      'zodiac-signs?fields[0]=slug&fields[1]=updatedAt&fields[2]=publishedAt',
+      fetchOptions,
+    ),
+    shopEnabled
+      ? fetchAll<{
+          documentId?: string;
+          updatedAt?: string;
+          publishedAt?: string;
+        }>(
+          'products?fields[0]=documentId&fields[1]=updatedAt&fields[2]=publishedAt',
+          fetchOptions,
+        )
+      : Promise.resolve([]),
+  ]);
+
+  return [
+    ...articlesToEntries(articles),
+    ...zodiacSignsToEntries(signs),
+    ...productsToEntries(products),
+  ];
+};
 
 app.get('/sitemap.xml', async (_req, res) => {
   const staticPaths = [
-    '/',
-    '/horoskopy',
-    '/tarot',
-    '/tarot/karta-dnia',
-    '/artykuly',
-    '/numerologia',
-    '/regulamin',
-    '/polityka-prywatnosci',
-    '/cookies',
-    '/disclaimer',
-    '/o-nas',
-    '/kontakt',
+    ...STATIC_SITEMAP_PATHS,
     ...(shopEnabled ? ['/sklep'] : []),
   ];
 
+  let dynamicEntries: SitemapEntry[] = [];
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    SITEMAP_FETCH_TIMEOUT_MS,
+  );
+
   try {
-    const [articles, signs, products] = await Promise.all([
-      fetchAll<{ slug?: string; updatedAt?: string; publishedAt?: string }>(
-        'articles?fields[0]=slug&fields[1]=updatedAt&fields[2]=publishedAt',
-      ),
-      fetchAll<{ slug?: string; updatedAt?: string; publishedAt?: string }>(
-        'zodiac-signs?fields[0]=slug&fields[1]=updatedAt&fields[2]=publishedAt',
-      ),
-      shopEnabled
-        ? fetchAll<{
-            documentId?: string;
-            updatedAt?: string;
-            publishedAt?: string;
-          }>(
-            'products?fields[0]=documentId&fields[1]=updatedAt&fields[2]=publishedAt',
-          )
-        : Promise.resolve([]),
-    ]);
-
-    const articlePaths = articles
-      .filter((article) => Boolean(article.slug))
-      .map((article) => ({
-        path: `/artykuly/${article.slug}`,
-        lastmod: article.updatedAt || article.publishedAt,
-      }));
-
-    const signPaths = signs
-      .filter((sign) => Boolean(sign.slug))
-      .flatMap((sign) =>
-        [
-          `/znaki/${sign.slug}`,
-          `/horoskopy/dzienny/${sign.slug}`,
-          `/horoskopy/tygodniowy/${sign.slug}`,
-          `/horoskopy/miesieczny/${sign.slug}`,
-          `/horoskopy/roczny/${sign.slug}`,
-        ].map((path) => ({
-          path,
-          lastmod: sign.updatedAt || sign.publishedAt,
-        })),
-      );
-
-    const productPaths = products
-      .filter((product) => Boolean(product.documentId))
-      .map((product) => ({
-        path: `/sklep/produkt/${product.documentId}`,
-        lastmod: product.updatedAt || product.publishedAt,
-      }));
-
-    const sitemapEntries = new Map<
-      string,
-      { path: string; lastmod?: string }
-    >();
-    staticPaths.forEach((path) => sitemapEntries.set(path, { path }));
-    [...articlePaths, ...signPaths, ...productPaths].forEach((entry) =>
-      sitemapEntries.set(entry.path, entry),
-    );
-
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${Array.from(sitemapEntries.values())
-  .map(
-    (path) => `  <url>
-    <loc>${escapeXml(`${siteUrl}${path.path}`)}</loc>${path.lastmod ? `\n    <lastmod>${escapeXml(path.lastmod)}</lastmod>` : ''}
-  </url>`,
-  )
-  .join('\n')}
-</urlset>`;
-
-    res.type('application/xml');
-    res.setHeader(
-      'Cache-Control',
-      'public, max-age=60, s-maxage=300, stale-while-revalidate=86400',
-    );
-    res.send(xml);
+    dynamicEntries = await fetchDynamicSitemapEntries(controller.signal);
   } catch (error) {
-    res
-      .status(500)
-      .type('application/xml')
-      .send(
-        `<?xml version="1.0" encoding="UTF-8"?><error>${escapeXml(String(error))}</error>`,
-      );
+    // Never fail the sitemap: degrade gracefully to the static pages only.
+    console.warn(
+      '[sitemap] dynamic fetch failed, serving static pages only:',
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    clearTimeout(timeout);
   }
+
+  const entries = mergeSitemapEntries(staticPaths, dynamicEntries);
+  const xml = buildSitemapXml(sitemapOrigin, entries);
+
+  res.status(200);
+  res.type('application/xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(xml);
 });
 
 /**
