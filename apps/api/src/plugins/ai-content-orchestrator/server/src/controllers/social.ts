@@ -12,7 +12,9 @@ const socialController = ({ strapi }: { strapi: Strapi }) => ({
       const status = typeof ctx.query.status === 'string' ? ctx.query.status : undefined;
       const workflowId = Number(ctx.query.workflowId);
       const page = Number(ctx.query.page ?? 1);
-      const limit = Number(ctx.query.limit ?? 50);
+      const rawLimit = Number(ctx.query.limit ?? 50);
+      // Clamp to a sane range so a hostile/huge `limit` can't trigger an oversized query.
+      const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(200, rawLimit)) : 50;
 
       const tickets = await strapi
         .plugin('ai-content-orchestrator')

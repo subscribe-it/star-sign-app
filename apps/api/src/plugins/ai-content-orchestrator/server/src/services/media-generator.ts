@@ -5,6 +5,11 @@ import Replicate from 'replicate';
 import { MEDIA_ASSET_UID } from '../constants';
 import type { Strapi } from '../types';
 import { getPluginService } from '../utils/plugin';
+import { isPublicHttpUrl } from '../utils/public-url';
+
+// Hard cap on the generated-image download (bytes) to bound memory / guard
+// against a hostile or misbehaving provider returning an oversized payload.
+const MAX_GENERATED_IMAGE_BYTES = 25 * 1024 * 1024;
 
 type AutonomyPolicyService = {
   evaluate: (input: {
@@ -113,9 +118,20 @@ const mediaGenerator = ({ strapi }: { strapi: Strapi }) => {
       });
 
       const imageUrl = String(Array.isArray(output) ? output[0] : output);
+      // SSRF guard: the URL comes from an external provider; only fetch public http(s) hosts.
+      if (!isPublicHttpUrl(imageUrl)) {
+        throw new Error(
+          `AICO media generation: provider returned a non-public image URL (${imageUrl.slice(0, 80)}).`
+        );
+      }
 
-      // 2. Pobieranie obrazu do bufora
-      const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+      // 2. Pobieranie obrazu do bufora (z limitem rozmiaru + timeout, by ograniczyć ryzyko DoS).
+      const response = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 60_000,
+        maxContentLength: MAX_GENERATED_IMAGE_BYTES,
+        maxBodyLength: MAX_GENERATED_IMAGE_BYTES,
+      });
       const buffer = Buffer.from(response.data, 'binary');
 
       // 3. Strategia Temp File dla Strapi 5

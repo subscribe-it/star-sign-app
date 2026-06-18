@@ -28,6 +28,42 @@ const normalizeHttpUrl = (value: string | null): string | null => {
   }
 };
 
+// Guards against SSRF: only allow http(s) URLs pointing at public hosts
+// (rejects localhost, link-local, and RFC-1918 private ranges). Used before
+// server-side fetches of URLs that originate from external providers.
+export const isPublicHttpUrl = (value: string | null | undefined): boolean => {
+  if (!value) {
+    return false;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return false;
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host)) {
+    return false;
+  }
+  if (host.endsWith('.local')) {
+    return false;
+  }
+  if (/^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host)) {
+    return false;
+  }
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
+    return false;
+  }
+
+  return true;
+};
+
 export const getPublicFrontendUrl = (): string =>
   normalizeHttpUrl(
     firstNonEmpty([
