@@ -1041,6 +1041,7 @@ const HomePage = () => {
   const [videoLoading, setVideoLoading] = useState<boolean>(false);
   const [videoCreating, setVideoCreating] = useState<boolean>(false);
   const [videoBusyAssetId, setVideoBusyAssetId] = useState<number | null>(null);
+  const [videoPolling, setVideoPolling] = useState<boolean>(false);
   const [adCampaignPlans, setAdCampaignPlans] = useState<AdCampaignPlan[]>([]);
   const [growthExperiments, setGrowthExperiments] = useState<GrowthExperiment[]>([]);
   const [providerStatuses, setProviderStatuses] = useState<ProviderCredentialStatus[]>([]);
@@ -2154,6 +2155,21 @@ const HomePage = () => {
       showError(`Nie udało się opublikować materiału #${id}: ${getErrorMessage(error)}`);
     } finally {
       setVideoBusyAssetId(null);
+    }
+  };
+
+  const pollVideoRenders = async (): Promise<void> => {
+    setVideoPolling(true);
+    try {
+      const result = await api.pollVideoRenders(client);
+      showSuccess(
+        `Sprawdzono ${result.checked}: gotowe ${result.completed}, błędy ${result.failed}, w toku ${result.pending}`
+      );
+      await refreshVideoAssets();
+    } catch (error) {
+      showError(`Nie udało się sprawdzić renderów: ${getErrorMessage(error)}`);
+    } finally {
+      setVideoPolling(false);
     }
   };
 
@@ -3532,6 +3548,10 @@ const HomePage = () => {
             onPublish={(id) => {
               void publishVideo(id);
             }}
+            onPollRenders={() => {
+              void pollVideoRenders();
+            }}
+            polling={videoPolling}
             cardStyle={CARD_STYLE}
             sectionTitleStyle={SECTION_TITLE_STYLE}
             colors={COLORS}
