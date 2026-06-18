@@ -20,6 +20,7 @@ import { SeoService } from '../../core/services/seo.service';
 import { PremiumPreviewBlock } from '../../shared/components/premium-preview-block/premium-preview-block';
 import { SocialShare } from '../../shared/components/social-share';
 import { StrapiImagePipe } from '../../core/pipes/strapi-image-pipe';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-tarot-result',
@@ -77,6 +78,7 @@ export class TarotResult implements OnInit {
       next: (draw) => {
         if (draw.card) {
           this.card.set(draw.card);
+          this.updateCardSeo(draw.card);
           this.analyticsService.trackFeatureUse('tarot_draw', {
             card_name: draw.card.name,
           });
@@ -109,6 +111,52 @@ export class TarotResult implements OnInit {
         this.analyticsService.trackEvent('tarot_error', { error: err.message });
       },
     });
+  }
+
+  private cardImageUrl(card: TarotCard): string | undefined {
+    const url = card.image?.url;
+    if (!url) {
+      return undefined;
+    }
+
+    return this.seoService.absoluteUrl(
+      url.startsWith('http') ? url : `${environment.apiUrl}${url}`,
+    );
+  }
+
+  private updateCardSeo(card: TarotCard): void {
+    const canonicalUrl = this.seoService.absoluteUrl('/tarot/karta-dnia');
+    const imageUrl = this.cardImageUrl(card);
+    const description =
+      card.description ||
+      card.meaning_upright ||
+      `Twoja Karta Dnia w Star Sign: ${card.name}.`;
+
+    this.seoService.updateSeo(
+      `Karta Dnia: ${card.name}`,
+      description,
+      {
+        canonicalUrl,
+        type: 'article',
+        ...(imageUrl ? { imageUrl } : {}),
+        jsonLd: {
+          '@context': 'https://schema.org',
+          '@type': 'CreativeWork',
+          name: card.name,
+          headline: `Karta Dnia: ${card.name}`,
+          description,
+          ...(imageUrl ? { image: imageUrl } : {}),
+          ...(card.arcana ? { genre: card.arcana } : {}),
+          ...(card.meaning_upright
+            ? { keywords: card.meaning_upright }
+            : {}),
+          inLanguage: 'pl',
+          url: canonicalUrl,
+          mainEntityOfPage: canonicalUrl,
+          isAccessibleForFree: true,
+        },
+      },
+    );
   }
 
   public premiumTarotContent(card: TarotCard): string {

@@ -79,6 +79,48 @@ export class SeoService {
     return new URL(pathOrUrl, environment.siteUrl).toString();
   }
 
+  /**
+   * Emits a dedicated schema.org BreadcrumbList JSON-LD payload.
+   *
+   * Uses a separate <script> id from the page-level JSON-LD so a breadcrumb
+   * trail and an Article/WebPage payload can coexist on the same page without
+   * clobbering each other. SSR-safe (uses the injected DOCUMENT). Pass an empty
+   * array to remove the breadcrumb JSON-LD.
+   */
+  public setBreadcrumbsJsonLd(
+    items: ReadonlyArray<{ name: string; url: string }>,
+  ): void {
+    const scriptId = 'star-sign-breadcrumbs-json-ld';
+
+    if (!items.length) {
+      this.document.getElementById(scriptId)?.remove();
+      return;
+    }
+
+    const payload = {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: items.map((item, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: item.name,
+        item: this.absoluteUrl(item.url),
+      })),
+    };
+
+    const existing = this.document.getElementById(scriptId);
+    if (existing) {
+      existing.textContent = JSON.stringify(payload);
+      return;
+    }
+
+    const script = this.document.createElement('script');
+    script.id = scriptId;
+    script.type = 'application/ld+json';
+    script.text = JSON.stringify(payload);
+    this.document.head.appendChild(script);
+  }
+
   private setCanonical(url: string): void {
     const existing = this.document.querySelector<HTMLLinkElement>(
       'link[rel="canonical"]',
