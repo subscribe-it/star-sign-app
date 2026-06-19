@@ -6,7 +6,7 @@
 # esbuild binary that vite pins. Only advisories that are BOTH (a) not fixable
 # without a breaking Strapi-5 change and (b) unreachable on the production
 # `strapi start` / SSR request path are listed below. A CRITICAL is never ignored.
-# Last reviewed: 2026-06-17.
+# Last reviewed: 2026-06-19.
 
 # vite 5.4.x — `server.fs.deny` bypass on Windows alternate data-stream paths.
 # Reachable ONLY through the vite *dev server* on *Windows*. Production runs on
@@ -25,3 +25,14 @@ CVE-2026-53571
 # request path. Fixed in esbuild 0.28.1 — already the resolved top-level version;
 # only esbuild-loader keeps a 0.27.7 copy that Strapi 5's tree pins.
 GHSA-gv7w-rqvm-qjhr
+
+# nodemailer 8.0.5 (pinned by @strapi/provider-email-nodemailer@5.x) — the
+# message-level `raw` option bypasses disableFileAccess/disableUrlAccess. Reachable
+# ONLY if the application passes a `raw` message to the email provider. Star Sign's
+# email path (newsletter double-opt-in + contact via Brevo SMTP) only ever sends
+# standard fields (from/to/subject/text/html) — it never sets `raw`, so the
+# advisory is not exploitable here. Fixed in nodemailer 9.0.1, a major bump that
+# @strapi/provider-email-nodemailer pins to 8.0.5 and cannot be forced without a
+# breaking change to the production email channel. The undici advisory shipped in
+# the same scan IS fixed at source (cheerio->undici override to ^7.28.0).
+GHSA-p6gq-j5cr-w38f
