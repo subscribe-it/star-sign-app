@@ -199,7 +199,7 @@ const mediaSelector = ({ strapi }: { strapi: Strapi }) => {
         const result = await generator.generateAndUpload({
           prompt: fullPrompt,
           label: design.label,
-          purpose: input.workflowType === 'article' ? 'blog_article' : 'daily_card',
+          purpose: input.purpose ?? (input.workflowType === 'article' ? 'blog_article' : 'daily_card'),
           signSlug: input.requiredSignSlug,
           workflowId: input.workflowId,
           model: input.imageGenModel,
@@ -357,6 +357,7 @@ const mediaSelector = ({ strapi }: { strapi: Strapi }) => {
         try {
           const result = await this.triggerAutonomousGeneration({
             workflowType: 'daily_card',
+            purpose: 'zodiac_profile',
             requiredSignSlug: input.signSlug,
             contextKey: input.contextKey ?? 'reconciliation',
             now: new Date(),

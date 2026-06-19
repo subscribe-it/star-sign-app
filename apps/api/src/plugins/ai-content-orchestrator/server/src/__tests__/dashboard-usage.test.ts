@@ -35,7 +35,7 @@ const buildAutonomyPolicyService = () => ({
   })),
   getCounts: vi.fn(async () => ({
     generationJobsToday: 0,
-    llmRequestsToday: 0,
+    llmRequestsToday: 7,
     mediaJobsToday: 5,
     videoJobsToday: 0,
     autoPublishesToday: 0,
@@ -46,7 +46,7 @@ const buildAutonomyPolicyService = () => ({
 });
 
 describe('dashboard.getTodayUsageSummary', () => {
-  it('aggregates today LLM usage and reuses autonomy caps/counts', async () => {
+  it('reports LLM requests from autonomy counts and tokens summed from usage-daily', async () => {
     const autonomyPolicy = buildAutonomyPolicyService();
     const findMany = vi.fn(async (uid: string, _params?: Record<string, unknown>) => {
       expect(uid).toBe(USAGE_DAILY_UID);
@@ -63,9 +63,11 @@ describe('dashboard.getTodayUsageSummary', () => {
 
     const usage = await dashboard({ strapi }).getTodayUsageSummary();
 
-    // Kształt + sumy z usage-daily (per-workflow) oraz capy/liczniki z polityki.
+    // requests pochodzi z counts.llmRequestsToday (ten sam licznik, który bramka
+    // autonomy-policy porównuje z capem) — NIE z sumy request_count w usage-daily
+    // (która dałaby 5). tokens nadal sumowane z usage-daily (1200 + 800).
     expect(usage).toEqual({
-      llm: { requests: 5, tokens: 2000, requestsCap: 120 },
+      llm: { requests: 7, tokens: 2000, requestsCap: 120 },
       media: { jobsToday: 5, cap: 20 },
       ads: { spentPln: 12.5, capPln: 25 },
     });
@@ -78,7 +80,7 @@ describe('dashboard.getTodayUsageSummary', () => {
     expect(autonomyPolicy.getCounts).toHaveBeenCalledTimes(1);
   });
 
-  it('defaults to zero usage when there are no usage-daily rows today', async () => {
+  it('keeps requests from counts and zeroes only the summed tokens when no usage-daily rows today', async () => {
     const autonomyPolicy = buildAutonomyPolicyService();
     const strapi = createStrapi(
       { 'autonomy-policy': autonomyPolicy },
@@ -87,7 +89,9 @@ describe('dashboard.getTodayUsageSummary', () => {
 
     const usage = await dashboard({ strapi }).getTodayUsageSummary();
 
-    expect(usage.llm.requests).toBe(0);
+    // Brak wierszy usage-daily zeruje tylko sumowane tokeny; requests nadal
+    // pochodzi z counts.llmRequestsToday (7), spójnie z capem.
+    expect(usage.llm.requests).toBe(7);
     expect(usage.llm.tokens).toBe(0);
     expect(usage.llm.requestsCap).toBe(120);
     expect(usage.media).toEqual({ jobsToday: 5, cap: 20 });
@@ -109,7 +113,7 @@ describe('dashboard.getTodayUsageSummary', () => {
     const summary = await dashboard({ strapi }).getSummary();
 
     expect(summary.usage).toEqual({
-      llm: { requests: 4, tokens: 999, requestsCap: 120 },
+      llm: { requests: 7, tokens: 999, requestsCap: 120 },
       media: { jobsToday: 5, cap: 20 },
       ads: { spentPln: 12.5, capPln: 25 },
     });

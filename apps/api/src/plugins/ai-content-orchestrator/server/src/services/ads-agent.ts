@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { recordSystemAuditEvent } from '../utils/audit-trail';
 import { getEntityService } from '../utils/entity-service';
+import { toSafeErrorMessage } from '../utils/json';
 import { getPluginService } from '../utils/plugin';
 
 type AutonomyPolicyService = {
@@ -935,10 +936,41 @@ const adsAgent = ({ strapi }: { strapi: Strapi }) => {
           });
         }
 
-        const reserved = await ledgerService.reserveActivation({
-          plan,
-          providerMode,
-        });
+        let reserved: Awaited<ReturnType<AdsBudgetLedgerService['reserveActivation']>>;
+        try {
+          reserved = await ledgerService.reserveActivation({
+            plan,
+            providerMode,
+          });
+        } catch (error) {
+          // A ledger failure (e.g. a DB constraint hit) must not crash the
+          // activation endpoint — return a clean blocked result instead.
+          const reserveError = toSafeErrorMessage(error);
+          await recordSystemAuditEvent(strapi, {
+            action: 'ads.activate.skipped',
+            outcome: 'skipped',
+            severity: 'warn',
+            resourceUid: AD_CAMPAIGN_PLAN_UID,
+            resourceId: id,
+            metadata: {
+              reason: 'ads_budget_ledger_error',
+              providerMode,
+              error: reserveError,
+            },
+          });
+          return entityService.update<AdCampaignPlanRecord>(AD_CAMPAIGN_PLAN_UID, id, {
+            data: {
+              status: 'blocked',
+              blocked_reason: 'ads_budget_ledger_error',
+              stop_loss_state: {
+                budgetImpactPln: decision.budgetImpactPln,
+                policyDecision: decision.reason,
+                providerMode,
+                adsLedgerError: reserveError,
+              },
+            },
+          });
+        }
         if (!reserved.allowed) {
           await recordSystemAuditEvent(strapi, {
             action: 'ads.activate.skipped',
