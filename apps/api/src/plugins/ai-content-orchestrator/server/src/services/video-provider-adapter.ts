@@ -161,7 +161,11 @@ const videoProviderAdapter = ({ strapi }: { strapi: Strapi }) => ({
     const token = getReplicateToken();
     const model = getReplicateModel();
     if (!token || !model) {
-      return { status: 'failed', videoUrl: null };
+      // Missing token/model is a transient config gap (e.g. env not yet
+      // restored), NOT a terminal failure. Returning 'failed' here would make
+      // pollRenders permanently abandon an already-paid in-flight render.
+      // Keep it rendering so it retries once config is restored.
+      return { status: 'processing', videoUrl: null };
     }
 
     const id = String(jobId ?? '').trim();

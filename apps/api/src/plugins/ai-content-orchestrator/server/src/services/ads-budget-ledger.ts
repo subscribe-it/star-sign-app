@@ -164,23 +164,50 @@ const adsBudgetLedger = ({ strapi }: { strapi: Strapi }) => {
           };
         }
 
-        const ledger = await entityService.create<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, {
-          data: {
-            unique_key: uniqueKey,
-            day,
-            platform: input.plan.platform,
-            operation: 'activate',
-            status: 'reserved',
-            amount_pln: requestedPln,
-            provider_mode: input.providerMode,
-            metadata: {
-              planId: input.plan.id,
-              targetUrl: input.plan.target_url,
-              totals,
-            },
-            ad_campaign_plan: input.plan.id,
-          },
-        });
+        // A row may already exist for this deterministic unique_key in a
+        // NON-active status (released/blocked/failed) from a prior same-day
+        // attempt. The idempotency short-circuit above only returns early for
+        // ACTIVE statuses, so here we must REUSE that stale row via update()
+        // rather than create() — a create would collide on unique_key and the
+        // DB would throw, crashing the activation endpoint.
+        const ledger = existing
+          ? await entityService.update<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, existing.id, {
+              data: {
+                platform: input.plan.platform,
+                operation: 'activate',
+                status: 'reserved',
+                amount_pln: requestedPln,
+                provider_mode: input.providerMode,
+                blocked_reason: null,
+                provider_decision: null,
+                provider_campaign_id: null,
+                metadata: {
+                  ...(existing.metadata ?? {}),
+                  planId: input.plan.id,
+                  targetUrl: input.plan.target_url,
+                  totals,
+                  reactivatedAt: (input.now ?? new Date()).toISOString(),
+                },
+                ad_campaign_plan: input.plan.id,
+              },
+            })
+          : await entityService.create<AdsMutationLedgerRecord>(ADS_MUTATION_LEDGER_UID, {
+              data: {
+                unique_key: uniqueKey,
+                day,
+                platform: input.plan.platform,
+                operation: 'activate',
+                status: 'reserved',
+                amount_pln: requestedPln,
+                provider_mode: input.providerMode,
+                metadata: {
+                  planId: input.plan.id,
+                  targetUrl: input.plan.target_url,
+                  totals,
+                },
+                ad_campaign_plan: input.plan.id,
+              },
+            });
 
         return {
           allowed: true,

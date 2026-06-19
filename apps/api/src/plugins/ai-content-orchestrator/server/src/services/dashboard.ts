@@ -65,12 +65,16 @@ const dashboard = ({ strapi }: { strapi: Strapi }) => {
       }),
     ]);
 
-    const llmRequests = usageRows.reduce((sum, row) => sum + toNumber(row.request_count), 0);
+    // Tokens stay as the usage-daily sum (no paired cap, so a cross-workflow
+    // total is fine here). Requests, however, MUST mirror the media/ads rows:
+    // pair the numerator the autonomy-policy gate actually compares against the
+    // cap (`counts.llmRequestsToday`) with `daily_llm_request_limit`, instead of
+    // the unrelated usage-daily request_count sum.
     const llmTokens = usageRows.reduce((sum, row) => sum + toNumber(row.total_tokens), 0);
 
     return {
       llm: {
-        requests: llmRequests,
+        requests: toNumber(counts?.llmRequestsToday),
         tokens: llmTokens,
         requestsCap: toNumber(policy?.daily_llm_request_limit),
       },

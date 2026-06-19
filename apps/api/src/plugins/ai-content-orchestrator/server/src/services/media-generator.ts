@@ -131,6 +131,10 @@ const mediaGenerator = ({ strapi }: { strapi: Strapi }) => {
         timeout: 60_000,
         maxContentLength: MAX_GENERATED_IMAGE_BYTES,
         maxBodyLength: MAX_GENERATED_IMAGE_BYTES,
+        // SSRF guard: provider asset URLs are direct downloads; a redirect could
+        // rebind to an internal/metadata host that bypasses the isPublicHttpUrl
+        // check above, so refuse to follow any redirects.
+        maxRedirects: 0,
       });
       const buffer = Buffer.from(response.data, 'binary');
 

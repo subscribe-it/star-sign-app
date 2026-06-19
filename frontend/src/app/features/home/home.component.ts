@@ -55,28 +55,14 @@ export class HomeComponent {
   private readonly newsletterTurnstileWidget = viewChild(TurnstileWidget);
 
   constructor() {
+    // Organization + WebSite JSON-LD are injected sitewide via
+    // seoService.setSiteJsonLd() (from app.ts ngOnInit) under id
+    // 'star-sign-site-json-ld', each with stable @id (#organization / #website).
+    // Emitting them again here produced duplicate, @id-less nodes that confuse
+    // Google, so the home page only sets title/description/canonical.
     this.seoService.updateSeo(
       'Twoja Droga Przez Gwiazdy',
       'Odkryj magię astrologii, horoskopy, tarot i unikalne talizmany w Star Sign.',
-      {
-        jsonLd: {
-          '@context': 'https://schema.org',
-          '@graph': [
-            {
-              '@type': 'Organization',
-              name: 'Star Sign',
-              url: 'https://star-sign.pl',
-              logo: 'https://star-sign.pl/assets/icons/icon-512.png',
-            },
-            {
-              '@type': 'WebSite',
-              name: 'Star Sign',
-              url: 'https://star-sign.pl',
-              inLanguage: 'pl-PL',
-            },
-          ],
-        },
-      },
     );
   }
 

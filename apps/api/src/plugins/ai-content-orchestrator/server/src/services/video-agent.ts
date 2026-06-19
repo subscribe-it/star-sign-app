@@ -9,6 +9,7 @@ import { formatDateInZone } from '../utils/date-time';
 import { getEntityService } from '../utils/entity-service';
 import { resolveMediaPublicDir } from './media-generator';
 import { getPluginService } from '../utils/plugin';
+import { isPublicHttpUrl } from '../utils/public-url';
 
 // Hard cap on the rendered-video download (bytes) to bound memory / guard
 // against a hostile or misbehaving provider returning an oversized payload.
@@ -31,24 +32,6 @@ const toAbsoluteMediaUrl = (value: unknown, serverUrl: string): string | null =>
   if (/^https?:\/\//i.test(raw)) return raw;
   if (!serverUrl) return null;
   return `${serverUrl.replace(/\/$/, '')}/${raw.replace(/^\//, '')}`;
-};
-
-// A social platform must be able to fetch the media — reject localhost / private
-// hosts so we never persist a non-public URL into tickets or the audit trail.
-const isPublicHttpUrl = (value: string): boolean => {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    return false;
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-  const host = parsed.hostname.toLowerCase();
-  if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host)) return false;
-  if (host.endsWith('.local')) return false;
-  if (/^10\./.test(host) || /^192\.168\./.test(host)) return false;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
-  return true;
 };
 
 const resolveVideoMediaUrl = (video: VideoAssetRecord): string | null => {
@@ -158,6 +141,7 @@ const downloadAndUploadVideo = async (
     timeout: 120_000,
     maxContentLength: MAX_RENDERED_VIDEO_BYTES,
     maxBodyLength: MAX_RENDERED_VIDEO_BYTES,
+    maxRedirects: 0,
   });
   const buffer = Buffer.from(response.data, 'binary');
 
