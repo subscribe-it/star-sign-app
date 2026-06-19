@@ -25,6 +25,7 @@ const topicsController = ({ strapi }: { strapi: Strapi }) => ({
         scheduled_for?: string;
         workflow?: number;
         article_category?: number;
+        editor_persona?: number | null;
         seo_intent?: string;
         target_persona?: string;
         priority_score?: number;
@@ -42,6 +43,7 @@ const topicsController = ({ strapi }: { strapi: Strapi }) => ({
           scheduled_for: body.scheduled_for,
           workflow: body.workflow,
           article_category: body.article_category,
+          editor_persona: body.editor_persona,
           seo_intent: body.seo_intent,
           target_persona: body.target_persona,
           priority_score: body.priority_score,

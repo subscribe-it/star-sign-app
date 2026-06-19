@@ -39,6 +39,11 @@
       "relation": "manyToOne",
       "target": "api::category.category"
     },
+    "editor_persona": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.editor-persona"
+    },
     "generated_article": {
       "type": "relation",
       "relation": "oneToOne",

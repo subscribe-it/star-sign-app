@@ -59,6 +59,7 @@ export type WorkflowRecord = {
   horoscope_type_values?: string[] | null;
   all_signs?: boolean;
   article_category?: number | { id: number } | null;
+  default_editor_persona?: number | { id: number } | null;
   last_generated_at?: string | Date | null;
   last_published_at?: string | Date | null;
   last_generation_slot?: string | null;
@@ -94,6 +95,7 @@ export type TopicQueueItemRecord = {
   priority_score?: number | null;
   workflow?: number | { id: number } | null;
   article_category?: number | { id: number } | null;
+  editor_persona?: number | { id: number } | null;
   generated_article?: number | { id: number } | null;
   plan_item?: number | { id: number } | null;
   createdAt?: string;
@@ -728,6 +730,7 @@ export type NormalizedWorkflowConfig = {
   horoscopeTypeValues: string[];
   allSigns: boolean;
   articleCategoryId: number | null;
+  defaultEditorPersonaId: number | null;
   lastGenerationSlot: string | null;
   lastPublishSlot: string | null;
   enabledChannels: SocialPlatform[];
@@ -781,6 +784,7 @@ export type WorkflowUpdatePayload = Partial<
     | 'daily_token_limit'
     | 'all_signs'
     | 'article_category'
+    | 'default_editor_persona'
     | 'image_gen_model'
     | 'enabled_channels'
     | 'allow_manual_edit'
