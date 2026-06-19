@@ -14,6 +14,7 @@ import type {
   TrafficSnapshotRecord,
 } from '../types';
 import { recordSystemAuditEvent } from '../utils/audit-trail';
+import { EDITORIAL_CONTEXT_MAX_CHARS } from '../utils/editorial-context';
 import { getEntityService } from '../utils/entity-service';
 import { isRecord, toSafeErrorMessage } from '../utils/json';
 import { getPluginService } from '../utils/plugin';
@@ -307,6 +308,106 @@ export const computeBestPublishHours = (
     .map(([hour]) => hour);
 
   return hours.length > 0 ? hours : fallbackHours;
+};
+
+// Maksymalna długość deterministycznej rekomendacji "jak pisać". Trzymana
+// znacznie poniżej EDITORIAL_CONTEXT_MAX_CHARS (1500) z editorial-context.ts,
+// bo to tylko JEDEN wpis z wielu, a prompt twórczy musi zmieścić też inne reguły.
+export const EDITORIAL_RECOMMENDATION_MAX_CHARS = 700;
+
+const titlesOf = (entries: ContentInsightEntry[], limit: number): string[] =>
+  entries
+    .slice(0, limit)
+    .map((entry) => entry.title?.trim())
+    .filter((title): title is string => Boolean(title));
+
+/**
+ * Buduje DETERMINISTYCZNĄ rekomendację "JAK pisać" (styl, struktura, długość,
+ * ton, czego unikać) wyłącznie z sygnałów już policzonych w payloadzie insightów
+ * (top vs bottom content, trending, kanał ruchu, najlepsze godziny).
+ *
+ * To domyka pętlę performance->QUALITY: insighty wpływają nie tylko na TO, CO
+ * pisać (tematy), ale też na TO, JAK pisać (forma, która faktycznie działa).
+ *
+ * Zwraca null, gdy danych jest za mało, by udzielić rzetelnej wskazówki — wtedy
+ * świadomie NIE zapisujemy żadnej (mylącej) rekomendacji.
+ *
+ * Wynik jest po polsku i przycięty do EDITORIAL_RECOMMENDATION_MAX_CHARS, bo
+ * trafia wprost do promptu generacyjnego (przez editorial-context).
+ */
+export const buildEditorialRecommendation = (input: {
+  topContent?: ContentInsightEntry[];
+  bottomContent?: ContentInsightEntry[];
+  trendingTopics?: ContentInsightEntry[];
+  bestPublishHours?: number[];
+  traffic?: Pick<TrafficInsights, 'organicViews' | 'socialEngagements' | 'channelRecommendation'>;
+}): string | null => {
+  const topTitles = titlesOf(input.topContent ?? [], 3);
+  const trendingTitles = titlesOf(input.trendingTopics ?? [], 3);
+  const weakTitles = titlesOf(input.bottomContent ?? [], 3);
+  const channel = input.traffic?.channelRecommendation;
+  const organic = Number(input.traffic?.organicViews ?? 0);
+  const social = Number(input.traffic?.socialEngagements ?? 0);
+
+  // Brak jakiegokolwiek sygnału jakościowego => nic nie zapisujemy.
+  const hasSignal =
+    topTitles.length > 0 ||
+    trendingTitles.length > 0 ||
+    weakTitles.length > 0 ||
+    organic > 0 ||
+    social > 0;
+  if (!hasSignal) {
+    return null;
+  }
+
+  const parts: string[] = [];
+
+  // 1) Wzorzec do naśladowania: forma najlepszych/rosnących treści.
+  const winners = trendingTitles.length > 0 ? trendingTitles : topTitles;
+  if (winners.length > 0) {
+    parts.push(
+      `Naśladuj formę treści, które działają (${winners.join(', ')}): ten sam konkretny, ` +
+        `rzeczowy ton i klarowną strukturę.`
+    );
+  }
+
+  // 2) Struktura + długość zależnie od dominującego kanału dystrybucji.
+  //    Sygnał kanału pochodzi z faktycznych danych ruchu (co realnie performuje).
+  if (channel === 'invest_organic' || (channel === undefined && organic > social && organic > 0)) {
+    parts.push(
+      'Pisz pod ruch organiczny: dłuższe, wyczerpujące teksty (ok. 1000-1400 słów), ' +
+        'podziel je na śródtytuły, dodawaj konkretne przykłady i odpowiadaj wprost na pytania ' +
+        'czytelnika (format pod wyszukiwarkę).'
+    );
+  } else if (channel === 'invest_social' || (channel === undefined && social > organic && social > 0)) {
+    parts.push(
+      'Pisz pod dystrybucję w social: zwięźlej (ok. 600-900 słów), mocny hook w pierwszym akapicie, ' +
+        'krótkie akapity, śródtytuły i jasna puenta nadająca się do udostępnienia.'
+    );
+  } else {
+    parts.push(
+      'Utrzymuj zbalansowaną formę: ok. 800-1100 słów, śródtytuły, konkretne przykłady ' +
+        'i mocny pierwszy akapit.'
+    );
+  }
+
+  // 3) Czego unikać: wzorce słabych treści (deprioryteryzowane).
+  if (weakTitles.length > 0) {
+    parts.push(
+      `Unikaj wzorca słabych treści (${weakTitles.join(', ')}): ogólników, lania wody ` +
+        'i tematów bez wyraźnego haka dla czytelnika.'
+    );
+  }
+
+  const text = parts.join(' ').trim();
+  if (!text) {
+    return null;
+  }
+
+  if (text.length <= EDITORIAL_RECOMMENDATION_MAX_CHARS) {
+    return text;
+  }
+  return `${text.slice(0, EDITORIAL_RECOMMENDATION_MAX_CHARS - 1).trimEnd()}…`;
 };
 
 export const detectRepeatedRunFailures = (
@@ -607,9 +708,50 @@ const insightsEngine = ({ strapi }: { strapi: Strapi }) => {
       payload: Record<string, unknown>,
       now: Date
     ): Promise<{ status: 'created' | 'skipped' | 'failed'; reason?: string }> {
+      // Deterministyczna baza "JAK pisać" liczona z sygnałów performance.
+      // Jeśli jest null, danych jest za mało, by udzielić rzetelnej wskazówki.
+      const deterministic = buildEditorialRecommendation({
+        topContent: payload.topContent as ContentInsightEntry[] | undefined,
+        bottomContent: payload.bottomContent as ContentInsightEntry[] | undefined,
+        trendingTopics: payload.trendingTopics as ContentInsightEntry[] | undefined,
+        bestPublishHours: payload.bestPublishHours as number[] | undefined,
+        traffic: payload.traffic as TrafficInsights | undefined,
+      });
+
+      // Łączy prozę LLM (jeśli jest) z konkretną, deterministyczną wskazówką
+      // "jak pisać", twardo przycinając do limitu wstrzykiwanego do promptu.
+      const composeContent = (llmText: string): string => {
+        const combined = [llmText.trim(), deterministic?.trim()]
+          .filter((part): part is string => Boolean(part && part.length > 0))
+          .join(' ');
+        if (combined.length <= EDITORIAL_CONTEXT_MAX_CHARS) {
+          return combined;
+        }
+        return `${combined.slice(0, EDITORIAL_CONTEXT_MAX_CHARS - 1).trimEnd()}…`;
+      };
+
       const apiToken = process.env.AICO_OPENROUTER_TOKEN?.trim();
       if (!apiToken) {
-        return { status: 'skipped', reason: 'missing_openrouter_token' };
+        // Bez LLM nadal domykamy pętlę deterministyczną wskazówką (o ile są dane).
+        if (!deterministic) {
+          return { status: 'skipped', reason: 'insufficient_data' };
+        }
+        await this.upsertMemory({
+          key: EDITORIAL_RECOMMENDATION_MEMORY_KEY,
+          label: 'Rekomendacja redakcyjna (auto)',
+          content: deterministic,
+          active: true,
+          priority: 70,
+          // Typ wstrzykiwany przez editorial-context — DOMYKA pętlę do promptu.
+          memoryType: 'brand_voice',
+          metadata: {
+            kind: 'editorial_recommendation',
+            source: 'deterministic',
+            generatedAt: now.toISOString(),
+            validUntil: addDaysIso(now, INSIGHT_VALIDITY_DAYS),
+          },
+        });
+        return { status: 'created' };
       }
 
       try {
@@ -625,8 +767,10 @@ const insightsEngine = ({ strapi }: { strapi: Strapi }) => {
         const schema = '{"recommendation":"string (2-4 zdania po polsku)"}';
         const prompt = [
           'Jesteś strategiem redakcji portalu astrologicznego Star Sign.',
-          'Na podstawie poniższych statystyk skuteczności treści napisz krótką rekomendację redakcyjną po polsku (2-4 zdania):',
-          'co publikować częściej, czego unikać i kiedy publikować.',
+          'Na podstawie poniższych statystyk skuteczności treści napisz krótką rekomendację redakcyjną po polsku (2-4 zdania).',
+          'Skup się na tym JAK pisać, by treść performowała: rekomendowana długość artykułu,',
+          'struktura (śródtytuły, przykłady), ton oraz konkretne słabe wzorce, których należy unikać —',
+          'wyprowadzone z różnicy między treściami top a bottom oraz z sygnałów ruchu (kanał, godziny).',
           'Zwróć wyłącznie valid JSON zgodny ze schematem.',
           `Statystyki: ${JSON.stringify({
             topContent: payload.topContent,
@@ -676,11 +820,15 @@ const insightsEngine = ({ strapi }: { strapi: Strapi }) => {
         await this.upsertMemory({
           key: EDITORIAL_RECOMMENDATION_MEMORY_KEY,
           label: 'Rekomendacja redakcyjna (auto, LLM)',
-          content: recommendation,
+          // Proza LLM + konkretna deterministyczna wskazówka "jak pisać".
+          content: composeContent(recommendation),
           active: true,
           priority: 70,
+          // Typ wstrzykiwany przez editorial-context — DOMYKA pętlę do promptu.
+          memoryType: 'brand_voice',
           metadata: {
             kind: 'editorial_recommendation',
+            source: deterministic ? 'llm+deterministic' : 'llm',
             generatedAt: now.toISOString(),
             validUntil: addDaysIso(now, INSIGHT_VALIDITY_DAYS),
             model,
@@ -712,11 +860,16 @@ const insightsEngine = ({ strapi }: { strapi: Strapi }) => {
       active: boolean;
       priority: number;
       metadata: Record<string, unknown>;
+      // Domyślnie 'custom' (insighty techniczne/wewnętrzne, NIE wstrzykiwane do
+      // promptu twórczego). Rekomendacja redakcyjna nadpisuje to typem, który
+      // editorial-context faktycznie wstrzykuje (np. 'brand_voice') — bez tego
+      // pętla performance->jakość nie jest domknięta.
+      memoryType?: EditorialMemoryRecord['memory_type'];
     }): Promise<EditorialMemoryRecord> {
       const data = {
         key: input.key,
         label: input.label,
-        memory_type: 'custom' as const,
+        memory_type: input.memoryType ?? 'custom',
         content: input.content,
         active: input.active,
         priority: input.priority,

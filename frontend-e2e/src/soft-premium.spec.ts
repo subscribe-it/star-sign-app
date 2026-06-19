@@ -89,8 +89,10 @@ test.describe('Soft premium flow', () => {
       page.locator('[data-test="article-premium-preview"]'),
     ).toBeVisible();
     await expect(
-      page.locator('[data-test="blog-newsletter-link"]'),
-    ).toHaveAttribute('href', '/#newsletter');
+      page.locator(
+        '[data-test="newsletter-cta"][data-test-source="blog-detail"]',
+      ),
+    ).toBeVisible();
   });
 
   test('keeps daily tarot readable and adds the premium analysis teaser', async ({

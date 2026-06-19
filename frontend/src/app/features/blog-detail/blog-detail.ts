@@ -49,6 +49,7 @@ import { Skeleton } from '../../shared/components/skeleton/skeleton';
 import { BreadcrumbsComponent } from '../../shared/components/breadcrumbs/breadcrumbs';
 import { SocialShare } from '../../shared/components/social-share';
 import { PremiumPreviewBlock } from '../../shared/components/premium-preview-block/premium-preview-block';
+import { NewsletterCtaComponent } from '../../shared/components/newsletter-cta/newsletter-cta';
 
 @Component({
   selector: 'app-blog-detail',
@@ -62,6 +63,7 @@ import { PremiumPreviewBlock } from '../../shared/components/premium-preview-blo
     BreadcrumbsComponent,
     SocialShare,
     PremiumPreviewBlock,
+    NewsletterCtaComponent,
   ],
   viewProviders: [
     provideIcons({ heroChevronLeft, heroClock, heroUser, heroShare }),

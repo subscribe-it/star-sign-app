@@ -24,6 +24,7 @@
     "premium_events": { "type": "integer", "default": 0 },
     "cta_clicks": { "type": "integer", "default": 0 },
     "checkout_events": { "type": "integer", "default": 0 },
+    "newsletter_events": { "type": "integer", "default": 0 },
     "social_published": { "type": "integer", "default": 0 },
     "social_failed": { "type": "integer", "default": 0 },
     "organic_clicks": { "type": "integer", "default": 0 },

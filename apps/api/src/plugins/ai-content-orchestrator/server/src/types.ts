@@ -144,6 +144,7 @@ export type ContentPerformanceSnapshotRecord = {
   premium_events?: number;
   cta_clicks?: number;
   checkout_events?: number;
+  newsletter_events?: number;
   social_published?: number;
   social_failed?: number;
   organic_clicks?: number;

@@ -46,6 +46,7 @@ type EventStats = {
   premiumEvents: number;
   ctaClicks: number;
   checkoutEvents: number;
+  newsletterSignups: number;
 };
 
 const toDateRange = (day: string): { start: string; end: string } => {
@@ -168,6 +169,10 @@ const performanceFeedback = ({ strapi }: { strapi: Strapi }) => {
           premium_events: eventsForArticle.premiumEvents,
           cta_clicks: eventsForArticle.ctaClicks,
           checkout_events: eventsForArticle.checkoutEvents,
+          // Best-effort: 0 dopóki inline CTA + per-content 'newsletter_signup'
+          // event nie wylądują (patrz komentarz w aggregateEvents). Zapis pola
+          // jest dodatkowy i wstecznie kompatybilny.
+          newsletter_events: eventsForArticle.newsletterSignups,
           social_published: socialForArticle.published,
           social_failed: socialForArticle.failed,
           freshness_days: freshnessDays,
@@ -240,6 +245,20 @@ const performanceFeedback = ({ strapi }: { strapi: Strapi }) => {
 
           if (event.event_type === 'begin_checkout' || event.event_type === 'checkout_redirect') {
             current.checkoutEvents += 1;
+          }
+
+          // Newsletter sign-up to jedyny żywy kanał konwersji dopóki Premium jest
+          // w trybie 'open', dlatego liczymy go jako pełnoprawną metrykę, którą
+          // autopilot może optymalizować (experiment-agent -> 'newsletter_events').
+          //
+          // GAP ATRYBUCJI: dziś enum analytics-event.event_type NIE zawiera
+          // 'newsletter_signup', a frontend (poza zakresem) wysyła ten event bez
+          // przypięcia content_id/content_slug artykułu. Dopóki inline CTA w
+          // artykule + per-content event nie wylądują, ta gałąź realnie zlicza 0
+          // (best-effort, brak fałszywych dodatnich). Gdy event zacznie nieść
+          // atrybucję contentu, wpadnie tu automatycznie bez kolejnej zmiany.
+          if (event.event_type === 'newsletter_signup') {
+            current.newsletterSignups += 1;
           }
 
           map.set(key, current);
@@ -318,6 +337,7 @@ const performanceFeedback = ({ strapi }: { strapi: Strapi }) => {
         premiumEvents: 0,
         ctaClicks: 0,
         checkoutEvents: 0,
+        newsletterSignups: 0,
       };
     },
 
