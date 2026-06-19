@@ -1,0 +1,152 @@
+<div
+  class="min-h-screen bg-[#FFFBFB] selection:bg-mystic-rose selection:text-white"
+>
+  @if (isLoading()) {
+  <!-- Loading -->
+  <section class="section-container pt-32 pb-24" aria-busy="true">
+    <p class="text-mystic-cocoa font-light text-lg">Wczytujemy autora…</p>
+  </section>
+  } @else if (notFound()) {
+  <!-- Not found -->
+  <section class="section-container pt-32 pb-24 text-center">
+    <h1 class="serif-display text-3xl sm:text-4xl text-mystic-cocoa mb-4">
+      Nie znaleźliśmy tego autora
+    </h1>
+    <p class="text-mystic-cocoa font-light mb-10 max-w-xl mx-auto">
+      Być może odnośnik jest nieaktualny. Zajrzyj na bloga — czeka tam mnóstwo
+      tekstów od naszej redakcji.
+    </p>
+    <a routerLink="/artykuly" class="btn-primary justify-center">
+      Przejdź do artykułów ✦
+    </a>
+  </section>
+  } @else if (author(); as currentAuthor) {
+  <!-- Author profile -->
+  <section
+    class="relative pt-24 pb-14 sm:pt-32 sm:pb-20 overflow-hidden bg-[#FDF4F5]"
+  >
+    <div
+      aria-hidden="true"
+      class="mystic-orb top-12 right-[6%] w-72 h-72 sm:w-[26rem] sm:h-[26rem] animate-float bg-mystic-rose/20"
+    ></div>
+
+    <div class="section-container relative z-10">
+      <a
+        routerLink="/artykuly"
+        class="inline-flex items-center gap-2 text-mystic-rose hover:text-mystic-cocoa transition-colors mb-10 font-medium text-sm tracking-wide group"
+      >
+        <ng-icon
+          name="heroChevronLeft"
+          class="group-hover:-translate-x-1 transition-transform"
+        />
+        Powrót do artykułów
+      </a>
+
+      <div class="flex flex-col sm:flex-row items-start gap-8 max-w-4xl">
+        @if (avatarUrl(currentAuthor)) {
+        <img
+          [src]="avatarUrl(currentAuthor) | strapiImage"
+          [alt]="currentAuthor.avatar?.alternativeText || displayName()"
+          decoding="async"
+          class="w-28 h-28 sm:w-36 sm:h-36 rounded-full object-cover border-4 border-white shadow-xl shrink-0"
+        />
+        }
+        <div>
+          <span
+            class="text-mystic-gold text-[11px] uppercase tracking-[0.2em] font-bold mb-3 block"
+          >
+            Autor Star Sign
+          </span>
+          <h1
+            class="serif-display text-3xl sm:text-5xl text-mystic-cocoa mb-4 leading-tight break-words"
+          >
+            {{ displayName() }}
+          </h1>
+          @if (currentAuthor.specialization) {
+          <p
+            class="inline-flex items-center gap-2 bg-white/90 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs font-bold text-mystic-rose tracking-wide shadow-sm"
+          >
+            <ng-icon name="heroSparkles" />
+            {{ currentAuthor.specialization }}
+          </p>
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-container py-14 sm:py-16">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16">
+      <!-- Bio -->
+      <div class="lg:col-span-7">
+        <h2 class="serif-display text-2xl text-mystic-cocoa mb-5">O autorze</h2>
+        @if (currentAuthor.bio) {
+        <p
+          class="text-mystic-cocoa text-base sm:text-lg leading-relaxed font-light whitespace-pre-line break-words"
+        >
+          {{ currentAuthor.bio }}
+        </p>
+        } @else {
+        <p class="text-mystic-cocoa font-light italic">
+          Ten autor nie dodał jeszcze opisu. Zajrzyj do jego artykułów poniżej.
+        </p>
+        }
+      </div>
+    </div>
+
+    <!-- Author's articles -->
+    @let authorArticles = articles();
+    <div class="mt-16 pt-12 border-t border-mystic-rose/10">
+      <h2 class="serif-display text-3xl text-mystic-cocoa mb-10">
+        Artykuły autora
+      </h2>
+
+      @if (authorArticles.length > 0) {
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        @for (item of authorArticles; track item.documentId) {
+        <a
+          [routerLink]="['/artykuly', item.slug]"
+          class="group block bg-white rounded-2xl overflow-hidden border border-mystic-rose/10 hover:shadow-xl transition-all h-full"
+        >
+          <div class="relative aspect-video overflow-hidden">
+            <img
+              [src]="item.image?.url | strapiImage"
+              [alt]="item.title"
+              loading="lazy"
+              decoding="async"
+              class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+            @if (item.category?.name) {
+            <span
+              class="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-bold text-mystic-rose tracking-wider uppercase"
+            >
+              {{ item.category?.name }}
+            </span>
+            }
+          </div>
+          <div class="p-6">
+            <h3
+              class="serif-display text-xl text-mystic-cocoa mb-3 line-clamp-2 group-hover:text-mystic-rose transition-colors"
+            >
+              {{ item.title }}
+            </h3>
+            <p class="text-mystic-cocoa text-sm font-light line-clamp-3 mb-4">
+              {{ item.excerpt }}
+            </p>
+            <span
+              class="text-xs text-mystic-gold font-medium uppercase tracking-widest"
+              >Czytaj więcej →</span
+            >
+          </div>
+        </a>
+        }
+      </div>
+      } @else {
+      <p class="text-mystic-cocoa font-light">
+        Ten autor nie ma jeszcze opublikowanych artykułów. Zajrzyj wkrótce ✦
+      </p>
+      }
+    </div>
+  </section>
+  }
+</div>

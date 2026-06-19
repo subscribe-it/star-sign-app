@@ -9,5 +9,21 @@ export default () => ({
         auth: false,
       },
     },
+    {
+      method: 'GET',
+      path: '/editor-personas',
+      handler: 'personas-public.find',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
+      path: '/editor-personas/:key',
+      handler: 'personas-public.findByKey',
+      config: {
+        auth: false,
+      },
+    },
   ],
 });

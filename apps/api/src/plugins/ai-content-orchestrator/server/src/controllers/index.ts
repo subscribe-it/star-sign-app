@@ -11,6 +11,7 @@ import mediaLibrary from './media-library';
 import mediaUsage from './media-usage';
 import performance from './performance';
 import personas from './personas';
+import personasPublic from './personas-public';
 import providers from './providers';
 import runs from './runs';
 import settings from './settings';
@@ -35,6 +36,7 @@ export default {
   'media-usage': mediaUsage,
   performance,
   personas,
+  'personas-public': personasPublic,
   providers,
   social,
   strategy,

@@ -41,6 +41,7 @@ import {
 import { getOptionalString, getString, isRecord, toSafeErrorMessage } from '../utils/json';
 import {
   assertPremiumContentQuality,
+  hasAstrologyDisclaimer,
   PREMIUM_CONTENT_RETRY_MAX,
   type PremiumContentKind,
 } from '../utils/premium-quality';
@@ -112,6 +113,12 @@ type UsageService = {
     tokenLimit: number;
   }) => Promise<{ blocked: boolean; usage: { request_count: number; total_tokens: number } }>;
   registerUsage: (workflowId: number, day: string, usage: OpenRouterUsage) => Promise<void>;
+  // Miękki odczyt dziennego zużycia bez efektów ubocznych (nie zmienia statusu
+  // budżetu). Wykorzystywany do bramkowania dodatkowych wywołań multi-pass.
+  getOrCreate?: (
+    workflowId: number,
+    day: string
+  ) => Promise<{ request_count: number; total_tokens: number }>;
 };
 
 type OpenRouterService = {
@@ -263,6 +270,17 @@ type PolishRepairValidator<TPayload> = (payload: unknown) => TPayload;
 
 const DEFAULT_WORKFLOW_LOCK_TTL_MS = 30 * 60_000;
 const MAX_WORKFLOW_LOCK_TTL_MS = 6 * 60 * 60_000;
+
+// Multi-pass dla ARTYKUŁÓW (tylko article): generujemy N szkiców (writer) i
+// jednym wywołaniem critique wybieramy zwycięzcę przed istniejącym etapem
+// editor-repair. Domyślnie 2 szkice, twardy sufit 3, dolny próg 1 (= dawne
+// zachowanie single-shot, bez critique). Konfigurowalne przez ENV, żeby nie
+// dotykać schematu workflow/typów.
+const ARTICLE_MULTIPASS_DEFAULT_DRAFTS = 2;
+const ARTICLE_MULTIPASS_MAX_DRAFTS = 3;
+// Lekki narzut promptu pojedynczego szkicu/critique przy szacowaniu, czy starczy
+// dziennego budżetu tokenów na dodatkowe wywołanie (oprócz maxCompletionTokens).
+const ARTICLE_MULTIPASS_PROMPT_TOKEN_HEADROOM = 1500;
 
 const emptyUsage = (): OpenRouterUsage => ({
   prompt_tokens: 0,
@@ -1864,6 +1882,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
         imageAssetKey: selectionResult.mediaAssetKey,
         imageContextKey: `daily-card:${workflow.id}`,
         targetDate,
+        editorPersonaId: persona?.id ?? null,
         onStep: onStep,
       });
 
@@ -1893,6 +1912,355 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           total_tokens: llmResponse.usage.total_tokens + repairResult.usage.total_tokens,
         },
       };
+    },
+
+    // Liczba szkiców writer-pass dla artykułu: ENV
+    // AICO_ARTICLE_MULTIPASS_DRAFTS, domyślnie 2, przycięte do [1,3]. 1 = dawne
+    // zachowanie single-shot (bez critique).
+    resolveArticleMultiPassDrafts(): number {
+      const raw = Number(process.env.AICO_ARTICLE_MULTIPASS_DRAFTS);
+      if (!Number.isFinite(raw)) {
+        return ARTICLE_MULTIPASS_DEFAULT_DRAFTS;
+      }
+      return Math.max(1, Math.min(ARTICLE_MULTIPASS_MAX_DRAFTS, Math.floor(raw)));
+    },
+
+    // Miękki odczyt dziennego zużycia per-workflow (bez efektów ubocznych na
+    // status budżetu). Gdy serwis nie wystawia getOrCreate (np. w testach),
+    // zwraca zero — wtedy bramka budżetu polega wyłącznie na tokenach zużytych w
+    // bieżącym runie.
+    async readDailyUsageSoft(
+      workflowId: number,
+      day: string
+    ): Promise<{ request_count: number; total_tokens: number }> {
+      const service = usageService() as UsageService | undefined;
+      if (!service || typeof service.getOrCreate !== 'function') {
+        return { request_count: 0, total_tokens: 0 };
+      }
+
+      try {
+        const record = await service.getOrCreate(workflowId, day);
+        return {
+          request_count: Number(record.request_count ?? 0),
+          total_tokens: Number(record.total_tokens ?? 0),
+        };
+      } catch {
+        return { request_count: 0, total_tokens: 0 };
+      }
+    },
+
+    // Bramka budżetu dla DODATKOWEGO wywołania LLM w multi-pass. Sprawdzamy
+    // PRZED każdym dodatkowym wywołaniem (szkice > 1 oraz critique):
+    //   - per-workflow dzienny limit requestów: zużycie dzisiejsze + wywołania w
+    //     bieżącym runie (już zarejestrowane jako 1 na koniec runa, więc liczymy
+    //     je dodatkowo) < dailyRequestLimit;
+    //   - per-workflow dzienny limit tokenów: zużycie dzisiejsze + tokeny tego
+    //     runu + szacowany narzut tego wywołania (maxCompletionTokens + prompt
+    //     headroom) <= dailyTokenLimit;
+    //   - globalny dzienny cap LLM autonomy-policy (action: 'llm.generate'),
+    //     best-effort — brak serwisu => nie blokuje.
+    // Gdy którakolwiek bramka nie przejdzie, multi-pass łagodnie spada do
+    // single-shot (N=1, bez critique) i nie wydaje dodatkowych tokenów.
+    async canAffordExtraLlmCall(input: {
+      config: NormalizedWorkflowConfig;
+      day: string;
+      tokensSpentThisRun: number;
+      // Ile dodatkowych wywołań (poza pierwszym szkicem) już wykonaliśmy w tym
+      // runie; każde liczy się do dziennego limitu requestów.
+      extraCallsSoFar: number;
+    }): Promise<boolean> {
+      const daily = await this.readDailyUsageSoft(input.config.id, input.day);
+
+      // Limit requestów: dzisiejsze + (to wywołanie) + dotychczasowe dodatkowe
+      // wywołania tego runu. Pierwszy szkic to "bazowy" request zliczany na
+      // koniec runu; dodatkowe wywołania konsumują dalszą część dziennego limitu.
+      const projectedRequests = daily.request_count + 1 + input.extraCallsSoFar;
+      if (projectedRequests > input.config.dailyRequestLimit) {
+        return false;
+      }
+
+      const tokenHeadroom =
+        input.config.maxCompletionTokens + ARTICLE_MULTIPASS_PROMPT_TOKEN_HEADROOM;
+      const projectedTokens = daily.total_tokens + input.tokensSpentThisRun + tokenHeadroom;
+      if (projectedTokens > input.config.dailyTokenLimit) {
+        return false;
+      }
+
+      const policy = autonomyPolicyService();
+      if (typeof policy?.evaluate === 'function') {
+        try {
+          const decision = await policy.evaluate({
+            action: 'llm.generate',
+          } as any);
+          if (!decision.allowed) {
+            return false;
+          }
+        } catch (error) {
+          // Best-effort: niedostępna polityka nie blokuje dodatkowego wywołania,
+          // bo twarde limity per-workflow powyżej już chronią budżet.
+          strapi.log.warn(
+            `[aico] multi-pass: autonomy-policy llm.generate check failed, continuing: ${toSafeErrorMessage(
+              error
+            )}`
+          );
+        }
+      }
+
+      return true;
+    },
+
+    // Multi-pass writer + critique dla ARTYKUŁU. Generuje do N szkiców (każdy
+    // tym samym promptem/personą/systemPreamble, z lekko zróżnicowaną
+    // temperaturą), po czym jednym wywołaniem critique ocenia je wg rubryki i
+    // wybiera zwycięzcę. Każde dodatkowe wywołanie (szkice > 1 oraz critique)
+    // jest bramkowane budżetem; gdy budżet jest ciasny, gracefully spada do
+    // pojedynczego szkicu bez critique. Zwraca wybrany szkic + łączne zużycie
+    // tokenów (do rejestracji jak dotąd) + metadane do logu kroków.
+    async runArticleMultiPassDraft(input: {
+      topic: TopicQueueItemRecord;
+      config: NormalizedWorkflowConfig;
+      apiToken: string;
+      llmModel: string;
+      temperature: number;
+      prompt: string;
+      schema: string;
+      systemPreamble: string;
+      day: string;
+      tokensSpentBeforeRun: number;
+      onLlmTrace?: LlmTraceLogger;
+      onStep?: (
+        stepId: string,
+        status: RunStepStatus,
+        message?: string,
+        output?: any
+      ) => Promise<void>;
+      abortSignal?: AbortSignal;
+    }): Promise<{
+      draft: ArticlePayload;
+      usage: OpenRouterUsage;
+      draftsGenerated: number;
+      critiqueApplied: boolean;
+      winnerIndex: number;
+      fallbackReason: string | null;
+    }> {
+      const usage = emptyUsage();
+      const targetDrafts = this.resolveArticleMultiPassDrafts();
+      const drafts: ArticlePayload[] = [];
+      let extraCalls = 0;
+      let fallbackReason: string | null = null;
+
+      // Pierwszy szkic zawsze wykonujemy (baza, jak w single-shot).
+      // Kolejne tylko, gdy budżet pozwala.
+      for (let i = 0; i < targetDrafts; i += 1) {
+        assertNotAborted(input.abortSignal);
+
+        if (i > 0) {
+          const affordable = await this.canAffordExtraLlmCall({
+            config: input.config,
+            day: input.day,
+            tokensSpentThisRun: input.tokensSpentBeforeRun + usage.total_tokens,
+            extraCallsSoFar: extraCalls,
+          });
+          if (!affordable) {
+            fallbackReason = 'budget_tight_drafts';
+            break;
+          }
+        }
+
+        // Lekkie zróżnicowanie temperatury per szkic dla różnorodności
+        // kandydatów, w bezpiecznym zakresie [0, 2].
+        const candidateTemperature = Math.max(
+          0,
+          Math.min(2, input.temperature + i * 0.1)
+        );
+
+        const response = await llmService().requestJson({
+          model: input.llmModel,
+          apiToken: input.apiToken,
+          prompt: input.prompt,
+          schemaDescription: input.schema,
+          systemPreamble: input.systemPreamble,
+          temperature: candidateTemperature,
+          maxCompletionTokens: input.config.maxCompletionTokens,
+          signal: input.abortSignal,
+        });
+        assertNotAborted(input.abortSignal);
+
+        addUsage(usage, response.usage);
+        if (i > 0) {
+          extraCalls += 1;
+        }
+        await input.onLlmTrace?.(response.trace, {
+          label: `Article draft ${i + 1}/${targetDrafts} #${input.topic.id} / ${input.topic.title}`,
+          workflowType: input.config.workflowType,
+        });
+
+        drafts.push(this.validateArticlePayload(response.payload));
+      }
+
+      // Jeden szkic (target=1, fallback budżetowy, albo dawne zachowanie) =>
+      // brak critique. Zwracamy go wprost.
+      if (drafts.length <= 1) {
+        return {
+          draft: drafts[0]!,
+          usage,
+          draftsGenerated: drafts.length,
+          critiqueApplied: false,
+          winnerIndex: 0,
+          fallbackReason: drafts.length === 1 && targetDrafts > 1 ? fallbackReason : null,
+        };
+      }
+
+      // Critique to dodatkowe wywołanie — też bramkowane budżetem. Gdy się nie
+      // mieści, wybieramy pierwszy szkic (deterministyczny fallback) bez
+      // wydawania dalszych tokenów.
+      const critiqueAffordable = await this.canAffordExtraLlmCall({
+        config: input.config,
+        day: input.day,
+        tokensSpentThisRun: input.tokensSpentBeforeRun + usage.total_tokens,
+        extraCallsSoFar: extraCalls,
+      });
+
+      if (!critiqueAffordable) {
+        return {
+          draft: drafts[0]!,
+          usage,
+          draftsGenerated: drafts.length,
+          critiqueApplied: false,
+          winnerIndex: 0,
+          fallbackReason: 'budget_tight_critique',
+        };
+      }
+
+      const winner = await this.selectBestArticleDraft({
+        topic: input.topic,
+        config: input.config,
+        apiToken: input.apiToken,
+        llmModel: input.llmModel,
+        drafts,
+        onLlmTrace: input.onLlmTrace,
+        abortSignal: input.abortSignal,
+      });
+      addUsage(usage, winner.usage);
+
+      return {
+        draft: drafts[winner.winnerIndex]!,
+        usage,
+        draftsGenerated: drafts.length,
+        critiqueApplied: true,
+        winnerIndex: winner.winnerIndex,
+        fallbackReason,
+      };
+    },
+
+    // Wywołuje prompt critique i wybiera zwycięski szkic wg najwyższego score.
+    // Odporny na nieprawidłowy/niespójny JSON: przy każdej anomalii spada do
+    // szkicu 0 (deterministycznie), nigdy nie rzuca błędem psującym generację.
+    async selectBestArticleDraft(input: {
+      topic: TopicQueueItemRecord;
+      config: NormalizedWorkflowConfig;
+      apiToken: string;
+      llmModel: string;
+      drafts: ArticlePayload[];
+      onLlmTrace?: LlmTraceLogger;
+      abortSignal?: AbortSignal;
+    }): Promise<{ winnerIndex: number; usage: OpenRouterUsage; reason: string }> {
+      const usage = emptyUsage();
+      const candidatesText = input.drafts
+        .map((draft, index) => {
+          const premium = draft.premiumContent ?? '';
+          return [
+            `### Kandydat ${index}`,
+            `Tytuł: ${draft.title}`,
+            `Excerpt: ${draft.excerpt}`,
+            `Content: ${draft.content}`,
+            `PremiumContent: ${premium}`,
+          ].join('\n');
+        })
+        .join('\n\n');
+
+      const critiqueSchema =
+        '{"winnerIndex":0,"reason":"string","scores":[{"index":0,"score":0,"originalnosc":0,"wartosc":0,"persona":0,"seo":0,"czytelnosc":0}]}';
+
+      try {
+        const critiquePrompt = renderAicoPromptTemplate(getAicoPromptTemplate('articleCritique'), {
+          topicTitle: input.topic.title,
+          topicBrief: input.topic.brief ?? input.topic.title,
+          candidates: candidatesText,
+        });
+
+        const response = await llmService().requestJson({
+          model: input.llmModel,
+          apiToken: input.apiToken,
+          prompt: critiquePrompt,
+          schemaDescription: critiqueSchema,
+          temperature: 0.2,
+          maxCompletionTokens: input.config.maxCompletionTokens,
+          signal: input.abortSignal,
+        });
+        assertNotAborted(input.abortSignal);
+
+        addUsage(usage, response.usage);
+        await input.onLlmTrace?.(response.trace, {
+          label: `Article critique #${input.topic.id} / ${input.topic.title}`,
+          workflowType: input.config.workflowType,
+        });
+
+        const winnerIndex = this.resolveCritiqueWinnerIndex(response.payload, input.drafts.length);
+        const reason = isRecord(response.payload)
+          ? getOptionalString(response.payload.reason) ?? 'critique_selected'
+          : 'critique_selected';
+
+        return { winnerIndex, usage, reason };
+      } catch (error) {
+        if (input.abortSignal?.aborted) {
+          throw error;
+        }
+        // Critique nie jest twardym wymogiem — przy błędzie zwracamy szkic 0.
+        strapi.log.warn(
+          `[aico] multi-pass critique failed, falling back to draft 0: ${toSafeErrorMessage(error)}`
+        );
+        return { winnerIndex: 0, usage, reason: 'critique_failed' };
+      }
+    },
+
+    // Wyłuskuje zwycięski indeks z odpowiedzi critique. Najpierw ufa
+    // winnerIndex; gdy brak/niepoprawny, liczy zwycięzcę z tablicy scores
+    // (najwyższy score). Zawsze zwraca poprawny indeks w zakresie [0, count).
+    resolveCritiqueWinnerIndex(payload: unknown, draftCount: number): number {
+      const clamp = (value: number): number =>
+        Math.max(0, Math.min(draftCount - 1, Math.floor(value)));
+
+      if (!isRecord(payload)) {
+        return 0;
+      }
+
+      const explicit = payload.winnerIndex;
+      if (typeof explicit === 'number' && Number.isInteger(explicit) && explicit >= 0 && explicit < draftCount) {
+        return explicit;
+      }
+
+      if (Array.isArray(payload.scores) && payload.scores.length > 0) {
+        let bestIndex = 0;
+        let bestScore = -Infinity;
+        payload.scores.forEach((entry, position) => {
+          if (!isRecord(entry)) {
+            return;
+          }
+          const index =
+            typeof entry.index === 'number' && Number.isFinite(entry.index)
+              ? clamp(entry.index)
+              : clamp(position);
+          const score = typeof entry.score === 'number' && Number.isFinite(entry.score) ? entry.score : -Infinity;
+          if (score > bestScore) {
+            bestScore = score;
+            bestIndex = index;
+          }
+        });
+        return bestIndex;
+      }
+
+      return 0;
     },
 
     async generateArticleFromQueue(
@@ -1975,31 +2343,53 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
         let payload: ArticlePayload | null = null;
         let lastQualityError: Error | null = null;
 
+        // Dzień dla bramki budżetu = "teraz" w strefie workflow (ten sam klucz,
+        // którym executeGeneration rejestruje usage), niezależnie od daty publikacji.
+        const budgetDay = formatDateInZone(now, config.timezone);
+
+        // KROK 0 (multi-pass, tylko artykuły): generuj N szkiców i critique
+        // wybiera zwycięzcę. Bramkowane budżetem; przy ciasnym budżecie spada do
+        // pojedynczego szkicu bez critique (zachowanie zbliżone do single-shot).
+        await onStep?.(
+          'article_draft',
+          'running',
+          'Inicjowanie wizji redakcyjnej i generowanie szkiców treści...'
+        );
+        const multiPass = await this.runArticleMultiPassDraft({
+          topic,
+          config,
+          apiToken,
+          llmModel,
+          temperature,
+          prompt,
+          schema,
+          systemPreamble,
+          day: budgetDay,
+          tokensSpentBeforeRun: 0,
+          onLlmTrace,
+          onStep,
+          abortSignal,
+        });
+        addUsage(finalUsage, multiPass.usage);
+        const baseDraft = multiPass.draft;
+        await onStep?.(
+          'article_draft',
+          'success',
+          multiPass.critiqueApplied
+            ? `Wybrano najlepszy z ${multiPass.draftsGenerated} szkiców (kandydat ${multiPass.winnerIndex + 1}): ${baseDraft.title}`
+            : `Wygenerowano szkic${multiPass.fallbackReason ? ' (single-shot, oszczędność budżetu)' : ''}: ${baseDraft.title}`,
+          {
+            draftsGenerated: multiPass.draftsGenerated,
+            critiqueApplied: multiPass.critiqueApplied,
+            winnerIndex: multiPass.winnerIndex,
+            fallbackReason: multiPass.fallbackReason,
+          }
+        );
+
         for (let attempt = 1; attempt <= PREMIUM_CONTENT_RETRY_MAX; attempt += 1) {
           try {
-            // KROK 1: Inicjowanie wizji redakcyjnej (Writer)
-            await onStep?.(
-              'article_draft',
-              'running',
-              `Inicjowanie wizji redakcyjnej i generowanie szkicu treści (${attempt}/${PREMIUM_CONTENT_RETRY_MAX})...`
-            );
-            const llmResponse = await llmService().requestJson({
-              model: llmModel,
-              apiToken,
-              prompt,
-              schemaDescription: schema,
-              systemPreamble,
-              temperature,
-              maxCompletionTokens: config.maxCompletionTokens,
-              signal: abortSignal,
-            });
-            assertNotAborted(abortSignal);
-
-            const draftPayload = this.validateArticlePayload(llmResponse.payload);
-            finalUsage.prompt_tokens += llmResponse.usage.prompt_tokens;
-            finalUsage.completion_tokens += llmResponse.usage.completion_tokens;
-            finalUsage.total_tokens += llmResponse.usage.total_tokens;
-            await onStep?.('article_draft', 'success', `Wygenerowano szkic: ${draftPayload.title}`);
+            // KROK 1: szkic bazowy pochodzi z multi-pass (writer + critique).
+            const draftPayload = baseDraft;
 
             // KROK 2: Redakcja i optymalizacja (Editor)
             await onStep?.(
@@ -2110,6 +2500,25 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           );
         }
 
+        // Disclaimer (Init 6): miękka kontrola obecności ducha disclaimera w
+        // treści. Warn-only — nie blokujemy generacji, tylko logujemy/raportujemy,
+        // bo brzmienie disclaimera jest częścią promptu i może być sparafrazowane.
+        if (!hasAstrologyDisclaimer({ content: payload.content, premiumContent: payload.premiumContent })) {
+          strapi.log.warn(
+            `[aico] article topic #${topic.id}: brak wykrytego disclaimera w treści (warn).`
+          );
+          await onStep?.(
+            'disclaimer_check',
+            'success',
+            'Uwaga: nie wykryto wyraźnego disclaimera w treści (warn, bez blokady).',
+            { present: false }
+          );
+        } else {
+          await onStep?.('disclaimer_check', 'success', 'Disclaimer obecny w treści.', {
+            present: true,
+          });
+        }
+
         const businessKey = `article:topic:${topic.id}:${targetDate}`;
 
         // KROK 3: Strategia wizualna i dobór mediów
@@ -2159,6 +2568,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           imageAssetKey: selectionResult.mediaAssetKey,
           imageContextKey: `article:${workflow.id}:category:${categoryId}`,
           targetDate,
+          editorPersonaId: persona?.id ?? null,
           title: payload.title,
           categoryName: isRecord(topic.article_category)
             ? (topic.article_category as any).name
@@ -2624,6 +3034,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       imageContextKey: string;
       targetDate: string;
       requiredSignSlug?: string | null;
+      editorPersonaId?: number | null;
       title?: string;
       categoryName?: string;
       onStep?: (
@@ -2713,6 +3124,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
               category: input.categoryId,
               image: imageSelection.uploadFileId,
               author: input.payload.author ?? 'Zespół Star Sign',
+              editor_persona: input.editorPersonaId ?? null,
               read_time_minutes:
                 typeof input.payload.read_time_minutes === 'number'
                   ? Math.max(1, Math.min(60, Math.floor(input.payload.read_time_minutes)))
@@ -2791,6 +3203,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           category: input.categoryId,
           image: imageSelection.uploadFileId,
           author: input.payload.author ?? 'Zespół Star Sign',
+          editor_persona: input.editorPersonaId ?? null,
           read_time_minutes:
             typeof input.payload.read_time_minutes === 'number'
               ? Math.max(1, Math.min(60, Math.floor(input.payload.read_time_minutes)))

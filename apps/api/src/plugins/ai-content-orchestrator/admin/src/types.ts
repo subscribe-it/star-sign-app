@@ -372,6 +372,41 @@ export type DashboardSummary = {
   // Dzisiejsze zużycie kosztowe (LLM / media / reklamy) względem dziennych
   // limitów autonomii. Read-only, prezentowane na karcie "Budżet i zużycie (dziś)".
   usage?: DashboardUsageSummary;
+  // Narracyjny, nietechniczny obraz dnia dla właściciela — zasila kartę
+  // "Co zrobił autopilot" (co powstało, ile wydał, co czeka, podpowiedzi).
+  operator?: OperatorSummary;
+};
+
+export type AutonomyMode = 'off' | 'draft_only' | 'guarded' | 'full';
+
+export type OperatorRecommendationTone = 'info' | 'warning' | 'danger' | 'success';
+
+export type OperatorRecommendation = {
+  key: string;
+  tone: OperatorRecommendationTone;
+  message: string;
+};
+
+export type OperatorSummary = {
+  generated: {
+    total: number;
+    successes: number;
+    failures: number;
+    running: number;
+  };
+  spend: DashboardUsageSummary;
+  pipeline: {
+    pendingTopics: number;
+    plannedItems: number;
+    scheduledPublications: number;
+  };
+  autonomy: {
+    mode: AutonomyMode;
+    modeLabel: string;
+    killSwitch: boolean;
+    llmTokenConfigured: boolean;
+  };
+  recommendations: OperatorRecommendation[];
 };
 
 export type DashboardUsageSummary = {
