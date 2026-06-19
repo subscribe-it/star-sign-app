@@ -51,6 +51,11 @@
     "author": {
       "type": "string"
     },
+    "editor_persona": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.editor-persona"
+    },
     "seo": {
       "type": "component",
       "repeatable": false,

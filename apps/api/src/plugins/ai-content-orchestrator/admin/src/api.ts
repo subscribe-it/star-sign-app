@@ -42,6 +42,8 @@ import type {
 const BASE = '/ai-content-orchestrator';
 
 export const api = {
+  // Zwraca pełne podsumowanie pulpitu wraz z polem `operator` (narracja "Co
+  // zrobił autopilot"). Operator jedzie tą samą odpowiedzią — bez osobnej trasy.
   async getDashboard(client: FetchClient): Promise<DashboardSummary> {
     const { data } = await client.get<ApiEnvelope<DashboardSummary>>(`${BASE}/dashboard`);
     return data.data;

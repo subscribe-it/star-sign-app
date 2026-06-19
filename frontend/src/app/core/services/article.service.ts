@@ -59,12 +59,28 @@ export class ArticleService {
     return this.http
       .get<
         StrapiCollectionResponse<Article>
-      >(`${this.apiUrl}/articles?filters[slug][$eq]=${encodeURIComponent(slug)}&populate[0]=category&populate[1]=image`)
+      >(`${this.apiUrl}/articles?filters[slug][$eq]=${encodeURIComponent(slug)}&populate[0]=category&populate[1]=image&populate[2]=editor_persona`)
       .pipe(
         timeout(API_REQUEST_TIMEOUT_MS),
         map((response) => response.data[0]),
         catchError(() => of(undefined)),
       );
+  }
+
+  /**
+   * Recent articles attributed to a given editor persona (author), newest
+   * first. Used by the public author page. Empty array on any error.
+   */
+  public getArticlesByPersonaKey(
+    personaKey: string,
+    limit = 6,
+  ): Observable<Article[]> {
+    const url = `${this.apiUrl}/articles?filters[editor_persona][key][$eq]=${encodeURIComponent(personaKey)}&sort=publishedAt:desc&pagination[limit]=${limit}&populate[0]=category&populate[1]=image`;
+    return this.http.get<StrapiCollectionResponse<Article>>(url).pipe(
+      timeout(API_REQUEST_TIMEOUT_MS),
+      map((response) => response.data),
+      catchError(() => of([])),
+    );
   }
 
   public getRelatedArticles(

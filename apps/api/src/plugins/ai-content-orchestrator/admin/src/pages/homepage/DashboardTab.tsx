@@ -1,7 +1,12 @@
 import type React from 'react';
 
 import { UiAlert, UiStatus } from '../../components/ui';
-import type { DashboardSummary, DashboardUsageSummary, DiagnosticsSummary } from '../../types';
+import type {
+  DashboardSummary,
+  DashboardUsageSummary,
+  DiagnosticsSummary,
+  OperatorSummary,
+} from '../../types';
 
 type StatTileProps = {
   label: string;
@@ -89,6 +94,175 @@ const BudgetRow = ({ label, used, cap, valueText, capText, colors }: BudgetRowPr
         </div>
       ) : null}
     </div>
+  );
+};
+
+// ——————————————————————————————————————————————————————————————————————————
+// "Co zrobił autopilot" — przyjazna, nietechniczna karta wyjaśniająca, co
+// silnik zrobił dziś, ile wydał, co czeka w kolejce i co warto zrobić dalej.
+// Cel: zbudować zaufanie nietechnicznego właściciela do autonomicznego silnika
+// (odblokowanie przejścia z trybu „tylko szkice" do realnej autonomii).
+// ——————————————————————————————————————————————————————————————————————————
+
+// Mała, spokojna kafelka statystyki (lokalna — nie miesza się z globalnym
+// StatTile z Centrum Dowodzenia; tutaj liczby są mniejsze i bardziej "miękkie").
+const OperatorStatTile = ({
+  label,
+  value,
+  color,
+  colors,
+}: {
+  label: string;
+  value: string | number;
+  color?: string;
+  colors: DashboardTabColors;
+}) => (
+  <div
+    style={{
+      background: '#f8fafc',
+      borderRadius: 12,
+      padding: '14px 16px',
+      display: 'grid',
+      gap: 4,
+    }}
+  >
+    <span style={{ fontSize: 12, color: colors.textLight, fontWeight: 600 }}>{label}</span>
+    <strong style={{ fontSize: 22, color: color ?? colors.text, lineHeight: 1.1 }}>{value}</strong>
+  </div>
+);
+
+// Buduje 1–2 zdania w prostym języku podsumowujące dzień autopilota.
+const buildOperatorHeadline = (operator: OperatorSummary): string => {
+  const { generated, autonomy, pipeline } = operator;
+
+  if (autonomy.killSwitch) {
+    return 'Autopilot jest zatrzymany wyłącznikiem awaryjnym. Dziś nic nie zostało wygenerowane.';
+  }
+
+  if (generated.total === 0) {
+    if (pipeline.pendingTopics > 0 || pipeline.plannedItems > 0) {
+      return 'Dziś autopilot jeszcze nic nie wygenerował, ale ma zaplanowaną pracę i zajmie się nią przy najbliższym uruchomieniu.';
+    }
+    return 'Dziś autopilot jeszcze nic nie wygenerował, a kolejka pracy jest pusta.';
+  }
+
+  const successPart =
+    generated.successes === 1
+      ? 'przygotował 1 materiał'
+      : `przygotował ${formatNumber(generated.successes)} materiałów`;
+  const failurePart =
+    generated.failures > 0
+      ? generated.failures === 1
+        ? ', a 1 zadanie wymaga uwagi'
+        : `, a ${formatNumber(generated.failures)} zadań wymaga uwagi`
+      : '';
+
+  return `Dziś autopilot ${successPart}${failurePart}.`;
+};
+
+const OperatorSummaryCard = ({
+  operator,
+  cardStyle,
+  sectionTitleStyle,
+  colors,
+}: {
+  operator: OperatorSummary | undefined;
+  cardStyle: React.CSSProperties;
+  sectionTitleStyle: React.CSSProperties;
+  colors: DashboardTabColors;
+}) => {
+  if (!operator) {
+    return (
+      <section style={cardStyle}>
+        <h3 style={{ ...sectionTitleStyle, fontSize: 16 }}>Co zrobił autopilot</h3>
+        <div style={{ fontSize: 13, color: colors.textLight }}>
+          Brak danych o pracy autopilota. Spróbuj odświeżyć panel.
+        </div>
+      </section>
+    );
+  }
+
+  const { generated, spend, autonomy, recommendations } = operator;
+
+  // Status badge: czerwony przy zatrzymaniu, pomarańczowy przy błędach,
+  // niebieski w trybie „tylko szkice", zielony gdy pracuje normalnie.
+  const headlineTone: 'danger' | 'warning' | 'info' | 'success' = autonomy.killSwitch
+    ? 'danger'
+    : generated.failures > 0
+      ? 'warning'
+      : autonomy.mode === 'off' || autonomy.mode === 'draft_only'
+        ? 'info'
+        : 'success';
+
+  const adsSpentText =
+    spend.ads.capPln > 0
+      ? `${formatPln(spend.ads.spentPln)} / ${formatPln(spend.ads.capPln)}`
+      : formatPln(spend.ads.spentPln);
+
+  return (
+    <section style={cardStyle}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 16,
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <h3 style={{ ...sectionTitleStyle, fontSize: 16, marginBottom: 0 }}>Co zrobił autopilot</h3>
+        <UiStatus tone={headlineTone} size="S">
+          {`TRYB: ${autonomy.modeLabel.toUpperCase()}`}
+        </UiStatus>
+      </div>
+
+      <p
+        style={{
+          fontSize: 15,
+          lineHeight: 1.5,
+          color: colors.text,
+          margin: '0 0 20px',
+        }}
+      >
+        {buildOperatorHeadline(operator)}
+      </p>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: 12,
+          marginBottom: recommendations.length ? 20 : 0,
+        }}
+      >
+        <OperatorStatTile label="Wygenerowano dziś" value={formatNumber(generated.total)} colors={colors} />
+        <OperatorStatTile
+          label="Sukcesy"
+          value={formatNumber(generated.successes)}
+          color={generated.successes > 0 ? colors.secondary : undefined}
+          colors={colors}
+        />
+        <OperatorStatTile
+          label="Błędy"
+          value={formatNumber(generated.failures)}
+          color={generated.failures > 0 ? colors.danger : undefined}
+          colors={colors}
+        />
+        <OperatorStatTile label="Wydatek na reklamy (dziś)" value={adsSpentText} colors={colors} />
+      </div>
+
+      {recommendations.length ? (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: colors.textLight }}>Co dalej</span>
+          {recommendations.map((rec) => (
+            <UiAlert key={rec.key} tone={rec.tone}>
+              {rec.message}
+            </UiAlert>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 };
 
@@ -220,6 +394,13 @@ export const DashboardTab = ({
         />
       </div>
     </section>
+
+    <OperatorSummaryCard
+      operator={summary?.operator}
+      cardStyle={cardStyle}
+      sectionTitleStyle={sectionTitleStyle}
+      colors={colors}
+    />
 
     <BudgetUsageCard
       usage={summary?.usage}

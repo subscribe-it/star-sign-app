@@ -24,6 +24,24 @@ import { AccountService } from '../../core/services/account.service';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { Article } from '@star-sign-monorepo/shared-types';
 import { environment } from '../../../environments/environment';
+
+/**
+ * Public, audience-facing editor persona attached to an article (E-E-A-T
+ * authorship). Only safe fields are ever populated by the public article API;
+ * the shape mirrors AuthorService.PublicAuthor. Kept local so we don't need to
+ * widen the shared Article type for this additive relation.
+ */
+interface ArticleEditorPersona {
+  key?: string | null;
+  byline?: string | null;
+  bio?: string | null;
+  specialization?: string | null;
+  avatar?: { url: string; alternativeText?: string | null } | null;
+}
+
+type ArticleWithPersona = Article & {
+  editor_persona?: ArticleEditorPersona | null;
+};
 import { featureFlags } from '../../core/feature-flags';
 import { StrapiImagePipe } from '../../core/pipes/strapi-image-pipe';
 import { StrapiSrcsetPipe } from '../../core/pipes/strapi-srcset-pipe';
@@ -136,9 +154,7 @@ export class BlogDetail {
               description: article.excerpt || '',
               image: this.articleImageUrl(article),
               datePublished: article.publishedAt,
-              author: article.author
-                ? { '@type': 'Person', name: article.author }
-                : undefined,
+              author: this.authorJsonLd(article),
               mainEntityOfPage: canonicalUrl,
             },
           },
@@ -166,6 +182,62 @@ export class BlogDetail {
 
   public getSiteUrl(): string {
     return this.seoService.absoluteUrl('/').replace(/\/$/, '');
+  }
+
+  /** Linked editor persona (if any) for an article. */
+  public articlePersona(
+    article: Article | undefined,
+  ): ArticleEditorPersona | null {
+    const persona = (article as ArticleWithPersona | undefined)?.editor_persona;
+    return persona ?? null;
+  }
+
+  /**
+   * Resolves the visible byline: a real named author (persona byline) first,
+   * then the legacy free-text author field, then the editorial fallback.
+   */
+  public authorByline(article: Article | undefined): string {
+    const persona = this.articlePersona(article);
+    const personaByline = persona?.byline?.trim();
+    if (personaByline) {
+      return personaByline;
+    }
+
+    const author = article?.author?.trim();
+    if (author) {
+      return author;
+    }
+
+    return 'Redakcja Star Sign';
+  }
+
+  /**
+   * Author page key when a persona with a key is linked, otherwise null
+   * (then the byline renders as plain text, not a link).
+   */
+  public authorKey(article: Article | undefined): string | null {
+    const key = this.articlePersona(article)?.key?.trim();
+    return key ? key : null;
+  }
+
+  /**
+   * schema.org Person for the article JSON-LD. Adds a `url` to the author page
+   * when a persona key is known so crawlers can connect article -> author.
+   */
+  private authorJsonLd(
+    article: Article,
+  ): { '@type': 'Person'; name: string; url?: string } | undefined {
+    const name = this.authorByline(article);
+    if (!name) {
+      return undefined;
+    }
+
+    const key = this.authorKey(article);
+    return {
+      '@type': 'Person',
+      name,
+      url: key ? this.seoService.absoluteUrl(`/redakcja/${key}`) : undefined,
+    };
   }
 
   /**

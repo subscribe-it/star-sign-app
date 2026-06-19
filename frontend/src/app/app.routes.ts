@@ -54,6 +54,11 @@ export const routes: Routes = [
       import('./features/blog-detail/blog-detail').then((m) => m.BlogDetail),
   },
   {
+    path: 'redakcja/:key',
+    loadComponent: () =>
+      import('./features/author/author').then((m) => m.Author),
+  },
+  {
     path: 'sklep',
     canMatch: [shopFeatureGuard],
     loadComponent: () =>

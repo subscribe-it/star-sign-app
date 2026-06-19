@@ -117,3 +117,28 @@ export const assertPremiumContentQuality = (input: PremiumContentQualityInput): 
     throw new Error(`${label}quality_failed premiumContent (${result.issues.join(', ')})`);
   }
 };
+
+// Sygnały, że treść niesie ze sobą zgodny z prawem disclaimer (charakter
+// rozrywkowy/inspiracyjny, brak porady medycznej/prawnej/finansowej). Sprawdzamy
+// w formie miękkiej (warn), bez wymuszania konkretnego brzmienia — żeby nie
+// blokować generacji, a jedynie wykryć brak ducha disclaimera.
+const DISCLAIMER_SPIRIT_PATTERNS: RegExp[] = [
+  /nie\s+zast[ęe]puj[ąa]?\s+porad/i,
+  /charakter\s+(inspiracyjn|rozrywkow|edukacyjn)/i,
+  /(w\s+celach|dla\s+)?\s*rozrywk/i,
+  /nie\s+stanowi\s+porad/i,
+];
+
+// True, gdy w przekazanym tekście widać ducha disclaimera. Łączy content i
+// (opcjonalnie) premiumContent w jeden korpus, bo disclaimer może wystąpić w
+// dowolnym z widocznych pól.
+export const hasAstrologyDisclaimer = (input: {
+  content?: unknown;
+  premiumContent?: unknown;
+}): boolean => {
+  const corpus = `${toText(input.content)}\n${toText(input.premiumContent)}`;
+  if (!corpus.trim()) {
+    return false;
+  }
+  return DISCLAIMER_SPIRIT_PATTERNS.some((pattern) => pattern.test(corpus));
+};
