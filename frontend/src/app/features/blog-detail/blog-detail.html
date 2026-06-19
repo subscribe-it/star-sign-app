@@ -239,23 +239,8 @@
         </div>
         }
 
-        <!-- Newsletter Mini -->
-        <div class="bg-[#fbf5f7] p-6 sm:p-8 rounded-2xl border border-mystic-rose/20">
-          <h3 class="serif-display text-xl text-mystic-cocoa mb-4">
-            Codzienny horoskop na e-mail
-          </h3>
-          <p class="text-mystic-cocoa text-sm font-light mb-6">
-            Zapisz się, jeśli chcesz wracać po krótką codzienną wskazówkę.
-          </p>
-          <a
-            routerLink="/"
-            fragment="newsletter"
-            class="btn-primary w-full justify-center !py-3 !text-sm"
-            data-test="blog-newsletter-link"
-          >
-            Przejdź do zapisu ✦
-          </a>
-        </div>
+        <!-- Newsletter CTA (inline subscribe, mirrors home GDPR flow) -->
+        <app-newsletter-cta source="blog-detail" />
       </aside>
     </div>
   </section>

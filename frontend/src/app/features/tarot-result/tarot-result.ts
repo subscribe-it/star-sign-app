@@ -19,6 +19,7 @@ import { AnalyticsService } from '../../core/services/analytics.service';
 import { SeoService } from '../../core/services/seo.service';
 import { PremiumPreviewBlock } from '../../shared/components/premium-preview-block/premium-preview-block';
 import { SocialShare } from '../../shared/components/social-share';
+import { NewsletterCtaComponent } from '../../shared/components/newsletter-cta/newsletter-cta';
 import { StrapiImagePipe } from '../../core/pipes/strapi-image-pipe';
 import { environment } from '../../../environments/environment';
 
@@ -29,6 +30,7 @@ import { environment } from '../../../environments/environment';
     NgIcon,
     PremiumPreviewBlock,
     SocialShare,
+    NewsletterCtaComponent,
     StrapiImagePipe,
   ],
   viewProviders: [provideIcons({ heroShare })],

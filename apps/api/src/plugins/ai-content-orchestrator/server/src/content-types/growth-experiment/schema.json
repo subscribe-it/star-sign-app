@@ -27,6 +27,7 @@
       "required": true
     },
     "primary_metric": { "type": "string", "default": "premium_cta_click" },
+    "newsletter_events": { "type": "integer", "default": 0 },
     "variants": { "type": "json" },
     "started_at": { "type": "datetime" },
     "ended_at": { "type": "datetime" },

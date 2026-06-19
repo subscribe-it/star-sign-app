@@ -149,15 +149,32 @@ export const twoProportionZTest = (
   };
 };
 
-const metricFieldForExperiment = (
+export type ExperimentMetricField =
+  | 'cta_clicks'
+  | 'checkout_events'
+  | 'premium_events'
+  | 'newsletter_events';
+
+/**
+ * Mapuje primary_metric eksperymentu na pole licznika sukcesów w snapshotcie
+ * wydajności. Newsletter sign-up to jedyny żywy kanał konwersji dopóki Premium
+ * jest w trybie 'open', więc autopilot może optymalizować eksperymenty wprost
+ * pod zapisy do newslettera (primary_metric = 'newsletter_signup' / 'newsletter').
+ * Domyślna metryka (cta_clicks) pozostaje bez zmian, gdy metryka nie pasuje do
+ * żadnej znanej gałęzi — zachowanie wstecznie kompatybilne.
+ */
+export const metricFieldForExperiment = (
   primaryMetric?: string | null
-): 'cta_clicks' | 'checkout_events' | 'premium_events' => {
+): ExperimentMetricField => {
   const metric = String(primaryMetric ?? '').trim();
   if (metric === 'begin_checkout' || metric === 'checkout_redirect') {
     return 'checkout_events';
   }
   if (metric === 'premium_content_view' || metric === 'premium_content_impression') {
     return 'premium_events';
+  }
+  if (metric === 'newsletter_signup' || metric === 'newsletter') {
+    return 'newsletter_events';
   }
   return 'cta_clicks';
 };

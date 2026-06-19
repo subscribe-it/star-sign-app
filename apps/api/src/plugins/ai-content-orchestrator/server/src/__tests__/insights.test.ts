@@ -10,10 +10,12 @@ import {
   TRAFFIC_SNAPSHOT_UID,
 } from '../constants';
 import insightsEngine, {
+  buildEditorialRecommendation,
   computeBestPublishHours,
   computeContentInsights,
   computeTrafficInsights,
   detectRepeatedRunFailures,
+  EDITORIAL_RECOMMENDATION_MEMORY_KEY,
   isInsightsEnabled,
   PERFORMANCE_INSIGHT_MEMORY_KEY,
   SYSTEM_HEALTH_MEMORY_KEY,
@@ -229,6 +231,73 @@ describe('insights-engine computations', () => {
   });
 });
 
+describe('buildEditorialRecommendation (how-to-write guidance)', () => {
+  const entry = (title: string) => ({
+    key: title,
+    title,
+    slug: title,
+    totalScore: 0,
+    totalViews: 0,
+    daysObserved: 1,
+    scorePerDay: 0,
+    viewsGrowth: 0,
+  });
+
+  it('returns null when there is no qualitative signal at all', () => {
+    expect(buildEditorialRecommendation({})).toBeNull();
+    expect(
+      buildEditorialRecommendation({
+        topContent: [],
+        bottomContent: [],
+        trendingTopics: [],
+        traffic: { organicViews: 0, socialEngagements: 0, channelRecommendation: 'balanced' },
+      })
+    ).toBeNull();
+  });
+
+  it('derives concrete HOW-TO guidance (length, structure, avoid) from top vs bottom + organic traffic', () => {
+    const text = buildEditorialRecommendation({
+      topContent: [entry('Mocny poradnik')],
+      trendingTopics: [entry('Rosnący temat')],
+      bottomContent: [entry('Słaba treść')],
+      bestPublishHours: [18],
+      traffic: { organicViews: 900, socialEngagements: 10, channelRecommendation: 'invest_organic' },
+    });
+
+    expect(text).toBeTruthy();
+    // Naśladuj formę zwycięzców (trending ma pierwszeństwo).
+    expect(text).toContain('Rosnący temat');
+    // Konkretna wskazówka długości + struktury (kanał organiczny).
+    expect(text).toMatch(/słów/);
+    expect(text).toContain('śródtytuł');
+    // Czego unikać — wzorzec słabej treści.
+    expect(text).toContain('Słaba treść');
+  });
+
+  it('switches structure guidance for a social-dominant channel', () => {
+    const text = buildEditorialRecommendation({
+      topContent: [entry('Viralowy wpis')],
+      traffic: { organicViews: 10, socialEngagements: 800, channelRecommendation: 'invest_social' },
+    });
+
+    expect(text).toContain('hook');
+    expect(text).toMatch(/słów/);
+  });
+
+  it('never exceeds the injection-safe length cap', () => {
+    const many = Array.from({ length: 20 }, (_, i) => entry(`Bardzo długi tytuł treści numer ${i}`));
+    const text = buildEditorialRecommendation({
+      topContent: many,
+      trendingTopics: many,
+      bottomContent: many,
+      traffic: { organicViews: 100, socialEngagements: 1, channelRecommendation: 'invest_organic' },
+    });
+
+    expect(text).toBeTruthy();
+    expect((text as string).length).toBeLessThanOrEqual(700);
+  });
+});
+
 describe('insights-engine daily tick', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -287,6 +356,8 @@ describe('insights-engine daily tick', () => {
 
   it('throttles to one run per day and writes insight + health memories', async () => {
     vi.stubEnv('AICO_INSIGHTS_ENABLED', 'true');
+    // Bez tokenu LLM domyka pętlę deterministyczną rekomendacją (ścieżka offline).
+    vi.stubEnv('AICO_OPENROUTER_TOKEN', '');
 
     const auditRecords: Array<Record<string, unknown>> = [];
     const { entityService, created } = createEntityService();
@@ -311,6 +382,22 @@ describe('insights-engine daily tick', () => {
 
     const healthEntry = created.find((entry) => entry.data.key === SYSTEM_HEALTH_MEMORY_KEY);
     expect((healthEntry?.data.metadata as Record<string, unknown>).kind).toBe('system_health');
+
+    // Pętla performance->jakość DOMKNIĘTA: rekomendacja redakcyjna jest zapisana
+    // z memory_type, który editorial-context faktycznie wstrzykuje do promptu...
+    const editorialEntry = created.find(
+      (entry) => entry.data.key === EDITORIAL_RECOMMENDATION_MEMORY_KEY
+    );
+    expect(editorialEntry).toBeDefined();
+    expect(editorialEntry?.data.memory_type).toBe('brand_voice');
+    // ...a jej treść zawiera konkretne wskazówki "jak pisać" (długość/struktura).
+    expect(String(editorialEntry?.data.content)).toMatch(/słów/);
+    expect(String(editorialEntry?.data.content)).toContain('śródtytuł');
+    // Insighty techniczne pozostają 'custom' (NIE trafiają do promptu twórczego).
+    const perfEntry = created.find((entry) => entry.data.key === PERFORMANCE_INSIGHT_MEMORY_KEY);
+    expect(perfEntry?.data.memory_type).toBe('custom');
+    expect(healthEntry?.data.memory_type).toBe('custom');
+
     expect(
       auditRecords.some(
         (event) => event.action === 'insights.health.warning' && event.severity === 'warn'

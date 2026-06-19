@@ -107,12 +107,13 @@ describe('BlogDetail', () => {
     );
   });
 
-  it('should link sidebar newsletter CTA to the real home newsletter form', () => {
-    const link = (fixture.nativeElement as HTMLElement).querySelector(
-      '[data-test="blog-newsletter-link"]',
+  it('should render an inline sidebar newsletter CTA attributed to blog-detail', () => {
+    const cta = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-test="newsletter-cta"]',
     );
 
-    expect(link?.getAttribute('href')).toBe('/#newsletter');
+    expect(cta).not.toBeNull();
+    expect(cta?.getAttribute('data-test-source')).toBe('blog-detail');
   });
 
   it('should render visible decorative mystic orbs in the article hero', () => {
