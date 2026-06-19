@@ -38,6 +38,13 @@ export const pluginActions = [
   },
   {
     section: 'plugins',
+    displayName: 'Manage editor personas',
+    uid: 'manage-personas',
+    subCategory: 'topics',
+    pluginName: PLUGIN_ID,
+  },
+  {
+    section: 'plugins',
     displayName: 'View runs and errors',
     uid: 'view-runs',
     subCategory: 'runs',

@@ -178,6 +178,39 @@ export type EditorialMemoryRecord = {
   updatedAt?: string;
 };
 
+export type EditorPersonaRecord = {
+  id: number;
+  name: string;
+  key: string;
+  byline?: string | null;
+  bio?: string | null;
+  specialization?: string | null;
+  avatar?:
+    | number
+    | {
+        id: number;
+        url?: string;
+        name?: string;
+        mime?: string;
+        width?: number;
+        height?: number;
+        formats?: Record<string, unknown>;
+      }
+    | null;
+  temperament?: string | null;
+  writing_style?: Record<string, unknown> | null;
+  system_instruction?: string | null;
+  prompt_prefix?: string | null;
+  prompt_suffix?: string | null;
+  llm_model?: string | null;
+  temperature?: number | null;
+  enabled_for?: string[] | null;
+  active?: boolean;
+  priority?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type HomepageRecommendationRecord = {
   id: number;
   slot: 'today_in_stars' | 'weekly_focus' | 'recommended_for_you' | 'new_premium' | 'evergreen';

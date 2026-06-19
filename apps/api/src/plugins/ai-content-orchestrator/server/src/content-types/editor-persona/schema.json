@@ -1,0 +1,38 @@
+{
+  "kind": "collectionType",
+  "collectionName": "aico_editor_personas",
+  "info": {
+    "singularName": "editor-persona",
+    "pluralName": "editor-personas",
+    "displayName": "Editor Persona"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": { "visible": true },
+    "content-type-builder": { "visible": true }
+  },
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "key": { "type": "uid", "targetField": "name", "required": true },
+    "byline": { "type": "string" },
+    "bio": { "type": "text" },
+    "specialization": { "type": "string" },
+    "avatar": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "temperament": { "type": "string" },
+    "writing_style": { "type": "json" },
+    "system_instruction": { "type": "text" },
+    "prompt_prefix": { "type": "text" },
+    "prompt_suffix": { "type": "text" },
+    "llm_model": { "type": "string" },
+    "temperature": { "type": "decimal", "min": 0, "max": 2 },
+    "enabled_for": { "type": "json" },
+    "active": { "type": "boolean", "default": true },
+    "priority": { "type": "integer", "default": 0 }
+  }
+}

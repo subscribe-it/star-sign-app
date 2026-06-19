@@ -20,6 +20,7 @@ import mediaUsage from './media-usage';
 import openRouter from './open-router';
 import orchestrator from './orchestrator';
 import performanceFeedback from './performance-feedback';
+import personas from './personas';
 import providerProbe from './provider-probe';
 import providerStatus from './provider-status';
 import productionReadiness from './production-readiness';
@@ -59,6 +60,7 @@ export default {
   'open-router': openRouter,
   orchestrator,
   'performance-feedback': performanceFeedback,
+  personas,
   'provider-probe': providerProbe,
   'provider-status': providerStatus,
   'production-readiness': productionReadiness,
