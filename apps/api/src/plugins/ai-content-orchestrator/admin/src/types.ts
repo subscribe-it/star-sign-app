@@ -35,6 +35,7 @@ export type Workflow = {
   horoscope_type_values: string[];
   all_signs: boolean;
   article_category: number | null;
+  default_editor_persona?: number | null;
   enabled_channels?: SocialPlatform[];
   fb_page_id?: string | null;
   ig_user_id?: string | null;
@@ -52,6 +53,29 @@ export type Workflow = {
   last_error?: string | null;
   last_generated_at?: string | null;
   last_published_at?: string | null;
+};
+
+// Redaktor (editor persona) — wirtualny autor o własnym, rozpoznawalnym głosie.
+// Pola odwzorowują schema.json content-type'u editor-persona; sercem są pola
+// zrozumiałe dla operatora (byline/specjalizacja/temperament/biogram) oraz
+// instrukcja stylu dla AI (system_instruction). Pola id/key/optionals jak w Workflow.
+export type Persona = {
+  id: number;
+  name: string;
+  key?: string;
+  byline?: string | null;
+  bio?: string | null;
+  specialization?: string | null;
+  temperament?: string | null;
+  writing_style?: Record<string, unknown> | null;
+  system_instruction?: string | null;
+  prompt_prefix?: string | null;
+  prompt_suffix?: string | null;
+  llm_model?: string | null;
+  temperature?: number | null;
+  enabled_for?: string[] | null;
+  active?: boolean;
+  priority?: number;
 };
 
 export type SocialPlatform = 'facebook' | 'instagram' | 'twitter' | 'tiktok' | 'youtube_shorts';
