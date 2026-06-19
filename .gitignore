@@ -78,3 +78,12 @@ final_coverage*.txt
 test_output*.txt
 COVERAGE_PLAN.md
 proxy-server.mjs
+
+# Strapi runtime-generated upload variants (responsive sizes + hashed originals).
+# The committed seed images (e.g. apps/api/public/uploads/daily_blazen.webp) stay
+# tracked — gitignore never untracks an already-tracked file.
+apps/api/public/uploads/thumbnail_*
+apps/api/public/uploads/small_*
+apps/api/public/uploads/medium_*
+apps/api/public/uploads/large_*
+apps/api/public/uploads/*_??????????.*
