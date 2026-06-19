@@ -263,6 +263,38 @@ export default () => ({
     },
     {
       method: 'GET',
+      path: '/personas',
+      handler: 'personas.find',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.managePersonas),
+      },
+    },
+    {
+      method: 'POST',
+      path: '/personas',
+      handler: 'personas.create',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.managePersonas),
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/personas/:id',
+      handler: 'personas.update',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.managePersonas),
+      },
+    },
+    {
+      method: 'DELETE',
+      path: '/personas/:id',
+      handler: 'personas.delete',
+      config: {
+        policies: withPermission(RBAC_ACTIONS.managePersonas),
+      },
+    },
+    {
+      method: 'GET',
       path: '/settings',
       handler: 'settings.find',
       config: {

@@ -16,6 +16,7 @@ type OpenRouterRequestInput = {
   apiToken: string;
   prompt: string;
   schemaDescription: string;
+  systemPreamble?: string;
   temperature?: number;
   maxCompletionTokens?: number;
   signal?: AbortSignal;
@@ -41,7 +42,11 @@ const openRouter = ({ strapi }: { strapi: Strapi }) => ({
   async requestJson(
     input: OpenRouterRequestInput
   ): Promise<{ payload: unknown; usage: OpenRouterUsage; trace: OpenRouterTrace }> {
-    const messages = this.buildMessages(input.prompt, input.schemaDescription);
+    const messages = this.buildMessages(
+      input.prompt,
+      input.schemaDescription,
+      input.systemPreamble
+    );
     const temperature = input.temperature ?? DEFAULT_TEMPERATURE;
     const maxCompletionTokens = input.maxCompletionTokens ?? DEFAULT_MAX_COMPLETION_TOKENS;
     const body = {
@@ -113,18 +118,35 @@ const openRouter = ({ strapi }: { strapi: Strapi }) => ({
     };
   },
 
-  buildMessages(prompt: string, schemaDescription: string): ChatCompletionMessage[] {
-    return [
-      {
+  buildMessages(
+    prompt: string,
+    schemaDescription: string,
+    systemPreamble?: string
+  ): ChatCompletionMessage[] {
+    const messages: ChatCompletionMessage[] = [];
+
+    const preamble = systemPreamble?.trim();
+    if (preamble) {
+      // Persona / editorial context goes FIRST so the JSON-only contract below
+      // stays the last (and therefore strongest) system instruction.
+      messages.push({
         role: 'system',
-        content:
-          'Zwracaj WYŁĄCZNIE poprawny JSON bez markdown i bez dodatkowych komentarzy. Stosuj się ściśle do schematu.',
-      },
-      {
-        role: 'user',
-        content: `${prompt}\n\nWymagany format odpowiedzi JSON:\n${schemaDescription}`,
-      },
-    ];
+        content: preamble,
+      });
+    }
+
+    messages.push({
+      role: 'system',
+      content:
+        'Zwracaj WYŁĄCZNIE poprawny JSON bez markdown i bez dodatkowych komentarzy. Stosuj się ściśle do schematu.',
+    });
+
+    messages.push({
+      role: 'user',
+      content: `${prompt}\n\nWymagany format odpowiedzi JSON:\n${schemaDescription}`,
+    });
+
+    return messages;
   },
 
   extractContent(response: OpenRouterResponse): string {

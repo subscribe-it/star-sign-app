@@ -20,6 +20,7 @@ import adCampaignPlan from './ad-campaign-plan/schema.json';
 import adsMutationLedger from './ads-mutation-ledger/schema.json';
 import growthExperiment from './growth-experiment/schema.json';
 import providerCredentialStatus from './provider-credential-status/schema.json';
+import editorPersona from './editor-persona/schema.json';
 
 export default {
   workflow: { schema: workflow },
@@ -44,4 +45,5 @@ export default {
   'ads-mutation-ledger': { schema: adsMutationLedger },
   'growth-experiment': { schema: growthExperiment },
   'provider-credential-status': { schema: providerCredentialStatus },
+  'editor-persona': { schema: editorPersona },
 };

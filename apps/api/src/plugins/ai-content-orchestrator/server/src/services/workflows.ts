@@ -71,7 +71,7 @@ const workflows = ({ strapi }: { strapi: Strapi }) => {
     async list(): Promise<Array<Record<string, unknown>>> {
       const records = (await entityService.findMany(WORKFLOW_UID, {
         sort: { id: 'asc' },
-        populate: ['article_category'],
+        populate: ['article_category', 'default_editor_persona'],
       })) as WorkflowRecord[];
 
       return records.map((record) => this.serialize(record));
@@ -79,7 +79,7 @@ const workflows = ({ strapi }: { strapi: Strapi }) => {
 
     async getById(id: number): Promise<WorkflowRecord | null> {
       const record = (await entityService.findOne(WORKFLOW_UID, id, {
-        populate: ['article_category'],
+        populate: ['article_category', 'default_editor_persona'],
       })) as WorkflowRecord | null;
 
       return record;
@@ -120,7 +120,7 @@ const workflows = ({ strapi }: { strapi: Strapi }) => {
 
       const created = (await entityService.create(WORKFLOW_UID, {
         data,
-        populate: ['article_category'],
+        populate: ['article_category', 'default_editor_persona'],
       })) as WorkflowRecord;
 
       return this.serialize(created);
@@ -185,7 +185,7 @@ const workflows = ({ strapi }: { strapi: Strapi }) => {
 
       const updated = (await entityService.update(WORKFLOW_UID, id, {
         data,
-        populate: ['article_category'],
+        populate: ['article_category', 'default_editor_persona'],
       })) as WorkflowRecord;
 
       return this.serialize(updated);
@@ -199,7 +199,7 @@ const workflows = ({ strapi }: { strapi: Strapi }) => {
       }
 
       const deleted = (await entityService.delete(WORKFLOW_UID, id, {
-        populate: ['article_category'],
+        populate: ['article_category', 'default_editor_persona'],
       })) as WorkflowRecord;
 
       return this.serialize(deleted ?? current);
@@ -259,6 +259,7 @@ const workflows = ({ strapi }: { strapi: Strapi }) => {
         has_x_access_token_secret: Boolean(record.x_access_token_secret_encrypted),
         enabled_channels: toSocialChannels(record.enabled_channels),
         article_category: getId(record.article_category),
+        default_editor_persona: getId(record.default_editor_persona),
       };
     },
 
@@ -344,6 +345,7 @@ const workflows = ({ strapi }: { strapi: Strapi }) => {
         horoscopeTypeValues: this.normalizeHoroscopeTypes(record.horoscope_type_values),
         allSigns: record.all_signs ?? true,
         articleCategoryId: getId(record.article_category),
+        defaultEditorPersonaId: getId(record.default_editor_persona),
         lastGenerationSlot: record.last_generation_slot ?? null,
         lastPublishSlot: record.last_publish_slot ?? null,
         enabledChannels: toSocialChannels(record.enabled_channels),
@@ -536,6 +538,10 @@ const workflows = ({ strapi }: { strapi: Strapi }) => {
 
       if (typeof payload.article_category !== 'undefined') {
         data.article_category = getId(payload.article_category);
+      }
+
+      if (typeof payload.default_editor_persona !== 'undefined') {
+        data.default_editor_persona = getId(payload.default_editor_persona);
       }
 
       if (!data.status) {

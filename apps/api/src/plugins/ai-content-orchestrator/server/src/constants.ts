@@ -22,6 +22,7 @@ export const AD_CAMPAIGN_PLAN_UID = `plugin::${PLUGIN_ID}.ad-campaign-plan`;
 export const ADS_MUTATION_LEDGER_UID = `plugin::${PLUGIN_ID}.ads-mutation-ledger`;
 export const GROWTH_EXPERIMENT_UID = `plugin::${PLUGIN_ID}.growth-experiment`;
 export const PROVIDER_CREDENTIAL_STATUS_UID = `plugin::${PLUGIN_ID}.provider-credential-status`;
+export const EDITOR_PERSONA_UID = `plugin::${PLUGIN_ID}.editor-persona`;
 
 export const CONTENT_UIDS = {
   horoscope: 'api::horoscope.horoscope',
@@ -126,6 +127,7 @@ export const RBAC_ACTIONS = {
   manageExperiments: `plugin::${PLUGIN_ID}.manage-experiments`,
   viewProviderStatus: `plugin::${PLUGIN_ID}.view-provider-status`,
   testProviderReadiness: `plugin::${PLUGIN_ID}.test-provider-readiness`,
+  managePersonas: `plugin::${PLUGIN_ID}.manage-personas`,
 } as const;
 
 export const TICKET_STATUS = {

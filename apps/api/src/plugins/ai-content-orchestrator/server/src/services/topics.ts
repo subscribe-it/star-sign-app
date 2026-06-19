@@ -9,6 +9,7 @@ type TopicCreatePayload = {
   scheduled_for?: string;
   workflow?: number;
   article_category?: number;
+  editor_persona?: number | null;
   seo_intent?: string;
   target_persona?: string;
   priority_score?: number;
@@ -66,7 +67,7 @@ const topics = ({ strapi }: { strapi: Strapi }) => {
     async list(): Promise<TopicQueueItemRecord[]> {
       return (await entityService.findMany(TOPIC_QUEUE_UID, {
         sort: [{ status: 'asc' }, { createdAt: 'asc' }],
-        populate: ['workflow', 'article_category', 'generated_article'],
+        populate: ['workflow', 'article_category', 'editor_persona', 'generated_article'],
       })) as TopicQueueItemRecord[];
     },
 
@@ -96,11 +97,12 @@ const topics = ({ strapi }: { strapi: Strapi }) => {
           scheduled_for: payload.scheduled_for,
           workflow: payload.workflow,
           article_category: payload.article_category,
+          editor_persona: payload.editor_persona ?? null,
           plan_item: payload.plan_item,
           metadata: payload.metadata ?? {},
           status: TOPIC_STATUS.pending,
         },
-        populate: ['workflow', 'article_category', 'generated_article'],
+        populate: ['workflow', 'article_category', 'editor_persona', 'generated_article'],
       })) as TopicQueueItemRecord;
 
       return created;
@@ -173,6 +175,10 @@ const topics = ({ strapi }: { strapi: Strapi }) => {
         data.article_category = payload.article_category;
       }
 
+      if (typeof payload.editor_persona !== 'undefined') {
+        data.editor_persona = payload.editor_persona ?? null;
+      }
+
       if (typeof payload.plan_item !== 'undefined') {
         data.plan_item = payload.plan_item;
       }
@@ -191,7 +197,7 @@ const topics = ({ strapi }: { strapi: Strapi }) => {
 
       const updated = (await entityService.update(TOPIC_QUEUE_UID, id, {
         data,
-        populate: ['workflow', 'article_category', 'generated_article'],
+        populate: ['workflow', 'article_category', 'editor_persona', 'generated_article'],
       })) as TopicQueueItemRecord;
 
       return updated;
@@ -213,7 +219,7 @@ const topics = ({ strapi }: { strapi: Strapi }) => {
             : { workflow: workflowId }),
         },
         sort: [{ scheduled_for: 'asc' }, { createdAt: 'asc' }],
-        populate: ['workflow', 'article_category'],
+        populate: ['workflow', 'article_category', 'editor_persona'],
         limit: 20,
       })) as TopicQueueItemRecord[];
 
@@ -237,7 +243,7 @@ const topics = ({ strapi }: { strapi: Strapi }) => {
       });
 
       const fresh = (await entityService.findOne(TOPIC_QUEUE_UID, next.id, {
-        populate: ['workflow', 'article_category'],
+        populate: ['workflow', 'article_category', 'editor_persona'],
       })) as TopicQueueItemRecord;
 
       return fresh;
@@ -269,6 +275,7 @@ const topics = ({ strapi }: { strapi: Strapi }) => {
         ...item,
         workflow: getId(item.workflow),
         article_category: getId(item.article_category),
+        editor_persona: getId(item.editor_persona),
         generated_article: getId(item.generated_article),
         plan_item: getId(item.plan_item),
       };

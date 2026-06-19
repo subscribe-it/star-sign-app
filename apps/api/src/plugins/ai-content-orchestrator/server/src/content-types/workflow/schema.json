@@ -71,6 +71,11 @@
       "relation": "manyToOne",
       "target": "api::category.category"
     },
+    "default_editor_persona": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::ai-content-orchestrator.editor-persona"
+    },
     "last_generated_at": { "type": "datetime" },
     "last_published_at": { "type": "datetime" },
     "last_generation_slot": { "type": "string" },

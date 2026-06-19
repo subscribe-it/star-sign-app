@@ -15,6 +15,7 @@ import {
 import type {
   ArticlePayload,
   DailyCardPayload,
+  EditorPersonaRecord,
   HoroscopePayload,
   LlmTraceLog,
   NormalizedWorkflowConfig,
@@ -51,6 +52,7 @@ import {
 } from '../utils/polish-content-quality';
 import { getAicoPromptTemplate, renderAicoPromptTemplate } from '../utils/aico-contract';
 import { recordSystemAuditEvent } from '../utils/audit-trail';
+import { buildEditorialContext } from '../utils/editorial-context';
 import {
   sanitizeLlmTraceForStorage,
   shouldStoreRawLlmTrace,
@@ -118,10 +120,24 @@ type OpenRouterService = {
     apiToken: string;
     prompt: string;
     schemaDescription: string;
+    systemPreamble?: string;
     temperature?: number;
     maxCompletionTokens?: number;
     signal?: AbortSignal;
   }) => Promise<{ payload: unknown; usage: OpenRouterUsage; trace: OpenRouterTrace }>;
+};
+
+type PersonasService = {
+  getById: (id: number) => Promise<EditorPersonaRecord | null>;
+  getByKey: (key: string) => Promise<EditorPersonaRecord | null>;
+  resolveForTopic: (personaRef: string | number) => Promise<EditorPersonaRecord | null>;
+};
+
+// Wynik kompozycji kontekstu redakcyjnego dla pojedynczej generacji:
+// rozwiązana persona (lub null) + gotowa preambuła systemowa (może być '').
+type EditorialComposition = {
+  persona: EditorPersonaRecord | null;
+  systemPreamble: string;
 };
 
 type LlmTraceLogger = (
@@ -404,6 +420,8 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
     getPluginService<Partial<AdsAgentRuntimeService> | undefined>(strapi, 'ads-agent');
   const seoGuardrailsService = (): SeoGuardrailsService =>
     getPluginService<SeoGuardrailsService>(strapi, 'seo-guardrails');
+  const personasService = (): PersonasService =>
+    getPluginService<PersonasService>(strapi, 'personas');
 
   const api = {
     async tick(): Promise<void> {
@@ -656,6 +674,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       schemaDescription: string;
       apiToken: string;
       llmModel: string;
+      systemPreamble?: string;
       workflowType: WorkflowRecord['workflow_type'];
       label: string;
       validate: PolishRepairValidator<TPayload>;
@@ -705,6 +724,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
             apiToken: input.apiToken,
             prompt: repairPrompt,
             schemaDescription: input.schemaDescription,
+            systemPreamble: input.systemPreamble,
             temperature: 0.25,
             maxCompletionTokens: input.maxCompletionTokens,
             signal: input.abortSignal,
@@ -900,7 +920,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       const workflows = (await entityService.findMany(WORKFLOW_UID, {
         filters: { enabled: true },
         sort: { id: 'asc' },
-        populate: ['article_category'],
+        populate: ['article_category', 'default_editor_persona'],
       })) as WorkflowRecord[];
 
       for (const workflow of workflows) {
@@ -1353,6 +1373,11 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
             config.timezone
           );
 
+        // Globalny kontekst redakcyjny budujemy RAZ na cały run (jedno
+        // zapytanie do editorial-memory), współdzielony przez wszystkie
+        // elementy generacji. Pusta pamięć => '' => brak preambuły (no-op).
+        const editorialContext = await buildEditorialContext(strapi);
+
         await setRunStep('generate', 'running', `Generating ${config.workflowType} content`, {
           publishAt: publishAt.toISOString(),
         });
@@ -1364,6 +1389,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           publishAt,
           targetDate: localDay,
           now: options.now,
+          editorialContext,
           onLlmTrace: logLlmTrace,
           abortSignal: abortController.signal,
           onStep: setRunStep,
@@ -1461,6 +1487,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       publishAt: Date;
       targetDate: string;
       now: Date;
+      editorialContext?: string;
       onLlmTrace?: LlmTraceLogger;
       abortSignal?: AbortSignal;
       onStep?: (
@@ -1470,6 +1497,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
         output?: any
       ) => Promise<void>;
     }): Promise<{ created: number; updated: number; skipped: number; usage: OpenRouterUsage }> {
+      const editorialContext = input.editorialContext ?? '';
       let lastError: Error | null = null;
       const maxAttempts = PREMIUM_CONTENT_RETRY_MAX;
 
@@ -1483,6 +1511,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
               input.config,
               input.apiToken,
               input.publishAt,
+              editorialContext,
               input.onLlmTrace,
               input.onStep,
               input.abortSignal
@@ -1496,6 +1525,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
               input.config,
               input.apiToken,
               input.publishAt,
+              editorialContext,
               input.onLlmTrace,
               input.onStep,
               input.abortSignal
@@ -1510,6 +1540,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
               input.apiToken,
               input.publishAt,
               input.now,
+              editorialContext,
               input.onLlmTrace,
               input.onStep,
               input.abortSignal
@@ -1550,6 +1581,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       config: NormalizedWorkflowConfig,
       apiToken: string,
       publishAt: Date,
+      editorialContext: string,
       onLlmTrace?: LlmTraceLogger,
       onStep?: (
         stepId: string,
@@ -1564,6 +1596,13 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       if (signs.length === 0) {
         throw new Error('Brak znaków zodiaku w bazie.');
       }
+
+      // Horoskopy nie mają tematu — persona pochodzi tylko z workflow.
+      const { persona, systemPreamble } = await this.composeEditorialContext(
+        config,
+        editorialContext
+      );
+      const { model: llmModel, temperature } = this.resolvePersonaModelOverrides(config, persona);
 
       const targetDate = this.resolveHoroscopeDateAnchor(
         config.horoscopePeriod,
@@ -1591,17 +1630,21 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           topicBrief: '',
         };
 
-        const prompt = this.renderPrompt(config.promptTemplate, context);
+        const prompt = this.applyPersonaPromptAffixes(
+          this.renderPrompt(config.promptTemplate, context),
+          persona
+        );
 
         const schema =
           '{"items":[{"sign":"string","content":"string","premiumContent":"string wymagany","type":"string opcjonalny"}]}';
 
         const llmResponse = await llmService().requestJson({
-          model: config.llmModel,
+          model: llmModel,
           apiToken,
           prompt,
           schemaDescription: schema,
-          temperature: config.temperature,
+          systemPreamble,
+          temperature,
           maxCompletionTokens: config.maxCompletionTokens,
           signal: abortSignal,
         });
@@ -1621,7 +1664,8 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           kind: 'horoscope',
           schemaDescription: schema,
           apiToken,
-          llmModel: config.llmModel,
+          llmModel,
+          systemPreamble,
           workflowType: config.workflowType,
           label: `Horoscope ${config.horoscopePeriod} / ${horoscopeType}`,
           validate: (candidate) => this.validateHoroscopePayload(candidate, horoscopeType),
@@ -1700,6 +1744,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       config: NormalizedWorkflowConfig,
       apiToken: string,
       publishAt: Date,
+      editorialContext: string,
       onLlmTrace?: LlmTraceLogger,
       onStep?: (
         stepId: string,
@@ -1714,6 +1759,13 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       if (cards.length === 0) {
         throw new Error('Brak kart tarota w bazie.');
       }
+
+      // Karta dnia nie ma tematu — persona pochodzi tylko z workflow.
+      const { persona, systemPreamble } = await this.composeEditorialContext(
+        config,
+        editorialContext
+      );
+      const { model: llmModel, temperature } = this.resolvePersonaModelOverrides(config, persona);
 
       const card = cards[Math.floor(Math.random() * cards.length)];
       const targetDate = formatDateInZone(publishAt, config.timezone);
@@ -1732,16 +1784,20 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
         cardMeaningReversed: card.meaning_reversed ?? '',
       };
 
-      const prompt = this.renderPrompt(config.promptTemplate, context);
+      const prompt = this.applyPersonaPromptAffixes(
+        this.renderPrompt(config.promptTemplate, context),
+        persona
+      );
       const schema =
         '{"title":"string","excerpt":"string","content":"string","premiumContent":"string","isPremium":true,"draw_message":"string","slug":"string opcjonalny"}';
 
       const llmResponse = await llmService().requestJson({
-        model: config.llmModel,
+        model: llmModel,
         apiToken,
         prompt,
         schemaDescription: schema,
-        temperature: config.temperature,
+        systemPreamble,
+        temperature,
         maxCompletionTokens: config.maxCompletionTokens,
         signal: abortSignal,
       });
@@ -1757,7 +1813,8 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
         kind: 'daily_card',
         schemaDescription: schema,
         apiToken,
-        llmModel: config.llmModel,
+        llmModel,
+        systemPreamble,
         workflowType: config.workflowType,
         label: `Daily card / ${targetDate}`,
         validate: (candidate) => this.validateDailyCardPayload(candidate),
@@ -1845,6 +1902,7 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       apiToken: string,
       publishAt: Date,
       now: Date,
+      editorialContext: string,
       onLlmTrace?: LlmTraceLogger,
       onStep?: (
         stepId: string,
@@ -1877,6 +1935,16 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           throw new Error('Workflow article wymaga kategorii (workflow lub topic item).');
         }
 
+        // Persona: override z tematu (editor_persona) > domyślna persona
+        // workflow > null. Łączymy jej system_instruction z globalnym
+        // editorialContext w jedną preambułę systemową.
+        const { persona, systemPreamble } = await this.composeEditorialContext(
+          config,
+          editorialContext,
+          topic
+        );
+        const { model: llmModel, temperature } = this.resolvePersonaModelOverrides(config, persona);
+
         const context = {
           targetDate,
           period: 'Dzienny',
@@ -1888,7 +1956,10 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
           topicTitle: topic.title,
         };
 
-        const prompt = this.renderPrompt(config.promptTemplate, context);
+        const prompt = this.applyPersonaPromptAffixes(
+          this.renderPrompt(config.promptTemplate, context),
+          persona
+        );
         const schema =
           '{"title":"string","excerpt":"string","content":"string","premiumContent":"string wymagany","isPremium":true,"author":"string opcjonalny","read_time_minutes":"number opcjonalny","slug":"string opcjonalny"}';
 
@@ -1913,11 +1984,12 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
               `Inicjowanie wizji redakcyjnej i generowanie szkicu treści (${attempt}/${PREMIUM_CONTENT_RETRY_MAX})...`
             );
             const llmResponse = await llmService().requestJson({
-              model: config.llmModel,
+              model: llmModel,
               apiToken,
               prompt,
               schemaDescription: schema,
-              temperature: config.temperature,
+              systemPreamble,
+              temperature,
               maxCompletionTokens: config.maxCompletionTokens,
               signal: abortSignal,
             });
@@ -1948,10 +2020,11 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
             );
 
             const editorResponse = await llmService().requestJson({
-              model: config.llmModel,
+              model: llmModel,
               apiToken,
               prompt: editorPrompt,
               schemaDescription: schema,
+              systemPreamble,
               temperature: 0.5,
               signal: abortSignal,
             });
@@ -1972,7 +2045,8 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
               kind: 'article',
               schemaDescription: schema,
               apiToken,
-              llmModel: config.llmModel,
+              llmModel,
+              systemPreamble,
               workflowType: config.workflowType,
               label: `Article topic #${topic.id} / ${topic.title}`,
               validate: (candidate) => this.validateArticlePayload(candidate),
@@ -1992,6 +2066,12 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
             });
 
             polishedPayload.isPremium = true;
+            // Byline persony nadpisuje autora; brak persony/byline => bez
+            // zmian (autor z LLM lub domyślny 'Zespół Star Sign' w upsercie).
+            const personaByline = persona?.byline?.trim();
+            if (personaByline) {
+              polishedPayload.author = personaByline;
+            }
             payload = polishedPayload;
             lastQualityError = null;
             await onStep?.(
@@ -2867,6 +2947,88 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
       return template.replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_match, key: string) => {
         return context[key] ?? '';
       });
+    },
+
+    // Rozwiązuje personę redaktora dla danej generacji wg precedencji:
+    // 1) override z tematu (topic.editor_persona),
+    // 2) domyślna persona workflow (config.defaultEditorPersonaId),
+    // 3) null (zachowanie domyślne, bez persony).
+    // Best-effort: błąd serwisu person nigdy nie przerywa generacji.
+    async resolveEditorPersona(
+      config: NormalizedWorkflowConfig,
+      topic?: TopicQueueItemRecord | null
+    ): Promise<EditorPersonaRecord | null> {
+      const service = personasService();
+
+      const topicPersonaId = resolveId(topic?.editor_persona ?? null);
+      const candidates: Array<() => Promise<EditorPersonaRecord | null>> = [];
+
+      if (topicPersonaId) {
+        candidates.push(() => service.resolveForTopic(topicPersonaId));
+      }
+
+      if (config.defaultEditorPersonaId) {
+        candidates.push(() => service.resolveForTopic(config.defaultEditorPersonaId as number));
+      }
+
+      for (const resolve of candidates) {
+        try {
+          const persona = await resolve();
+          if (persona) {
+            return persona;
+          }
+        } catch (error) {
+          strapi.log.warn(
+            `[aico] Nie udało się rozwiązać persony redaktora: ${toSafeErrorMessage(error)}`
+          );
+        }
+      }
+
+      return null;
+    },
+
+    // Składa kontekst redakcyjny dla generacji: rozwiązuje personę i łączy jej
+    // system_instruction z globalnym blokiem editorial-memory w jedną preambułę
+    // systemową. editorialContext budujemy RAZ na cały run (przekazywany tu),
+    // by nie odpytywać bazy per element.
+    async composeEditorialContext(
+      config: NormalizedWorkflowConfig,
+      editorialContext: string,
+      topic?: TopicQueueItemRecord | null
+    ): Promise<EditorialComposition> {
+      const persona = await this.resolveEditorPersona(config, topic);
+      const systemPreamble = [persona?.system_instruction, editorialContext]
+        .map((part) => part?.trim())
+        .filter((part): part is string => Boolean(part))
+        .join('\n\n');
+
+      return { persona, systemPreamble };
+    },
+
+    // Opakowuje prompt prefixem/suffixem persony (gdy ustawione). Brak persony
+    // lub brak prefix/suffix => prompt bez zmian.
+    applyPersonaPromptAffixes(prompt: string, persona: EditorPersonaRecord | null): string {
+      if (!persona) {
+        return prompt;
+      }
+
+      const prefix = persona.prompt_prefix?.trim();
+      const suffix = persona.prompt_suffix?.trim();
+
+      return [prefix, prompt, suffix].filter((part) => Boolean(part)).join('\n\n');
+    },
+
+    // Nadpisuje model/temperaturę z run-configu wartościami persony, gdy są
+    // ustawione; w przeciwnym razie zachowuje wartości run-configu.
+    resolvePersonaModelOverrides(
+      config: NormalizedWorkflowConfig,
+      persona: EditorPersonaRecord | null
+    ): { model: string; temperature: number } {
+      const model = persona?.llm_model?.trim() || config.llmModel;
+      const temperature =
+        typeof persona?.temperature === 'number' ? persona.temperature : config.temperature;
+
+      return { model, temperature };
     },
 
     validateHoroscopePayload(payload: unknown, fallbackType: string): HoroscopePayload {
