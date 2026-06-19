@@ -17,6 +17,7 @@ import { AuditTab } from './homepage/AuditTab';
 import { DashboardTab } from './homepage/DashboardTab';
 import { GrowthTab } from './homepage/GrowthTab';
 import { MediaTab } from './homepage/MediaTab';
+import { PersonasTab } from './homepage/PersonasTab';
 import { RunsTab } from './homepage/RunsTab';
 import { SettingsTab } from './homepage/SettingsTab';
 import { SocialTab } from './homepage/SocialTab';
@@ -43,6 +44,7 @@ import type {
   MediaLibraryFile,
   MediaLibraryListResult,
   MediaUsage,
+  Persona,
   Run,
   RunStep,
   SettingsPayload,
@@ -64,6 +66,7 @@ import type {
 type TabKey =
   | 'dashboard'
   | 'workflows'
+  | 'personas'
   | 'topics'
   | 'media'
   | 'runs'
@@ -104,6 +107,7 @@ type WorkflowFormState = {
   horoscope_type_values: string;
   all_signs: boolean;
   article_category: string;
+  default_editor_persona: string;
   image_gen_model: string;
   imageGenApiToken: string;
   enabled_channels: SocialPlatform[];
@@ -117,6 +121,23 @@ type WorkflowFormState = {
   xAccessTokenSecret: string;
   tt_creator_id: string;
   ttAccessToken: string;
+};
+
+type PersonaFormState = {
+  name: string;
+  byline: string;
+  specialization: string;
+  temperament: string;
+  bio: string;
+  active: boolean;
+  priority: number;
+  system_instruction: string;
+  prompt_prefix: string;
+  prompt_suffix: string;
+  llm_model: string;
+  temperature: string;
+  enabled_for: string[];
+  writing_style: string;
 };
 
 type TopicFormState = {
@@ -301,6 +322,7 @@ const initialWorkflowForm = (): WorkflowFormState => ({
   horoscope_type_values: 'Ogólny',
   all_signs: true,
   article_category: '',
+  default_editor_persona: '',
   image_gen_model: 'openai/gpt-image-2',
   imageGenApiToken: '',
   enabled_channels: ['facebook', 'instagram', 'twitter'],
@@ -314,6 +336,23 @@ const initialWorkflowForm = (): WorkflowFormState => ({
   xAccessTokenSecret: '',
   tt_creator_id: '',
   ttAccessToken: '',
+});
+
+const initialPersonaForm = (): PersonaFormState => ({
+  name: '',
+  byline: '',
+  specialization: '',
+  temperament: '',
+  bio: '',
+  active: true,
+  priority: 0,
+  system_instruction: '',
+  prompt_prefix: '',
+  prompt_suffix: '',
+  llm_model: '',
+  temperature: '',
+  enabled_for: [],
+  writing_style: '',
 });
 
 const initialTopicForm = (): TopicFormState => ({
@@ -380,6 +419,7 @@ const ADS_STOP_LOSS_CONFIRMATION = 'PAUSE_ACTIVE_ADS';
 const TAB_DEFS: Array<[TabKey, string]> = [
   ['dashboard', 'Pulpit'],
   ['workflows', 'Przepływy'],
+  ['personas', 'Redaktorzy'],
   ['topics', 'Kolejka tematów'],
   ['media', 'Katalog mediów'],
   ['runs', 'Monitoring'],
@@ -983,6 +1023,7 @@ const HomePage = () => {
 
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
+  const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   const [showRunModal, setShowRunModal] = useState(false);
@@ -994,6 +1035,7 @@ const HomePage = () => {
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [personas, setPersonas] = useState<Persona[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [mediaUsage, setMediaUsage] = useState<MediaUsage[]>([]);
@@ -1068,6 +1110,10 @@ const HomePage = () => {
   const [workflowStep, setWorkflowStep] = useState<number>(0);
 
   const [topicForm, setTopicForm] = useState<TopicFormState>(initialTopicForm());
+  const [personaForm, setPersonaForm] = useState<PersonaFormState>(initialPersonaForm());
+  const [editingPersonaId, setEditingPersonaId] = useState<number | null>(null);
+  const [editingPersonaKey, setEditingPersonaKey] = useState<string | null>(null);
+  const [showPersonaAdvanced, setShowPersonaAdvanced] = useState<boolean>(false);
   const [mediaAssetForm, setMediaAssetForm] =
     useState<MediaAssetFormState>(initialMediaAssetForm());
   const [mediaFilters, setMediaFilters] = useState<MediaFiltersState>(initialMediaFilters());
@@ -1401,6 +1447,7 @@ const HomePage = () => {
         summaryResult,
         diagnosticsResult,
         workflowsResult,
+        personasResult,
         topicsResult,
         mediaAssetsResult,
         mediaUsageResult,
@@ -1422,6 +1469,7 @@ const HomePage = () => {
         runOptionalRequest(api.getDashboard(client)),
         runOptionalRequest(api.getDiagnostics(client)),
         runOptionalRequest(api.getWorkflows(client)),
+        runOptionalRequest(api.getPersonas(client)),
         runOptionalRequest(api.getTopics(client)),
         runOptionalRequest(api.getMediaAssets(client)),
         runOptionalRequest(api.getMediaUsage(client, 120)),
@@ -1469,6 +1517,12 @@ const HomePage = () => {
         const message = `Workflows API: ${workflowsResult.error}`;
         coreErrors.push(message);
         nextCoreState = mergeOpsState(nextCoreState, toOpsStateFromErrorMessage(message));
+      }
+
+      if (personasResult.ok) {
+        setPersonas(personasResult.data);
+      } else {
+        setPersonas([]);
       }
 
       if (topicsResult.ok) {
@@ -1693,6 +1747,7 @@ const HomePage = () => {
         : 'Ogólny',
       all_signs: Boolean(workflow.all_signs),
       article_category: workflow.article_category?.toString() || '',
+      default_editor_persona: workflow.default_editor_persona?.toString() || '',
       image_gen_model: workflow.image_gen_model ?? 'openai/gpt-image-2',
       imageGenApiToken: '',
       enabled_channels: Array.isArray(workflow.enabled_channels)
@@ -1740,6 +1795,9 @@ const HomePage = () => {
         .map((item) => item.trim())
         .filter((item) => item.length > 0),
       article_category: data.article_category ? Number(data.article_category) : null,
+      default_editor_persona: data.default_editor_persona
+        ? Number(data.default_editor_persona)
+        : null,
     };
 
     if (apiToken.trim()) payload.apiToken = apiToken.trim();
@@ -1891,6 +1949,164 @@ const HomePage = () => {
       await loadAll();
     } catch (error) {
       showError(`Błąd podczas usuwania tematu: ${String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const refreshPersonas = async (): Promise<void> => {
+    const result = await runOptionalRequest(api.getPersonas(client));
+    if (result.ok) {
+      setPersonas(result.data);
+    }
+  };
+
+  const resetPersonaForm = (): void => {
+    setPersonaForm(initialPersonaForm());
+    setEditingPersonaId(null);
+    setEditingPersonaKey(null);
+    setShowPersonaAdvanced(false);
+  };
+
+  const onNewPersona = (): void => {
+    resetPersonaForm();
+    setShowPersonaModal(true);
+  };
+
+  const onPickPersonaToEdit = (persona: Persona): void => {
+    setEditingPersonaId(persona.id);
+    setEditingPersonaKey(persona.key ?? null);
+    setPersonaForm({
+      name: persona.name ?? '',
+      byline: persona.byline ?? '',
+      specialization: persona.specialization ?? '',
+      temperament: persona.temperament ?? '',
+      bio: persona.bio ?? '',
+      active: persona.active !== false,
+      priority: typeof persona.priority === 'number' ? persona.priority : 0,
+      system_instruction: persona.system_instruction ?? '',
+      prompt_prefix: persona.prompt_prefix ?? '',
+      prompt_suffix: persona.prompt_suffix ?? '',
+      llm_model: persona.llm_model ?? '',
+      temperature:
+        typeof persona.temperature === 'number' && Number.isFinite(persona.temperature)
+          ? String(persona.temperature)
+          : '',
+      enabled_for: Array.isArray(persona.enabled_for) ? persona.enabled_for : [],
+      writing_style:
+        persona.writing_style && Object.keys(persona.writing_style).length > 0
+          ? JSON.stringify(persona.writing_style, null, 2)
+          : '',
+    });
+    // Otwórz sekcję zaawansowaną, jeśli zawiera ona już jakieś dane.
+    setShowPersonaAdvanced(
+      Boolean(
+        persona.prompt_prefix ||
+          persona.prompt_suffix ||
+          persona.llm_model ||
+          (typeof persona.temperature === 'number' && Number.isFinite(persona.temperature)) ||
+          (Array.isArray(persona.enabled_for) && persona.enabled_for.length > 0) ||
+          (persona.writing_style && Object.keys(persona.writing_style).length > 0)
+      )
+    );
+    setShowPersonaModal(true);
+  };
+
+  const togglePersonaEnabledFor = (value: string, checked: boolean): void => {
+    setPersonaForm((prev) => {
+      const next = new Set(prev.enabled_for);
+      if (checked) {
+        next.add(value);
+      } else {
+        next.delete(value);
+      }
+      return { ...prev, enabled_for: Array.from(next) };
+    });
+  };
+
+  const buildPersonaPayload = (): Record<string, unknown> | null => {
+    if (!personaForm.name.trim()) {
+      showError('Nazwa redaktora jest wymagana.');
+      return null;
+    }
+
+    const payload: Record<string, unknown> = {
+      name: personaForm.name.trim(),
+      byline: personaForm.byline.trim() || null,
+      specialization: personaForm.specialization.trim() || null,
+      temperament: personaForm.temperament.trim() || null,
+      bio: personaForm.bio.trim() || null,
+      active: personaForm.active,
+      priority: Number.isFinite(personaForm.priority) ? personaForm.priority : 0,
+      system_instruction: personaForm.system_instruction.trim() || null,
+      prompt_prefix: personaForm.prompt_prefix.trim() || null,
+      prompt_suffix: personaForm.prompt_suffix.trim() || null,
+      llm_model: personaForm.llm_model.trim() || null,
+      enabled_for: personaForm.enabled_for,
+    };
+
+    const temperatureText = personaForm.temperature.trim();
+    if (temperatureText) {
+      const parsed = Number(temperatureText);
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 2) {
+        showError('Temperatura redaktora musi być liczbą od 0 do 2 (lub pusta).');
+        return null;
+      }
+      payload.temperature = parsed;
+    } else {
+      payload.temperature = null;
+    }
+
+    const writingStyleText = personaForm.writing_style.trim();
+    if (writingStyleText) {
+      const parsed = parseJsonObject(writingStyleText);
+      if (!parsed) {
+        showError('Profil stylu musi być poprawnym obiektem JSON (lub pusty).');
+        return null;
+      }
+      payload.writing_style = parsed;
+    } else {
+      payload.writing_style = null;
+    }
+
+    return payload;
+  };
+
+  const savePersona = async (): Promise<void> => {
+    const payload = buildPersonaPayload();
+    if (!payload) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (editingPersonaId) {
+        await api.updatePersona(client, editingPersonaId, payload);
+        showSuccess('Redaktor zaktualizowany.');
+      } else {
+        await api.createPersona(client, payload);
+        showSuccess('Redaktor dodany.');
+      }
+      setShowPersonaModal(false);
+      resetPersonaForm();
+      await refreshPersonas();
+    } catch (error) {
+      showError(`Nie udało się zapisać redaktora: ${getErrorMessage(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deletePersona = async (id: number): Promise<void> => {
+    if (!window.confirm('Czy na pewno chcesz usunąć tego redaktora?')) return;
+    setSaving(true);
+    try {
+      await api.deletePersona(client, id);
+      showSuccess('Redaktor usunięty.');
+      await refreshPersonas();
+      await refreshMonitoringData();
+    } catch (error) {
+      showError(`Błąd podczas usuwania redaktora: ${getErrorMessage(error)}`);
     } finally {
       setSaving(false);
     }
@@ -2848,6 +3064,29 @@ const HomePage = () => {
                   setWorkflowForm((prev) => ({ ...prev, prompt_template: e.target.value }))
                 }
               />
+
+              <UiField
+                label="Domyślny redaktor"
+                hint="Wirtualny autor nadający tekstom spójny styl i podpis. Zostaw „— brak —”, aby pisać neutralnie."
+              >
+                <UiSelect
+                  aria-label="Domyślny redaktor"
+                  value={workflowForm.default_editor_persona || ''}
+                  onChange={(value) =>
+                    setWorkflowForm((prev) => ({
+                      ...prev,
+                      default_editor_persona: value === '' ? '' : String(value),
+                    }))
+                  }
+                  options={[
+                    { value: '', label: '— brak —' },
+                    ...personas.map((persona) => ({
+                      value: String(persona.id),
+                      label: persona.byline?.trim() || persona.name,
+                    })),
+                  ]}
+                />
+              </UiField>
             </div>
           )}
 
@@ -3000,6 +3239,230 @@ const HomePage = () => {
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </Modal>
+  );
+
+  const renderPersonaModal = () => (
+    <Modal
+      title={editingPersonaId ? `Edycja redaktora: ${personaForm.name}` : 'Nowy redaktor'}
+      isOpen={showPersonaModal}
+      onClose={() => setShowPersonaModal(false)}
+      maxWidth={760}
+      footer={
+        <>
+          <UiButton variant="secondary" onClick={() => setShowPersonaModal(false)}>
+            Anuluj
+          </UiButton>
+          <UiButton
+            variant="primary"
+            disabled={saving}
+            loading={saving}
+            onClick={() => {
+              void savePersona();
+            }}
+          >
+            {saving
+              ? 'Zapisywanie...'
+              : editingPersonaId
+                ? 'Zapisz zmiany'
+                : 'Dodaj redaktora'}
+          </UiButton>
+        </>
+      }
+    >
+      <div style={{ display: 'grid', gap: 24 }}>
+        {/* Podstawy — pola zrozumiałe dla operatora. */}
+        <div style={{ display: 'grid', gap: 16 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 800, color: COLORS.text, margin: 0 }}>Podstawy</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <UiTextField
+              label="Nazwa wewnętrzna"
+              hint="Widoczna tylko w panelu — ułatwia odnalezienie redaktora."
+              value={personaForm.name}
+              placeholder="np. Ciepła astrolożka"
+              onChange={(e) => setPersonaForm((prev) => ({ ...prev, name: e.target.value }))}
+            />
+            <UiTextField
+              label="Podpis publiczny (autor)"
+              hint="Imię/nazwa pokazywana czytelnikom pod artykułem."
+              value={personaForm.byline}
+              placeholder="np. Anna Gwiazda"
+              onChange={(e) => setPersonaForm((prev) => ({ ...prev, byline: e.target.value }))}
+            />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <UiTextField
+              label="Specjalizacja"
+              hint="Czym się zajmuje ten redaktor."
+              value={personaForm.specialization}
+              placeholder='np. "Astrologia i horoskopy"'
+              onChange={(e) =>
+                setPersonaForm((prev) => ({ ...prev, specialization: e.target.value }))
+              }
+            />
+            <UiTextField
+              label="Temperament"
+              hint="Jedno-dwa słowa o charakterze tekstów."
+              value={personaForm.temperament}
+              placeholder='np. "ciepły", "rzeczowy", "mistyczny"'
+              onChange={(e) =>
+                setPersonaForm((prev) => ({ ...prev, temperament: e.target.value }))
+              }
+            />
+          </div>
+          <UiTextareaField
+            label="Biogram"
+            hint="Krótki opis na stronę autora. Zdjęcie (avatar) możesz dodać w Content Managerze."
+            value={personaForm.bio}
+            placeholder="np. Od 10 lat pomaga czytelnikom zrozumieć język gwiazd…"
+            onChange={(e) => setPersonaForm((prev) => ({ ...prev, bio: e.target.value }))}
+          />
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 16,
+              alignItems: 'center',
+            }}
+          >
+            <UiCheckbox
+              checked={personaForm.active}
+              onChange={(checked) => setPersonaForm((prev) => ({ ...prev, active: checked }))}
+            >
+              Aktywny (dostępny do przypisania)
+            </UiCheckbox>
+            <UiTextField
+              label="Priorytet"
+              hint="Wyższy = wyżej na liście wyboru."
+              type="number"
+              value={String(personaForm.priority)}
+              onChange={(e) =>
+                setPersonaForm((prev) => ({ ...prev, priority: Number(e.target.value) }))
+              }
+            />
+          </div>
+          {editingPersonaId && editingPersonaKey ? (
+            <UiTextField
+              label="Klucz (generowany automatycznie)"
+              hint="Tworzony z nazwy przy zapisie — tylko do odczytu."
+              value={editingPersonaKey}
+              disabled
+            />
+          ) : null}
+        </div>
+
+        {/* Styl pisania — sedno funkcji. */}
+        <div style={{ display: 'grid', gap: 12 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 800, color: COLORS.text, margin: 0 }}>
+            Styl pisania
+          </h3>
+          <UiTextareaField
+            label="Styl i wskazówki dla AI"
+            hint="Opisz, jak ma pisać ten redaktor: ton, tempo, słownictwo, czego unikać. To najważniejsze pole — nadaje tekstom charakter."
+            value={personaForm.system_instruction}
+            placeholder="np. Pisz ciepło i z empatią. Używaj prostych słów, krótkich zdań. Unikaj żargonu i straszenia. Dodawaj jeden praktyczny wniosek na koniec."
+            onChange={(e) =>
+              setPersonaForm((prev) => ({ ...prev, system_instruction: e.target.value }))
+            }
+          />
+        </div>
+
+        {/* Zaawansowane — ukryte domyślnie. */}
+        <div style={{ display: 'grid', gap: 16 }}>
+          <UiButton
+            variant="ghost"
+            size="S"
+            onClick={() => setShowPersonaAdvanced((prev) => !prev)}
+          >
+            {showPersonaAdvanced ? 'Ukryj ustawienia zaawansowane' : 'Pokaż ustawienia zaawansowane'}
+          </UiButton>
+
+          {showPersonaAdvanced ? (
+            <div
+              style={{
+                display: 'grid',
+                gap: 16,
+                padding: 16,
+                background: '#f8fafc',
+                borderRadius: 12,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <UiTextareaField
+                label="Wstęp do promptu (opcjonalnie)"
+                hint="Tekst dodawany na początku polecenia dla AI."
+                value={personaForm.prompt_prefix}
+                onChange={(e) =>
+                  setPersonaForm((prev) => ({ ...prev, prompt_prefix: e.target.value }))
+                }
+              />
+              <UiTextareaField
+                label="Zakończenie promptu (opcjonalnie)"
+                hint="Tekst dodawany na końcu polecenia dla AI."
+                value={personaForm.prompt_suffix}
+                onChange={(e) =>
+                  setPersonaForm((prev) => ({ ...prev, prompt_suffix: e.target.value }))
+                }
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <UiTextField
+                  label="Model LLM (opcjonalnie)"
+                  hint="Zostaw puste = model przepływu."
+                  value={personaForm.llm_model}
+                  placeholder="np. openai/gpt-4o-mini"
+                  onChange={(e) =>
+                    setPersonaForm((prev) => ({ ...prev, llm_model: e.target.value }))
+                  }
+                />
+                <UiTextField
+                  label="Temperatura (opcjonalnie)"
+                  hint="0–2. Puste = wartość przepływu."
+                  type="number"
+                  value={personaForm.temperature}
+                  placeholder="np. 0.7"
+                  onChange={(e) =>
+                    setPersonaForm((prev) => ({ ...prev, temperature: e.target.value }))
+                  }
+                />
+              </div>
+              <UiField
+                label="Dla jakich treści"
+                hint="Gdzie ten redaktor może być używany. Brak zaznaczeń = bez ograniczeń."
+              >
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, paddingTop: 4 }}>
+                  <UiCheckbox
+                    checked={personaForm.enabled_for.includes('article')}
+                    onChange={(checked) => togglePersonaEnabledFor('article', checked)}
+                  >
+                    Artykuły
+                  </UiCheckbox>
+                  <UiCheckbox
+                    checked={personaForm.enabled_for.includes('horoscope')}
+                    onChange={(checked) => togglePersonaEnabledFor('horoscope', checked)}
+                  >
+                    Horoskopy
+                  </UiCheckbox>
+                  <UiCheckbox
+                    checked={personaForm.enabled_for.includes('daily_card')}
+                    onChange={(checked) => togglePersonaEnabledFor('daily_card', checked)}
+                  >
+                    Karta dnia
+                  </UiCheckbox>
+                </div>
+              </UiField>
+              <UiTextareaField
+                label="Profil stylu (zaawansowane, JSON)"
+                hint="Opcjonalny obiekt JSON dla precyzyjnego sterowania stylem. Możesz zostawić puste i ustawić to później w Content Managerze."
+                value={personaForm.writing_style}
+                placeholder='np. { "ton": "ciepły", "dlugosc_zdan": "krotkie" }'
+                onChange={(e) =>
+                  setPersonaForm((prev) => ({ ...prev, writing_style: e.target.value }))
+                }
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </Modal>
@@ -3389,6 +3852,22 @@ const HomePage = () => {
           />
         )}
 
+        {activeTab === 'personas' && (
+          <PersonasTab
+            personas={personas}
+            cardStyle={CARD_STYLE}
+            sectionTitleStyle={SECTION_TITLE_STYLE}
+            colors={COLORS}
+            onNewPersona={onNewPersona}
+            onEditPersona={(persona) => {
+              onPickPersonaToEdit(persona);
+            }}
+            onDeletePersona={(id) => {
+              void deletePersona(id);
+            }}
+          />
+        )}
+
         {activeTab === 'topics' && (
           <TopicsTab
             topics={topics}
@@ -3684,6 +4163,7 @@ const HomePage = () => {
         )}
 
         {renderWorkflowModal()}
+        {renderPersonaModal()}
         {renderTopicModal()}
         {renderRunDetailsModal()}
       </div>

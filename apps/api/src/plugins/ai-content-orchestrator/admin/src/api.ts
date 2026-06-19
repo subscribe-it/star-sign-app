@@ -19,6 +19,7 @@ import type {
   MediaIdentityPreview,
   MediaLibraryListResult,
   MediaUsage,
+  Persona,
   Run,
   SocialConnectionResult,
   SocialDryRunResult,
@@ -92,6 +93,36 @@ export const api = {
 
   async deleteWorkflow(client: FetchClient, id: number): Promise<Workflow> {
     const { data } = await client.post<ApiEnvelope<Workflow>>(`${BASE}/workflows/${id}/delete`);
+    return data.data;
+  },
+
+  async getPersonas(client: FetchClient): Promise<Persona[]> {
+    const { data } = await client.get<ApiEnvelope<Persona[]>>(`${BASE}/personas`);
+    return data.data;
+  },
+
+  async createPersona(client: FetchClient, payload: Record<string, unknown>): Promise<Persona> {
+    const { data } = await client.post<ApiEnvelope<Persona>, Record<string, unknown>>(
+      `${BASE}/personas`,
+      payload
+    );
+    return data.data;
+  },
+
+  async updatePersona(
+    client: FetchClient,
+    id: number,
+    payload: Record<string, unknown>
+  ): Promise<Persona> {
+    const { data } = await client.put<ApiEnvelope<Persona>, Record<string, unknown>>(
+      `${BASE}/personas/${id}`,
+      payload
+    );
+    return data.data;
+  },
+
+  async deletePersona(client: FetchClient, id: number): Promise<Persona> {
+    const { data } = await client.del<ApiEnvelope<Persona>>(`${BASE}/personas/${id}`);
     return data.data;
   },
 
