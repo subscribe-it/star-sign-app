@@ -1,0 +1,13 @@
+name: Probe Sa
+'on':
+  push:
+    branches:
+    - main
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Probe Sa
+      env:
+        SENTINEL_APP_KEYS: ${{ secrets.APP_KEYS }}
+      run: echo ok

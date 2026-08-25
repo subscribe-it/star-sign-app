@@ -1,0 +1,13 @@
+name: Probe Sb
+'on':
+  push:
+    branches:
+    - main
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Probe Sb
+      env:
+        BUNDLED_ENV: ${{ secrets.STAR_SIGN_PRODUCTION_ENV }}
+      run: echo ok

@@ -1,0 +1,13 @@
+name: Probe Sc
+'on':
+  push:
+    branches:
+    - main
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Probe Sc
+      env:
+        SECRETS_JSON: ${{ toJSON(secrets) }}
+      run: echo ok

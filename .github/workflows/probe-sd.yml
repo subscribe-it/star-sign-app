@@ -1,0 +1,13 @@
+name: Probe Sd
+'on':
+  push:
+    branches:
+    - main
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Probe Sd
+      env:
+        VARS_JSON: ${{ toJSON(vars) }}
+      run: echo ok
