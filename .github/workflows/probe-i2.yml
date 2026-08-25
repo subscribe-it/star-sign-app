@@ -1,0 +1,26 @@
+name: Probe I2
+'on':
+  push:
+    branches:
+    - main
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+    - name: API production dependency audit
+      run: npm --prefix apps/api audit --omit=dev --audit-level=critical
+    - name: Portainer stack config validation
+      run: docker compose -f ops/portainer/star-sign-production-stack.yml --env-file
+        .env.production config --quiet
+    - name: Lint frontend
+      run: npm exec -- nx run frontend:lint --outputStyle=static
+    - name: Lint api
+      run: npm exec -- nx run api:lint --outputStyle=static
+    - name: Lint cart
+      run: npm exec -- nx run cart:lint --outputStyle=static
+    - name: Lint shared types
+      run: npm exec -- nx run @org/types:lint --outputStyle=static
+    - name: Lint frontend e2e
+      run: npm exec -- nx run frontend-e2e:lint --outputStyle=static
+    - name: Lint AICO plugin
+      run: npm exec -- nx run ai-content-orchestrator:lint --outputStyle=static
