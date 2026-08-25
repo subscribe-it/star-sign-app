@@ -1,0 +1,311 @@
+name: Production Deploy V2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: subscribe-it
+  API_IMAGE: star-sign-api
+  FRONTEND_IMAGE: star-sign-frontend
+
+jobs:
+  release-gate:
+    name: Main release gate
+    runs-on: ubuntu-latest
+    env:
+      STAR_SIGN_PRODUCTION_ENV: ${{ secrets.STAR_SIGN_PRODUCTION_ENV }}
+      FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: tree:0
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/api/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install API dependencies
+        run: npm --prefix apps/api ci
+
+      # Compose .env.production from INDIVIDUAL GitHub secrets + variables.
+      # Mode is chosen by a sentinel core secret (APP_KEYS):
+      #   - APP_KEYS set  -> individual mode: write every secret + variable as KEY=VALUE
+      #     (auto via toJSON, so no per-key enumeration; deploy-control keys skipped).
+      #   - else STAR_SIGN_PRODUCTION_ENV set -> legacy bundled mode (whole .env in one secret).
+      # See docs/ops/github-secrets-and-variables.md for the full key list + setup.
+      - name: Write production env file
+        env:
+          SENTINEL_APP_KEYS: ${{ secrets.APP_KEYS }}
+          BUNDLED_ENV: ${{ secrets.STAR_SIGN_PRODUCTION_ENV }}
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          VARS_JSON: ${{ toJSON(vars) }}
+        run: |
+          umask 077
+          if [ -n "${SENTINEL_APP_KEYS:-}" ]; then
+            node -e '
+              const fs = require("fs");
+              // Deploy-control / non-app keys that must NOT leak into the app .env.
+              const skip = new Set([
+                "github_token", "STAR_SIGN_PRODUCTION_ENV", "PORTAINER_WEBHOOK_URL",
+                "API_BASE_URL", "FRONTEND_BASE_URL", "DEPLOY_WAIT_SECONDS"
+              ]);
+              const lines = [];
+              for (const raw of [process.env.VARS_JSON, process.env.SECRETS_JSON]) {
+                const obj = JSON.parse(raw || "{}");
+                for (const [k, v] of Object.entries(obj)) {
+                  if (skip.has(k) || v === null || v === undefined || v === "") continue;
+                  lines.push(k + "=" + String(v));
+                }
+              }
+              fs.writeFileSync(".env.production", lines.join("\n") + "\n", { mode: 0o600 });
+            '
+            echo "Composed .env.production from $(grep -c "=" .env.production) individual secrets/variables."
+          elif [ -n "${BUNDLED_ENV:-}" ]; then
+            printf '%s\n' "$BUNDLED_ENV" > .env.production
+            echo "Composed .env.production from bundled STAR_SIGN_PRODUCTION_ENV (legacy mode)."
+          else
+            echo "No production env source: set individual secrets (APP_KEYS, ...) or STAR_SIGN_PRODUCTION_ENV." >&2
+            exit 2
+          fi
+
+      - name: Nx sync check
+        run: npm exec -- nx sync:check
+
+      - name: Production env guard
+        run: PRODUCTION_ENV_FILE=.env.production sh ops/production-env-check.sh
+
+      - name: Root production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      # apps/api gate is `critical` (root stays `high`). Remaining HIGH are accepted:
+      # Strapi-5 upstream advisories with no 5.x fix (npm only offers a breaking v4
+      # downgrade) + build-time dev-server tools (esbuild/vite/ws/esbuild-loader) that
+      # are not reachable in the production `strapi start` runtime.
+      # See docs/ops/github-secrets-and-variables.md / audit doc for the acceptance.
+      - name: API production dependency audit
+        run: npm --prefix apps/api audit --omit=dev --audit-level=critical
+
+      - name: Portainer stack config validation
+        run: docker compose -f ops/portainer/star-sign-production-stack.yml --env-file .env.production config --quiet
+
+      - name: Lint frontend
+        run: npm exec -- nx run frontend:lint --outputStyle=static
+
+      - name: Lint api
+        run: npm exec -- nx run api:lint --outputStyle=static
+
+      - name: Lint cart
+        run: npm exec -- nx run cart:lint --outputStyle=static
+
+      - name: Lint shared types
+        run: npm exec -- nx run @org/types:lint --outputStyle=static
+
+      - name: Lint frontend e2e
+        run: npm exec -- nx run frontend-e2e:lint --outputStyle=static
+
+      - name: Lint AICO plugin
+        run: npm exec -- nx run ai-content-orchestrator:lint --outputStyle=static
+
+      - name: Typecheck shared types
+        run: npm exec -- nx run @org/types:typecheck --outputStyle=static
+
+      - name: Typecheck api
+        run: npm exec -- nx run api:typecheck --outputStyle=static
+
+      - name: Typecheck cart
+        run: npm exec -- nx run cart:typecheck --outputStyle=static
+
+      - name: Typecheck frontend
+        run: npm exec -- nx run frontend:typecheck --outputStyle=static
+
+      - name: Typecheck frontend e2e
+        run: npm exec -- nx run frontend-e2e:typecheck --outputStyle=static
+
+      - name: Test frontend with coverage
+        run: npm exec -- nx run frontend:test --configuration=coverage --outputStyle=static
+
+      - name: Test api
+        run: npm exec -- nx run api:test --outputStyle=static
+
+      - name: Test cart
+        run: npm exec -- nx run cart:test --outputStyle=static
+
+      - name: Test AICO unit
+        run: npm exec -- nx run ai-content-orchestrator:test:unit --outputStyle=static
+
+      - name: Typecheck AICO backend
+        run: npm exec -- nx run ai-content-orchestrator:test:ts:back --outputStyle=static
+
+      - name: Typecheck AICO admin
+        run: npm exec -- nx run ai-content-orchestrator:test:ts:front --outputStyle=static
+
+      - name: Build AICO plugin
+        run: npm exec -- nx run ai-content-orchestrator:build --outputStyle=static
+
+      - name: Verify AICO plugin package
+        run: npm exec -- nx run ai-content-orchestrator:verify --outputStyle=static
+
+      - name: Build api
+        run: npm exec -- nx run api:build --outputStyle=static
+
+      - name: Build frontend production
+        run: npm exec -- nx run frontend:build:production --outputStyle=static
+
+      - name: Diff whitespace check
+        run: git diff --check
+
+  build-and-push:
+    name: Build and push GHCR images
+    runs-on: ubuntu-latest
+    needs: release-gate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: tree:0
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: api-runtime
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.API_IMAGE }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.API_IMAGE }}:main
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Scan API image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.API_IMAGE }}:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: '1'
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: frontend-runtime
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.FRONTEND_IMAGE }}:main
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: '1'
+
+  deploy:
+    name: Trigger Portainer deploy
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    env:
+      PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+    steps:
+      - name: Trigger Portainer stack webhook
+        run: |
+          if [ -z "${PORTAINER_WEBHOOK_URL:-}" ]; then
+            echo "Missing GitHub secret PORTAINER_WEBHOOK_URL." >&2
+            exit 2
+          fi
+          curl -fsS -X POST "$PORTAINER_WEBHOOK_URL"
+
+  post-deploy:
+    name: Post-deploy smoke and e2e
+    runs-on: ubuntu-latest
+    needs: deploy
+    env:
+      FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+      DEPLOY_WAIT_SECONDS: ${{ vars.DEPLOY_WAIT_SECONDS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: tree:0
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/api/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install API dependencies
+        run: npm --prefix apps/api ci
+
+      - run: npm exec -- playwright install --with-deps chromium
+
+      - name: Wait for Portainer rollout
+        run: sleep "${DEPLOY_WAIT_SECONDS:-90}"
+
+      - name: Smoke test production domains
+        run: |
+          : "${FRONTEND_BASE_URL:?Set GitHub variable FRONTEND_BASE_URL.}"
+          : "${API_BASE_URL:?Set GitHub variable API_BASE_URL.}"
+          npm run ops:smoke
+
+      - name: Verify security headers
+        run: |
+          : "${FRONTEND_BASE_URL:?Set GitHub variable FRONTEND_BASE_URL.}"
+          : "${API_BASE_URL:?Set GitHub variable API_BASE_URL.}"
+          npm run ops:headers
+
+      - name: Playwright e2e against deployed frontend
+        run: BASE_URL="$FRONTEND_BASE_URL" npm exec -- nx run frontend-e2e:e2e --outputStyle=static
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-playwright-report
+          path: |
+            dist/.playwright/frontend-e2e/playwright-report
+            dist/.playwright/frontend-e2e/test-output
