@@ -255,7 +255,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Scan API image
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.API_IMAGE }}:${{ github.sha }}
           format: table
@@ -278,7 +278,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Scan frontend image
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           format: table
