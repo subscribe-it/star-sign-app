@@ -381,6 +381,51 @@ describe('seed media bootstrap', () => {
     });
   });
 
+  it('uploads bundled zodiac profile images, maps them and links the sign', async () => {
+    vi.stubEnv('R2_UPLOAD_ENABLED', 'true');
+    const uploadsDir = createTempUploadsDir();
+    writeSeedFile(uploadsDir, 'zodiac-baran-profile.webp');
+    const mocks = createStrapiMock({
+      zodiacSigns: [{ id: 11, name: 'Baran', slug: 'baran', image: null }],
+    });
+
+    const result = await ensureSeedMedia(mocks.strapi as never, {
+      uploadsDir,
+      assets: [],
+    });
+
+    expect(result.uploaded).toBe(1);
+    expect(result.mediaAssets).toBeGreaterThanOrEqual(1);
+    expect(result.zodiacLinked).toBe(1);
+    expect(result.missingFiles).not.toContain('zodiac-baran-profile.webp');
+    expect(mocks.mediaAssetCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        asset_key: 'zodiac-baran-profile',
+        purpose: 'zodiac_profile',
+        sign_slug: 'baran',
+        label: 'Znak: Baran',
+        period_scope: 'any',
+      }),
+    });
+    expect(mocks.zodiacUpdate).toHaveBeenCalledWith({
+      where: { id: 11 },
+      data: { image: 55 },
+    });
+  });
+
+  it('silently skips optional zodiac profile images when local files are absent', async () => {
+    const mocks = createStrapiMock({});
+
+    const result = await ensureSeedMedia(mocks.strapi as never, {
+      uploadsDir: '/does-not-need-to-exist',
+      assets: [],
+    });
+
+    expect(result.uploaded).toBe(0);
+    expect(result.zodiacLinked).toBe(0);
+    expect(result.missingFiles).not.toContain('zodiac-baran-profile.webp');
+  });
+
   it('links seeded articles from already mapped AICO blog assets', async () => {
     const asset: SeedMediaAsset = {
       cardSlug: 'glupiec',

@@ -158,6 +158,39 @@ export const DAILY_TAROT_SEED_ASSETS: SeedMediaAsset[] =
     keywords: ['daily', 'card', 'tarot', cardSlug],
   }));
 
+/**
+ * Statyczne ilustracje profilowe 12 znaków zodiaku (konstelacje, Lumina Silk).
+ * Bootstrap uploaduje je idempotentnie (dedupe po nazwie pliku) i tworzy
+ * AICO media-asset z purpose=zodiac_profile, dzięki czemu ensureZodiacSignImages
+ * podpina obraz do każdego znaku także na czystej produkcji.
+ */
+const ZODIAC_SIGN_FILES: Array<[string, string, string]> = [
+  ['baran', 'zodiac-baran-profile.webp', 'Baran'],
+  ['byk', 'zodiac-byk-profile.webp', 'Byk'],
+  ['bliznieta', 'zodiac-bliznieta-profile.webp', 'Bliźnięta'],
+  ['rak', 'zodiac-rak-profile.webp', 'Rak'],
+  ['lew', 'zodiac-lew-profile.webp', 'Lew'],
+  ['panna', 'zodiac-panna-profile.webp', 'Panna'],
+  ['waga', 'zodiac-waga-profile.webp', 'Waga'],
+  ['skorpion', 'zodiac-skorpion-profile.webp', 'Skorpion'],
+  ['strzelec', 'zodiac-strzelec-profile.webp', 'Strzelec'],
+  ['koziorozec', 'zodiac-koziorozec-profile.webp', 'Koziorożec'],
+  ['wodnik', 'zodiac-wodnik-profile.webp', 'Wodnik'],
+  ['ryby', 'zodiac-ryby-profile.webp', 'Ryby'],
+];
+
+export const ZODIAC_PROFILE_SEED_ASSETS: SeedMediaAsset[] =
+  ZODIAC_SIGN_FILES.map(([signSlug, fileName, label]) => ({
+    cardSlug: signSlug,
+    fileName,
+    label,
+    assetKey: `zodiac-${signSlug}-profile`,
+    purpose: 'zodiac_profile',
+    signSlug,
+    priority: 10,
+    keywords: ['zodiac', 'profile', signSlug],
+  }));
+
 const BLOG_PLACEHOLDER_FILE_NAME = 'blog_placeholder.webp';
 const BLOG_LEGACY_PLACEHOLDER_FILE_NAMES = ['blog_placeholder.svg'];
 const BLOG_PLACEHOLDER_ASSET_KEY = 'blog-placeholder-default';
@@ -1010,12 +1043,14 @@ const ensureAicoMediaAsset = async (
   });
   const currentAssetId = extractRelationId(existing?.asset);
   const purpose = asset.purpose ?? 'daily_card';
+  const isZodiacProfile = purpose === 'zodiac_profile';
+  const defaultLabelPrefix = isZodiacProfile ? 'Znak' : 'Karta Dnia';
   const data = {
     asset_key: asset.assetKey,
-    label: `Karta Dnia: ${asset.label}`,
+    label: `${defaultLabelPrefix}: ${asset.label}`,
     purpose,
     sign_slug: asset.signSlug ?? null,
-    period_scope: asset.periodScope ?? 'daily',
+    period_scope: asset.periodScope ?? (isZodiacProfile ? 'any' : 'daily'),
     priority: asset.priority ?? 10,
     active: true,
     cooldown_days: 3,
@@ -1023,7 +1058,9 @@ const ensureAicoMediaAsset = async (
     mapping_source: 'seed',
     mapping_confidence: 1,
     mapping_reasons: ['Bootstrap seed media'],
-    notes: 'Lokalny asset tarota przypięty automatycznie przez bootstrap.',
+    notes: isZodiacProfile
+      ? 'Ilustracja profilowa znaku podpięta automatycznie przez bootstrap.'
+      : 'Lokalny asset tarota przypięty automatycznie przez bootstrap.',
     asset: file.id,
     use_count: typeof existing?.use_count === 'number' ? existing.use_count : 0,
     last_used_at: existing?.last_used_at || null,
@@ -1559,6 +1596,30 @@ export const ensureSeedMedia = async (
 
     if (await ensureTarotCardImage(strapi, asset, ensured.file)) {
       result.linked += 1;
+    }
+
+    if (await ensureAicoMediaAsset(strapi, asset, ensured.file)) {
+      result.mediaAssets += 1;
+    }
+  }
+
+  // Ilustracje profilowe znaków: upload + media-asset (purpose=zodiac_profile),
+  // linkowanie do znaków realizuje ensureZodiacSignImages poniżej.
+  // Assety są opcjonalne — brak pliku lokalnego pomijamy cicho, żeby środowiska
+  // bez nich (np. testy) nie dostawały ostrzeżeń o missingFiles.
+  for (const asset of ZODIAC_PROFILE_SEED_ASSETS) {
+    if (!fs.existsSync(path.join(uploadsDir, asset.fileName))) {
+      continue;
+    }
+
+    const ensured = await ensureUploadFile(strapi, asset, uploadsDir);
+
+    if (!ensured) {
+      continue;
+    }
+
+    if (ensured.uploaded) {
+      result.uploaded += 1;
     }
 
     if (await ensureAicoMediaAsset(strapi, asset, ensured.file)) {
