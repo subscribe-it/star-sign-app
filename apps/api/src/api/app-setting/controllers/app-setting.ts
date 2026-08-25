@@ -20,5 +20,15 @@ export default {
       allowPromotionCodes: settings.allowPromotionCodes,
       maintenanceMode: settings.maintenanceMode,
     };
+
+    // Diagnostyka produkcyjna bootstrapu mediów (tymczasowe, patrz seed-media).
+    try {
+      const diag = await strapi
+        .store({ type: 'plugin', name: 'seed-media-diag', key: 'state' })
+        .get();
+      (ctx.body as Record<string, unknown>)['seedMediaDiag'] = diag;
+    } catch {
+      /* brak diag nie może psuć endpointu */
+    }
   },
 };

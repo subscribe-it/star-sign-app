@@ -1607,24 +1607,64 @@ export const ensureSeedMedia = async (
   // linkowanie do znaków realizuje ensureZodiacSignImages poniżej.
   // Assety są opcjonalne — brak pliku lokalnego pomijamy cicho, żeby środowiska
   // bez nich (np. testy) nie dostawały ostrzeżeń o missingFiles.
+  // Diagnostyka produkcyjna (usuwane po ustabilizowaniu): stan plików
+  // i ewentualny błąd trafiają do core-store, skąd czyta go publiczny
+  // /api/app-settings/public — bez dostępu do logów kontenera.
+  const seedMediaDiag: Record<string, unknown> = {
+    cwd: process.cwd(),
+    uploadsDir,
+    uploadsDirExists: fs.existsSync(uploadsDir),
+    uploadsZodiacSample: fs.existsSync(uploadsDir)
+      ? fs
+          .readdirSync(uploadsDir)
+          .filter((f) => f.startsWith('zodiac'))
+          .slice(0, 3)
+      : [],
+    zodiacFilesTotal: ZODIAC_PROFILE_SEED_ASSETS.length,
+    r2Enabled: isR2UploadEnabled(),
+    uploaded: 0,
+    firstZodiacError: null as string | null,
+  };
+
   for (const asset of ZODIAC_PROFILE_SEED_ASSETS) {
     if (!fs.existsSync(path.join(uploadsDir, asset.fileName))) {
       continue;
     }
 
-    const ensured = await ensureUploadFile(strapi, asset, uploadsDir);
+    try {
+      const ensured = await ensureUploadFile(strapi, asset, uploadsDir);
 
-    if (!ensured) {
-      continue;
-    }
+      if (!ensured) {
+        continue;
+      }
 
-    if (ensured.uploaded) {
-      result.uploaded += 1;
-    }
+      if (ensured.uploaded) {
+        result.uploaded += 1;
+        seedMediaDiag.uploaded = result.uploaded;
+      }
 
-    if (await ensureAicoMediaAsset(strapi, asset, ensured.file)) {
-      result.mediaAssets += 1;
+      if (await ensureAicoMediaAsset(strapi, asset, ensured.file)) {
+        result.mediaAssets += 1;
+      }
+    } catch (error) {
+      if (!seedMediaDiag.firstZodiacError) {
+        seedMediaDiag.firstZodiacError =
+          error instanceof Error ? error.message : String(error);
+      }
     }
+  }
+
+  try {
+    await strapi
+      .store({ type: 'plugin', name: 'seed-media-diag', key: 'state' })
+      .set({
+        value: {
+          ...seedMediaDiag,
+          at: new Date().toISOString(),
+        },
+      });
+  } catch {
+    /* diag never breaks bootstrap */
   }
 
   if (options.linkMappedContent !== false) {

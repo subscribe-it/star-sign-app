@@ -710,6 +710,13 @@ if (useE2eMockApi) {
 // Display-ads publisher id (Google AdSense). Empty = slots stay placeholders.
 const adsenseClientId = process.env['ADSENSE_CLIENT_ID'] || '';
 
+// Diagnostyka SSR (tymczasowa): porównanie Hosta żądania z allowlistą.
+app.use((req, res, next) => {
+  res.setHeader('x-ssr-host', String(req.headers.host ?? ''));
+  res.setHeader('x-ssr-allowed', ssrAllowedHosts.join('|'));
+  next();
+});
+
 app.get('/runtime-config.json', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({
