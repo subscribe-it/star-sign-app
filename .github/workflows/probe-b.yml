@@ -1,0 +1,13 @@
+name: Probe B
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  echo:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "probe-b ok"
