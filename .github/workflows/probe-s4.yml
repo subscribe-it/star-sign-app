@@ -1,0 +1,31 @@
+name: Probe S4
+'on':
+  push:
+    branches:
+    - main
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Write production env file
+      env:
+        SENTINEL_APP_KEYS: ${{ secrets.APP_KEYS }}
+        BUNDLED_ENV: ${{ secrets.STAR_SIGN_PRODUCTION_ENV }}
+        SECRETS_JSON: ${{ toJSON(secrets) }}
+        VARS_JSON: ${{ toJSON(vars) }}
+      run: "umask 077\nif [ -n \"${SENTINEL_APP_KEYS:-}\" ]; then\n  node -e '\n \
+        \   const fs = require(\"fs\");\n    // Deploy-control / non-app keys that\
+        \ must NOT leak into the app .env.\n    const skip = new Set([\n      \"github_token\"\
+        , \"STAR_SIGN_PRODUCTION_ENV\", \"PORTAINER_WEBHOOK_URL\",\n      \"API_BASE_URL\"\
+        , \"FRONTEND_BASE_URL\", \"DEPLOY_WAIT_SECONDS\"\n    ]);\n    const lines\
+        \ = [];\n    for (const raw of [process.env.VARS_JSON, process.env.SECRETS_JSON])\
+        \ {\n      const obj = JSON.parse(raw || \"{}\");\n      for (const [k, v]\
+        \ of Object.entries(obj)) {\n        if (skip.has(k) || v === null || v ===\
+        \ undefined || v === \"\") continue;\n        lines.push(k + \"=\" + String(v));\n\
+        \      }\n    }\n    fs.writeFileSync(\".env.production\", lines.join(\"\\\
+        n\") + \"\\n\", { mode: 0o600 });\n  '\n  echo \"Composed .env.production\
+        \ from $(grep -c \"=\" .env.production) individual secrets/variables.\"\n\
+        elif [ -n \"${BUNDLED_ENV:-}\" ]; then\n  printf '%s\\n' \"$BUNDLED_ENV\"\
+        \ > .env.production\n  echo \"Composed .env.production from bundled STAR_SIGN_PRODUCTION_ENV\
+        \ (legacy mode).\"\nelse\n  echo \"No production env source: set individual\
+        \ secrets (APP_KEYS, ...) or STAR_SIGN_PRODUCTION_ENV.\" >&2\n  exit 2\nfi\n"

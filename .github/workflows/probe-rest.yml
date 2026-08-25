@@ -1,0 +1,32 @@
+name: Probe Rest
+'on':
+  push:
+    branches:
+    - main
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        filter: tree:0
+        fetch-depth: 0
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+        cache-dependency-path: 'package-lock.json
+
+          apps/api/package-lock.json
+
+          '
+    - name: Install root dependencies
+      run: npm ci
+    - name: Install API dependencies
+      run: npm --prefix apps/api ci
+    - name: Nx sync check
+      run: npm exec -- nx sync:check
+    - name: Production env guard
+      run: PRODUCTION_ENV_FILE=.env.production sh ops/production-env-check.sh
+    - name: Root production dependency audit
+      run: npm audit --omit=dev --audit-level=high
