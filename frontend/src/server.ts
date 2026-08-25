@@ -50,7 +50,51 @@ const sentryTracesSampleRate = Number(
 );
 
 const app = express();
-const angularApp = new AngularNodeAppEngine();
+/**
+ * SSR host allowlist (Angular SSRF protection).
+ *
+ * Without an explicit list every render request fails host validation and the
+ * engine silently falls back to client-side rendering (empty <app-root> shell),
+ * which killed SEO on production. Hostnames are matched without port.
+ *
+ * Sources: explicit env override (comma-separated) plus the known deployment
+ * domains. `trustProxyHeaders: true` because the container runs behind Caddy,
+ * which always sets X-Forwarded-* headers.
+ */
+const ssrAllowedHostsEnv =
+  process.env['SSR_ALLOWED_HOSTS']?.split(',') ?? [];
+/** Production deploys pass the canonical origin as FRONTEND_URL. */
+const frontendUrlHost = (() => {
+  const raw = process.env['FRONTEND_URL'];
+  if (!raw) return undefined;
+  try {
+    return new URL(raw).hostname;
+  } catch {
+    return undefined;
+  }
+})();
+const ssrAllowedHosts = [
+  'localhost',
+  '127.0.0.1',
+  process.env['FRONTEND_DOMAIN'],
+  process.env['PRODUCTION_DOMAIN'],
+  frontendUrlHost,
+  ...ssrAllowedHostsEnv,
+]
+  .filter((host): host is string => Boolean(host && host.trim()))
+  .map((host) => host.trim().toLowerCase())
+  .flatMap((host) =>
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    !host.includes('.') ||
+    host.startsWith('www.')
+      ? [host]
+      : [host, `www.${host}`],
+  );
+const angularApp = new AngularNodeAppEngine({
+  allowedHosts: [...new Set(ssrAllowedHosts)],
+  trustProxyHeaders: true,
+});
 
 type StrapiCollectionResponse<T> = {
   data: T[];
@@ -663,9 +707,15 @@ if (useE2eMockApi) {
   });
 }
 
+// Display-ads publisher id (Google AdSense). Empty = slots stay placeholders.
+const adsenseClientId = process.env['ADSENSE_CLIENT_ID'] || '';
+
 app.get('/runtime-config.json', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({
+    ads: {
+      adsenseClientId,
+    },
     turnstile: {
       enabled: turnstileEnabled,
       siteKey: turnstileSiteKey,

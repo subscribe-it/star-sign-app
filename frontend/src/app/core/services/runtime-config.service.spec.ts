@@ -74,6 +74,41 @@ describe('RuntimeConfigService', () => {
     expect(service.turnstileEnabled()).toBe(false);
   });
 
+  it('should accept a valid AdSense client id from runtime payload', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ads: { adsenseClientId: 'ca-pub-1234567890123456' },
+          }),
+      }),
+    );
+
+    const service = TestBed.inject(RuntimeConfigService);
+    const config = await service.load();
+
+    expect(config.ads).toEqual({ adsenseClientId: 'ca-pub-1234567890123456' });
+    expect(service.adsenseClientId()).toBe('ca-pub-1234567890123456');
+  });
+
+  it('should reject an invalid AdSense client id from runtime payload', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({ ads: { adsenseClientId: 'not-a-client-id' } }),
+      }),
+    );
+
+    const service = TestBed.inject(RuntimeConfigService);
+    const config = await service.load();
+
+    expect(config.ads).toEqual({ adsenseClientId: '' });
+  });
+
   it('should keep default config when runtime endpoint fails', async () => {
     vi.stubGlobal(
       'fetch',

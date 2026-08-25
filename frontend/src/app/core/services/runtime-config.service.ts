@@ -26,10 +26,24 @@ export type SentryRuntimeConfig = {
   tracesSampleRate: number;
 };
 
+export type AdsRuntimeConfig = {
+  adsenseClientId: string;
+};
+
 export type RuntimeConfig = {
   turnstile: TurnstileRuntimeConfig;
   analytics: AnalyticsRuntimeConfig;
   sentry: SentryRuntimeConfig;
+  ads: AdsRuntimeConfig;
+};
+
+const normalizeAdsenseClientId = (value: unknown): string => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const clientId = value.trim();
+  return /^ca-pub-\d{10,}$/.test(clientId) ? clientId : '';
 };
 
 const placeholderPattern = /^(|replace_me.*|changeme|change_me|your_.+|G-X+)$/i;
@@ -90,6 +104,12 @@ const defaultRuntimeConfig = (): RuntimeConfig => ({
     release: normalizeString(environment.sentry.release),
     tracesSampleRate: normalizeNumber(environment.sentry.tracesSampleRate, 0),
   },
+  ads: {
+    adsenseClientId: normalizeAdsenseClientId(
+      (environment as { ads?: { adsenseClientId?: string } }).ads
+        ?.adsenseClientId,
+    ),
+  },
 });
 
 @Injectable({
@@ -103,6 +123,10 @@ export class RuntimeConfigService {
   public readonly config = this.configState.asReadonly();
   public readonly turnstile = computed(() => this.config().turnstile);
   public readonly analytics = computed(() => this.config().analytics);
+  public readonly ads = computed(() => this.config().ads);
+  public readonly adsenseClientId = computed(
+    () => this.ads().adsenseClientId,
+  );
   public readonly sentry = computed(() => this.config().sentry);
   public readonly ga4MeasurementId = computed(
     () => this.analytics().ga4MeasurementId,
@@ -165,6 +189,10 @@ export class RuntimeConfigService {
       record['sentry'] && typeof record['sentry'] === 'object'
         ? (record['sentry'] as Record<string, unknown>)
         : {};
+    const rawAds =
+      record['ads'] && typeof record['ads'] === 'object'
+        ? (record['ads'] as Record<string, unknown>)
+        : {};
     const defaults = defaultRuntimeConfig();
 
     return {
@@ -191,6 +219,9 @@ export class RuntimeConfigService {
           rawSentry['tracesSampleRate'],
           defaults.sentry.tracesSampleRate,
         ),
+      },
+      ads: {
+        adsenseClientId: normalizeAdsenseClientId(rawAds['adsenseClientId']),
       },
     };
   }
