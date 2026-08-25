@@ -66,6 +66,7 @@ jobs:
           SENTINEL_APP_KEYS: ${{ secrets.APP_KEYS }}
           BUNDLED_ENV: ${{ secrets.STAR_SIGN_PRODUCTION_ENV }}
           VARS_JSON: ${{ toJSON(vars) }}
+          SECRET__APP_KEYS: ${{ secrets.APP_KEYS }}
           SECRET__API_TOKEN_SALT: ${{ secrets.API_TOKEN_SALT }}
           SECRET__ADMIN_JWT_SECRET: ${{ secrets.ADMIN_JWT_SECRET }}
           SECRET__TRANSFER_TOKEN_SALT: ${{ secrets.TRANSFER_TOKEN_SALT }}
