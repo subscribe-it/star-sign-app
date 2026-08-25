@@ -157,7 +157,10 @@ describe('HoroscopeReader', () => {
 
     expect(component.adsEnabled).toBe(true);
     expect((fixture.nativeElement as HTMLElement).textContent).toContain(
-      'Miejsce na Twoją Reklamę',
+      'Zestawy do Rytuałów Księżycowych',
+    );
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Reklama',
     );
   });
 });

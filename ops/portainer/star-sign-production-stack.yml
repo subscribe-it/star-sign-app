@@ -12,6 +12,8 @@ services:
       # Extra SSR host allowlist entries (comma-separated), on top of the
       # FRONTEND_URL hostname; the engine rejects unknown Host headers with 400.
       SSR_ALLOWED_HOSTS: ${SSR_ALLOWED_HOSTS:-}
+      # Google AdSense publisher id (ca-pub-...). Empty = ad slots stay placeholders.
+      ADSENSE_CLIENT_ID: ${ADSENSE_CLIENT_ID:-}
       SHOP_ENABLED: ${SHOP_ENABLED:-false}
       FRONTEND_SHOP_ENABLED: ${FRONTEND_SHOP_ENABLED:-false}
       TURNSTILE_ENABLED: ${TURNSTILE_ENABLED:-false}

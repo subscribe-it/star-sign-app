@@ -28,6 +28,7 @@ import { ZodiacSign } from '@star-sign-monorepo/shared-types';
 import { Article } from '@star-sign-monorepo/shared-types';
 import { ProductService } from '../../core/services/product.service';
 import { Product } from '@star-sign-monorepo/shared-types';
+import { AdSlotComponent } from '../../core/components/ad-slot/ad-slot';
 import { featureFlags } from '../../core/feature-flags';
 import { RuntimeConfigService } from '../../core/services/runtime-config.service';
 import { TurnstileWidget } from '../../shared/components/turnstile/turnstile-widget';
@@ -35,7 +36,13 @@ import { SPECIAL_HOROSCOPE_TYPES } from '../../core/horoscope-type-definitions';
 
 @Component({
   selector: 'app-home',
-  imports: [RouterLink, NgIcon, StrapiImagePipe, TurnstileWidget],
+  imports: [
+    RouterLink,
+    NgIcon,
+    StrapiImagePipe,
+    TurnstileWidget,
+    AdSlotComponent,
+  ],
   viewProviders: [
     provideIcons({ simpleInstagram, simpleTiktok, simplePinterest }),
   ],

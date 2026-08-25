@@ -61,6 +61,7 @@ describe('HomeComponent', () => {
           useValue: {
             turnstileEnabled,
             turnstile: turnstileConfig,
+            adsenseClientId: () => '',
           },
         },
         NotificationService,
@@ -254,7 +255,7 @@ describe('HomeComponent', () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(component.adsEnabled).toBe(true);
-    expect(host.textContent).toContain('REKLAMA');
+    expect(host.textContent).toContain('Reklama');
     expect(host.textContent).toContain('Odkryj Magiczne Amulety');
   });
 

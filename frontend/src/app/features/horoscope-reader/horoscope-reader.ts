@@ -31,6 +31,7 @@ import { BreadcrumbsComponent } from '../../shared/components/breadcrumbs/breadc
 import { PremiumPreviewBlock } from '../../shared/components/premium-preview-block/premium-preview-block';
 import { SocialShare } from '../../shared/components/social-share';
 import { NewsletterCtaComponent } from '../../shared/components/newsletter-cta/newsletter-cta';
+import { AdSlotComponent } from '../../core/components/ad-slot/ad-slot';
 
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { featureFlags } from '../../core/feature-flags';
@@ -53,6 +54,7 @@ type HoroscopeReaderState = {
     PremiumPreviewBlock,
     SocialShare,
     NewsletterCtaComponent,
+    AdSlotComponent,
   ],
   viewProviders: [provideIcons({ heroSparkles, heroCalendar, heroArrowLeft })],
   templateUrl: './horoscope-reader.html',
