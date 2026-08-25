@@ -141,8 +141,10 @@ jobs:
       - name: Production env guard
         run: PRODUCTION_ENV_FILE=.env.production sh ops/production-env-check.sh
 
+      # Root project only: apps/api keeps its own critical-level gate whose
+      # accepted upstream findings are documented in docs/ops (Strapi chain).
       - name: Root production dependency audit
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --omit=dev --audit-level=high --workspaces=false
 
       # apps/api gate is `critical` (root stays `high`). Remaining HIGH are accepted:
       # Strapi-5 upstream advisories with no 5.x fix (npm only offers a breaking v4
