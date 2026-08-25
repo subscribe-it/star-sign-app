@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   PLATFORM_ID,
+  computed,
   effect,
   inject,
   input,
@@ -78,7 +79,10 @@ export class AdSlotComponent {
   private readonly runtimeConfig = inject(RuntimeConfigService);
 
   public readonly clientId = this.runtimeConfig.adsenseClientId;
-  public readonly active = this.consent.marketingAllowed;
+
+  public readonly active = computed(
+    () => this.clientId().length > 0 && this.consent.marketingAllowed(),
+  );
 
   constructor() {
     effect(() => {
