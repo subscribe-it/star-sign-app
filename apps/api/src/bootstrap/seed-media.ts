@@ -1582,24 +1582,31 @@ export const ensureSeedMedia = async (
     missingFiles: [],
   };
 
+  let firstUploadError: string | null = null;
+
   for (const asset of assets) {
-    const ensured = await ensureUploadFile(strapi, asset, uploadsDir);
+    try {
+      const ensured = await ensureUploadFile(strapi, asset, uploadsDir);
 
-    if (!ensured) {
-      result.missingFiles.push(asset.fileName);
-      continue;
-    }
+      if (!ensured) {
+        result.missingFiles.push(asset.fileName);
+        continue;
+      }
 
-    if (ensured.uploaded) {
-      result.uploaded += 1;
-    }
+      if (ensured.uploaded) {
+        result.uploaded += 1;
+      }
 
-    if (await ensureTarotCardImage(strapi, asset, ensured.file)) {
-      result.linked += 1;
-    }
+      if (await ensureTarotCardImage(strapi, asset, ensured.file)) {
+        result.linked += 1;
+      }
 
-    if (await ensureAicoMediaAsset(strapi, asset, ensured.file)) {
-      result.mediaAssets += 1;
+      if (await ensureAicoMediaAsset(strapi, asset, ensured.file)) {
+        result.mediaAssets += 1;
+      }
+    } catch (error) {
+      firstUploadError ??=
+        error instanceof Error ? `${asset.fileName}: ${error.message}` : String(error);
     }
   }
 
@@ -1624,6 +1631,7 @@ export const ensureSeedMedia = async (
     r2Enabled: isR2UploadEnabled(),
     uploaded: 0,
     firstZodiacError: null as string | null,
+    firstUploadError,
   };
 
   for (const asset of ZODIAC_PROFILE_SEED_ASSETS) {

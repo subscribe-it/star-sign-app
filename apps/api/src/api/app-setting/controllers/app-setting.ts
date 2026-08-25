@@ -26,6 +26,22 @@ export default {
       const diag = await strapi
         .store({ type: 'plugin', name: 'seed-media-diag', key: 'state' })
         .get();
+      const bootstrapError = await strapi
+        .store({ type: 'plugin', name: 'seed-media-diag', key: 'bootstrap-error' })
+        .get();
+      (ctx.body as Record<string, unknown>)['seedMediaDiag'] = diag;
+      (
+        ctx.body as Record<string, unknown>
+      )['bootstrapSeedMediaError'] = bootstrapError;
+    } catch {
+      /* brak diag nie może psuć endpointu */
+    }
+
+    // Diagnostyka produkcyjna bootstrapu mediów (tymczasowe, patrz seed-media).
+    try {
+      const diag = await strapi
+        .store({ type: 'plugin', name: 'seed-media-diag', key: 'state' })
+        .get();
       (ctx.body as Record<string, unknown>)['seedMediaDiag'] = diag;
     } catch {
       /* brak diag nie może psuć endpointu */

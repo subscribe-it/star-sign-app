@@ -964,9 +964,32 @@ export const ensureBootstrapContent = async (
   const categories = await seedCategories(strapi);
   await seedArticles(strapi, categories);
   const cards = await seedTarotCards(strapi);
-  await ensureSeedMedia(strapi, {
-    articleSlugs: ARTICLES.map((article) => article.slug),
-  });
+  let seedMediaError: unknown = null;
+  try {
+    await ensureSeedMedia(strapi, {
+      articleSlugs: ARTICLES.map((article) => article.slug),
+    });
+  } catch (error) {
+    seedMediaError = error;
+    strapi.log.error('ensureSeedMedia nie powiódł się:', error);
+  }
+  try {
+    await strapi
+      .store({ type: 'plugin', name: 'seed-media-diag', key: 'bootstrap-error' })
+      .set({
+        value: {
+          message:
+            seedMediaError instanceof Error
+              ? seedMediaError.message
+              : seedMediaError
+                ? String(seedMediaError)
+                : null,
+          at: new Date().toISOString(),
+        },
+      });
+  } catch {
+    /* diag-only */
+  }
   await seedDailyTarotDraw(strapi, cards);
   await seedNumerology(strapi);
   await seedHoroscopes(strapi, signs);
