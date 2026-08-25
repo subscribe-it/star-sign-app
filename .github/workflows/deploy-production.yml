@@ -54,29 +54,74 @@ jobs:
       #     (auto via toJSON, so no per-key enumeration; deploy-control keys skipped).
       #   - else STAR_SIGN_PRODUCTION_ENV set -> legacy bundled mode (whole .env in one secret).
       # See docs/ops/github-secrets-and-variables.md for the full key list + setup.
+      # Composes .env.production from INDIVIDUAL GitHub secrets + variables.
+      # NOTE: do NOT reference ${{ toJSON(secrets) }} here — dumping the whole
+      # secrets context makes GitHub hold every run of this workflow for manual
+      # approval (observed as action_required with zero jobs since 2026-08).
+      # Secrets are therefore passed explicitly via the SECRET__* prefix and
+      # the script strips the prefix; empty ones are skipped, exactly like the
+      # previous toJSON(secrets)-based enumeration did.
       - name: Write production env file
         env:
           SENTINEL_APP_KEYS: ${{ secrets.APP_KEYS }}
           BUNDLED_ENV: ${{ secrets.STAR_SIGN_PRODUCTION_ENV }}
-          SECRETS_JSON: ${{ toJSON(secrets) }}
           VARS_JSON: ${{ toJSON(vars) }}
+          SECRET__API_TOKEN_SALT: ${{ secrets.API_TOKEN_SALT }}
+          SECRET__ADMIN_JWT_SECRET: ${{ secrets.ADMIN_JWT_SECRET }}
+          SECRET__TRANSFER_TOKEN_SALT: ${{ secrets.TRANSFER_TOKEN_SALT }}
+          SECRET__JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SECRET__ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          SECRET__DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          SECRET__POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          SECRET__REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          SECRET__REDIS_URL: ${{ secrets.REDIS_URL }}
+          SECRET__RATE_LIMIT_REDIS_URL: ${{ secrets.RATE_LIMIT_REDIS_URL }}
+          SECRET__HTTP_CACHE_REDIS_URL: ${{ secrets.HTTP_CACHE_REDIS_URL }}
+          SECRET__R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          SECRET__R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          SECRET__BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          SECRET__BREVO_SMTP_USER: ${{ secrets.BREVO_SMTP_USER }}
+          SECRET__BREVO_SMTP_PASSWORD: ${{ secrets.BREVO_SMTP_PASSWORD }}
+          SECRET__BREVO_WEBHOOK_SECRET: ${{ secrets.BREVO_WEBHOOK_SECRET }}
+          SECRET__TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          SECRET__STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          SECRET__STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          SECRET__AICO_OPENROUTER_TOKEN: ${{ secrets.AICO_OPENROUTER_TOKEN }}
+          SECRET__AICO_AUDIT_IP_HASH_SALT: ${{ secrets.AICO_AUDIT_IP_HASH_SALT }}
+          SECRET__AICO_IMAGE_GEN_TOKEN: ${{ secrets.AICO_IMAGE_GEN_TOKEN }}
+          SECRET__AICO_VIDEO_GEN_TOKEN: ${{ secrets.AICO_VIDEO_GEN_TOKEN }}
+          SECRET__AICO_FACEBOOK_ACCESS_TOKEN: ${{ secrets.AICO_FACEBOOK_ACCESS_TOKEN }}
+          SECRET__AICO_INSTAGRAM_ACCESS_TOKEN: ${{ secrets.AICO_INSTAGRAM_ACCESS_TOKEN }}
+          SECRET__AICO_X_API_KEY: ${{ secrets.AICO_X_API_KEY }}
+          SECRET__AICO_X_API_SECRET: ${{ secrets.AICO_X_API_SECRET }}
+          SECRET__AICO_X_ACCESS_TOKEN: ${{ secrets.AICO_X_ACCESS_TOKEN }}
+          SECRET__AICO_X_ACCESS_TOKEN_SECRET: ${{ secrets.AICO_X_ACCESS_TOKEN_SECRET }}
+          SECRET__AICO_TIKTOK_ACCESS_TOKEN: ${{ secrets.AICO_TIKTOK_ACCESS_TOKEN }}
+          SECRET__AICO_YOUTUBE_CLIENT_SECRET: ${{ secrets.AICO_YOUTUBE_CLIENT_SECRET }}
+          SECRET__AICO_YOUTUBE_REFRESH_TOKEN: ${{ secrets.AICO_YOUTUBE_REFRESH_TOKEN }}
+          SECRET__AICO_META_ADS_ACCESS_TOKEN: ${{ secrets.AICO_META_ADS_ACCESS_TOKEN }}
+          SECRET__AICO_GOOGLE_ADS_DEVELOPER_TOKEN: ${{ secrets.AICO_GOOGLE_ADS_DEVELOPER_TOKEN }}
+          SECRET__AICO_GOOGLE_ADS_CLIENT_SECRET: ${{ secrets.AICO_GOOGLE_ADS_CLIENT_SECRET }}
+          SECRET__AICO_GOOGLE_ADS_REFRESH_TOKEN: ${{ secrets.AICO_GOOGLE_ADS_REFRESH_TOKEN }}
+          SECRET__SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SECRET__FRONTEND_SENTRY_DSN: ${{ secrets.FRONTEND_SENTRY_DSN }}
+          SECRET__BUGSINK_SECRET_KEY: ${{ secrets.BUGSINK_SECRET_KEY }}
+          SECRET__BUGSINK_POSTGRES_PASSWORD: ${{ secrets.BUGSINK_POSTGRES_PASSWORD }}
         run: |
           umask 077
           if [ -n "${SENTINEL_APP_KEYS:-}" ]; then
             node -e '
               const fs = require("fs");
-              // Deploy-control / non-app keys that must NOT leak into the app .env.
-              const skip = new Set([
-                "github_token", "STAR_SIGN_PRODUCTION_ENV", "PORTAINER_WEBHOOK_URL",
-                "API_BASE_URL", "FRONTEND_BASE_URL", "DEPLOY_WAIT_SECONDS"
-              ]);
               const lines = [];
-              for (const raw of [process.env.VARS_JSON, process.env.SECRETS_JSON]) {
-                const obj = JSON.parse(raw || "{}");
-                for (const [k, v] of Object.entries(obj)) {
-                  if (skip.has(k) || v === null || v === undefined || v === "") continue;
-                  lines.push(k + "=" + String(v));
-                }
+              for (const [k, v] of Object.entries(JSON.parse(process.env.VARS_JSON || "{}"))) {
+                if (v === null || v === undefined || v === "") continue;
+                lines.push(k + "=" + String(v));
+              }
+              for (const [k, v] of Object.entries(process.env)) {
+                if (!k.startsWith("SECRET__")) continue;
+                const key = k.slice("SECRET__".length);
+                if (v === null || v === undefined || v === "") continue;
+                lines.push(key + "=" + String(v));
               }
               fs.writeFileSync(".env.production", lines.join("\n") + "\n", { mode: 0o600 });
             '
