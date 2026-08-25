@@ -1,0 +1,46 @@
+name: Probe J
+'on':
+  push:
+    branches:
+    - main
+jobs:
+  release-gate:
+    name: Main release gate
+    runs-on: ubuntu-latest
+    env:
+      STAR_SIGN_PRODUCTION_ENV: ${{ secrets.STAR_SIGN_PRODUCTION_ENV }}
+      FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+    steps:
+    - name: Typecheck shared types
+      run: npm exec -- nx run @org/types:typecheck --outputStyle=static
+    - name: Typecheck api
+      run: npm exec -- nx run api:typecheck --outputStyle=static
+    - name: Typecheck cart
+      run: npm exec -- nx run cart:typecheck --outputStyle=static
+    - name: Typecheck frontend
+      run: npm exec -- nx run frontend:typecheck --outputStyle=static
+    - name: Typecheck frontend e2e
+      run: npm exec -- nx run frontend-e2e:typecheck --outputStyle=static
+    - name: Test frontend with coverage
+      run: npm exec -- nx run frontend:test --configuration=coverage --outputStyle=static
+    - name: Test api
+      run: npm exec -- nx run api:test --outputStyle=static
+    - name: Test cart
+      run: npm exec -- nx run cart:test --outputStyle=static
+    - name: Test AICO unit
+      run: npm exec -- nx run ai-content-orchestrator:test:unit --outputStyle=static
+    - name: Typecheck AICO backend
+      run: npm exec -- nx run ai-content-orchestrator:test:ts:back --outputStyle=static
+    - name: Typecheck AICO admin
+      run: npm exec -- nx run ai-content-orchestrator:test:ts:front --outputStyle=static
+    - name: Build AICO plugin
+      run: npm exec -- nx run ai-content-orchestrator:build --outputStyle=static
+    - name: Verify AICO plugin package
+      run: npm exec -- nx run ai-content-orchestrator:verify --outputStyle=static
+    - name: Build api
+      run: npm exec -- nx run api:build --outputStyle=static
+    - name: Build frontend production
+      run: npm exec -- nx run frontend:build:production --outputStyle=static
+    - name: Diff whitespace check
+      run: git diff --check

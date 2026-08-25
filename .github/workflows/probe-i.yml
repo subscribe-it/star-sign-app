@@ -1,0 +1,76 @@
+name: Probe I
+'on':
+  push:
+    branches:
+    - main
+jobs:
+  release-gate:
+    name: Main release gate
+    runs-on: ubuntu-latest
+    env:
+      STAR_SIGN_PRODUCTION_ENV: ${{ secrets.STAR_SIGN_PRODUCTION_ENV }}
+      FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        filter: tree:0
+        fetch-depth: 0
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+        cache-dependency-path: 'package-lock.json
+
+          apps/api/package-lock.json
+
+          '
+    - name: Install root dependencies
+      run: npm ci
+    - name: Install API dependencies
+      run: npm --prefix apps/api ci
+    - name: Write production env file
+      env:
+        SENTINEL_APP_KEYS: ${{ secrets.APP_KEYS }}
+        BUNDLED_ENV: ${{ secrets.STAR_SIGN_PRODUCTION_ENV }}
+        SECRETS_JSON: ${{ toJSON(secrets) }}
+        VARS_JSON: ${{ toJSON(vars) }}
+      run: "umask 077\nif [ -n \"${SENTINEL_APP_KEYS:-}\" ]; then\n  node -e '\n \
+        \   const fs = require(\"fs\");\n    // Deploy-control / non-app keys that\
+        \ must NOT leak into the app .env.\n    const skip = new Set([\n      \"github_token\"\
+        , \"STAR_SIGN_PRODUCTION_ENV\", \"PORTAINER_WEBHOOK_URL\",\n      \"API_BASE_URL\"\
+        , \"FRONTEND_BASE_URL\", \"DEPLOY_WAIT_SECONDS\"\n    ]);\n    const lines\
+        \ = [];\n    for (const raw of [process.env.VARS_JSON, process.env.SECRETS_JSON])\
+        \ {\n      const obj = JSON.parse(raw || \"{}\");\n      for (const [k, v]\
+        \ of Object.entries(obj)) {\n        if (skip.has(k) || v === null || v ===\
+        \ undefined || v === \"\") continue;\n        lines.push(k + \"=\" + String(v));\n\
+        \      }\n    }\n    fs.writeFileSync(\".env.production\", lines.join(\"\\\
+        n\") + \"\\n\", { mode: 0o600 });\n  '\n  echo \"Composed .env.production\
+        \ from $(grep -c \"=\" .env.production) individual secrets/variables.\"\n\
+        elif [ -n \"${BUNDLED_ENV:-}\" ]; then\n  printf '%s\\n' \"$BUNDLED_ENV\"\
+        \ > .env.production\n  echo \"Composed .env.production from bundled STAR_SIGN_PRODUCTION_ENV\
+        \ (legacy mode).\"\nelse\n  echo \"No production env source: set individual\
+        \ secrets (APP_KEYS, ...) or STAR_SIGN_PRODUCTION_ENV.\" >&2\n  exit 2\nfi\n"
+    - name: Nx sync check
+      run: npm exec -- nx sync:check
+    - name: Production env guard
+      run: PRODUCTION_ENV_FILE=.env.production sh ops/production-env-check.sh
+    - name: Root production dependency audit
+      run: npm audit --omit=dev --audit-level=high
+    - name: API production dependency audit
+      run: npm --prefix apps/api audit --omit=dev --audit-level=critical
+    - name: Portainer stack config validation
+      run: docker compose -f ops/portainer/star-sign-production-stack.yml --env-file
+        .env.production config --quiet
+    - name: Lint frontend
+      run: npm exec -- nx run frontend:lint --outputStyle=static
+    - name: Lint api
+      run: npm exec -- nx run api:lint --outputStyle=static
+    - name: Lint cart
+      run: npm exec -- nx run cart:lint --outputStyle=static
+    - name: Lint shared types
+      run: npm exec -- nx run @org/types:lint --outputStyle=static
+    - name: Lint frontend e2e
+      run: npm exec -- nx run frontend-e2e:lint --outputStyle=static
+    - name: Lint AICO plugin
+      run: npm exec -- nx run ai-content-orchestrator:lint --outputStyle=static
