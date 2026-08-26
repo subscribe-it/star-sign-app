@@ -39,3 +39,21 @@ Kolejne dźwignie: CTA premium w artykułach (round 3 już dodaje), newsletter�
 ## 5. Co jeszcze blokuje pełną autonomię na prodzie (stan 2026-08-25)
 - Brak tokenów providerów w env prod (OpenRouter/image/social) — do uzupełnienia przez właściciela.
 - Tryb `guarded` domyślny — świadomie; przełączenie decyzją właściciela.
+
+## Generowanie treści wrażliwych prawnie — reguły Lex Machina
+
+Przy tworzeniu lub redagowaniu treści o charakterze prawnym (regulaminy,
+polityki, klauzule umowne) agent AICO stosuje metodologię repozytorium
+`michaleiatrak-star/Lex-Machina`:
+
+1. **HARD GATE cytowań** — zakaz przywoływania numerów artykułów z pamięci.
+   Każdy przepis weryfikowany online w ISAP / API SEJM-ELI; bez potwierdzenia
+   zostaje sam tytuł aktu („brak numeru jest lepszy niż błędny").
+2. **Gradient weryfikacji** — treści konsumenckie i regulaminowe wymagają
+   pełnej weryfikacji; wzmianki ogólne (np. „zgodnie z RODO") wystarczą dla
+   kontekstu edytorialnego.
+3. **Status źródeł** — sprawdzaj aktualność instytucji i platform przed
+   kierowaniem do nich użytkowników (przykład: ODR UE wyłączona od
+   20.07.2025 na mocy rozporządzenia (UE) 2024/3228).
+4. **Przegląd człowieka** — publikacja zmian prawnych wymaga akceptacji
+   właściciela; agent przygotowuje propozycję diffu, nie deployuje sam.
