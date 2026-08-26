@@ -103,6 +103,11 @@ const config = ({
             endpoint: env('R2_S3_ENDPOINT'),
             region: env('R2_REGION', 'auto'),
             forcePathStyle: env.bool('R2_FORCE_PATH_STYLE', true),
+            // Cloudflare R2 odrzuca PUT-y podpisane z domyślnymi nagłówkami
+            // sum kontrolnych (CRC32) dodawanymi przez @aws-sdk >= 3.739
+            // (SignatureDoesNotMatch) — wymuszamy tryb zgodny z R2.
+            requestChecksumCalculation: 'WHEN_REQUIRED',
+            responseChecksumValidation: 'WHEN_REQUIRED',
             params: {
               Bucket: env('R2_BUCKET'),
               ACL: undefined,
