@@ -875,12 +875,18 @@ app.use((req, res, next) => {
   angularApp
     .handle(req)
     .then((response) => {
+      // Diagnostyka produkcyjna: dlaczego silnik rezygnuje z SSR.
+      res.setHeader('x-ssr-handled', response ? '1' : '0');
       if (e2eApiLogEnabled && req.path === '/') {
         console.log(`[ssr] completed / (${response ? 'response' : 'next'})`);
       }
       return response ? writeResponseToNodeResponse(response, res) : next();
     })
-    .catch(next);
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      res.setHeader('x-ssr-error', encodeURIComponent(message.slice(0, 300)));
+      next(error);
+    });
 });
 
 /**
