@@ -93,7 +93,17 @@ const ssrAllowedHosts = [
   );
 const angularApp = new AngularNodeAppEngine({
   allowedHosts: [...new Set(ssrAllowedHosts)],
-  trustProxyHeaders: true,
+  // Jawna lista zamiast `true`: dowolny nagłówek x-forwarded-* spoza
+  // zestawu (np. x-forwarded-server dodawany przez proxy przed kontenerem)
+  // wywołuje deoptToCSR i strona serwuje pustą skorupę CSR.
+  trustProxyHeaders: [
+    'x-forwarded-host',
+    'x-forwarded-proto',
+    'x-forwarded-port',
+    'x-forwarded-prefix',
+    'x-forwarded-for',
+    'x-forwarded-server',
+  ],
 });
 
 type StrapiCollectionResponse<T> = {
