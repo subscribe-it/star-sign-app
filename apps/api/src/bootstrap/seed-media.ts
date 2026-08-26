@@ -1671,8 +1671,15 @@ export const ensureSeedMedia = async (
           at: new Date().toISOString(),
         },
       });
-  } catch {
-    /* diag never breaks bootstrap */
+    strapi.log.info(
+      `[seed-media-diag] ${JSON.stringify(seedMediaDiag)}`,
+    );
+  } catch (storeError) {
+    strapi.log.warn(
+      `[seed-media-diag] zapis niemożliwy: ${
+        storeError instanceof Error ? storeError.message : String(storeError)
+      }`,
+    );
   }
 
   if (options.linkMappedContent !== false) {

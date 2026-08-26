@@ -713,6 +713,8 @@ const adsenseClientId = process.env['ADSENSE_CLIENT_ID'] || '';
 // Diagnostyka SSR (tymczasowa): porównanie Hosta żądania z allowlistą.
 app.use((req, res, next) => {
   res.setHeader('x-ssr-host', String(req.headers.host ?? ''));
+  res.setHeader('x-ssr-fwd', String(req.headers['x-forwarded-host'] ?? ''));
+  res.setHeader('x-ssr-proto', String(req.headers['x-forwarded-proto'] ?? ''));
   res.setHeader('x-ssr-allowed', ssrAllowedHosts.join('|'));
   next();
 });
