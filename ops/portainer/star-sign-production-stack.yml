@@ -195,6 +195,10 @@ services:
       AICO_STRATEGY_MIN_TOPIC_BACKLOG: ${AICO_STRATEGY_MIN_TOPIC_BACKLOG:-3}
       AICO_STRATEGY_MAX_PLAN_ITEMS_PER_TICK: ${AICO_STRATEGY_MAX_PLAN_ITEMS_PER_TICK:-2}
       AICO_SOCIAL_CHANNELS: ${AICO_SOCIAL_CHANNELS:-facebook,instagram,twitter}
+      # Auto-grant uprawnień AICO dla roli Editor przy każdym starcie API,
+      # żeby panel działał od razu po wklejeniu tokenów (bez ręcznego
+      # klikania RBAC w admin UI).
+      AICO_SYNC_EDITOR_ROLE_PERMISSIONS: ${AICO_SYNC_EDITOR_ROLE_PERMISSIONS:-true}
       AICO_FACEBOOK_PAGE_ID: ${AICO_FACEBOOK_PAGE_ID:-}
       AICO_FACEBOOK_ACCESS_TOKEN: ${AICO_FACEBOOK_ACCESS_TOKEN:-}
       AICO_INSTAGRAM_USER_ID: ${AICO_INSTAGRAM_USER_ID:-}

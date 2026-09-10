@@ -701,9 +701,20 @@ const seedArticles = async (
   strapi: Core.Strapi,
   categoriesByName: Map<string, SeededEntity>,
 ): Promise<void> => {
-  const publishedAt = new Date().toISOString();
+  // Autonomiczna strona nie może mieć nadpisywanych dat publikacji przy
+  // każdym restarcie: upsert tylko gdy rekordu brak (seed-when-missing),
+  // żeby treści AICO zachowały chronologię i sygnatury SEO.
+  const articleQuery = strapi.db.query('api::article.article');
+  const existingSlugs = new Set(
+    (await articleQuery.findMany({ where: { slug: { $in: ARTICLES.map((a) => a.slug) } } }))
+      .map((row: { slug: string }) => row.slug),
+  );
 
   for (const article of ARTICLES) {
+    if (existingSlugs.has(article.slug)) {
+      continue;
+    }
+
     const category = categoriesByName.get(article.categoryName);
 
     await upsertOne(
@@ -722,7 +733,7 @@ const seedArticles = async (
         read_time_minutes: article.read_time_minutes,
         author: article.author,
         category: category?.id || null,
-        publishedAt,
+        publishedAt: new Date().toISOString(),
       },
     );
   }
