@@ -300,6 +300,8 @@ jobs:
     env:
       PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_USER: ${{ secrets.PORTAINER_USER }}
+      PORTAINER_PASSWORD: ${{ secrets.PORTAINER_PASSWORD }}
       PORTAINER_STACK_NAME: star-sign
       IMAGE_TAG: ${{ github.sha }}
     steps:
@@ -313,18 +315,53 @@ jobs:
           fi
           curl -fsS -X POST "$PORTAINER_WEBHOOK_URL"
 
+      # Portainer CE nie robi re-pull obrazu z webhooka. Zamiast tego
+      # pipeline od razu po webhooku zapisuje stack przez API z flaga
+      # pullImage:true i tagiem SHA — Swarm musi pobrac nowy obraz z GHCR.
+      # Autoryzacja: PORTAINER_API_KEY (X-API-Key) LUB login/haslo
+      # (POST /auth -> JWT) przez sekrety PORTAINER_USER/PORTAINER_PASSWORD.
+      - name: Resolve Portainer auth token
+        id: auth
+        run: |
+          set -euo pipefail
+          if [ -n "${PORTAINER_API_KEY:-}" ]; then
+            echo "mode=apikey" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "${PORTAINER_USER:-}" ] && [ -n "${PORTAINER_PASSWORD:-}" ]; then
+            BASE="$(printf '%s' "$PORTAINER_WEBHOOK_URL" | sed -E 's#(https?://[^/]+).*#\1#')"
+            JWT="$(curl -fsS -X POST "$BASE/api/auth" \
+              -H 'Content-Type: application/json' \
+              -d "{\"Username\":\"$PORTAINER_USER\",\"Password\":\"$PORTAINER_PASSWORD\"}" \
+              | jq -r .jwt)"
+            if [ -n "$JWT" ] && [ "$JWT" != "null" ]; then
+              echo "jwt=$JWT" >> "$GITHUB_OUTPUT"
+              echo "mode=jwt" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "mode=none" >> "$GITHUB_OUTPUT"
+          echo "No PORTAINER_API_KEY nor PORTAINER_USER/PASSWORD - skipping force re-pull (webhook-only)." >&2
+
       # Portainer CE: webhook robi "force update" BEZ pull obrazu, przez co
       # Swarm tygodniami trzymal zabytkowy :main (issue portainer/portainer#8373).
       # PUT /stacks/{id} z pullImage:true to jedyny CE-owy sposob wymuszenia
       # pobrania fresh obrazu. Wymaga sekretu PORTAINER_API_KEY
       # (Portainer -> Settings -> API keys, rola standard admin).
       - name: Force Portainer image re-pull via API (CE-compatible)
-        if: ${{ env.PORTAINER_API_KEY != '' }}
+        if: ${{ steps.auth.outputs.mode != 'none' }}
+        env:
+          AUTH_MODE: ${{ steps.auth.outputs.mode }}
+          AUTH_JWT: ${{ steps.auth.outputs.jwt }}
         run: |
           set -euo pipefail
           BASE="$(printf '%s' "$PORTAINER_WEBHOOK_URL" | sed -E 's#(https?://[^/]+).*#\1#')"
           API="$BASE/api"
-          AUTH=(-H "X-API-Key: $PORTAINER_API_KEY" -H 'Content-Type: application/json')
+          if [ "$AUTH_MODE" = "jwt" ]; then
+            AUTH=(-H "Authorization: Bearer $AUTH_JWT" -H 'Content-Type: application/json')
+          else
+            AUTH=(-H "X-API-Key: $PORTAINER_API_KEY" -H 'Content-Type: application/json')
+          fi
 
           # 1. Znajdz stack i endpoint po nazwie.
           STACKS="$(curl -fsS "${AUTH[@]}" "$API/stacks")"
