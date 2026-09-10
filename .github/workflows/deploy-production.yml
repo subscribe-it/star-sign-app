@@ -299,7 +299,12 @@ jobs:
     needs: build-and-push
     env:
       PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_STACK_NAME: star-sign
+      IMAGE_TAG: ${{ github.sha }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Trigger Portainer stack webhook
         run: |
           if [ -z "${PORTAINER_WEBHOOK_URL:-}" ]; then
@@ -307,6 +312,49 @@ jobs:
             exit 2
           fi
           curl -fsS -X POST "$PORTAINER_WEBHOOK_URL"
+
+      # Portainer CE: webhook robi "force update" BEZ pull obrazu, przez co
+      # Swarm tygodniami trzymal zabytkowy :main (issue portainer/portainer#8373).
+      # PUT /stacks/{id} z pullImage:true to jedyny CE-owy sposob wymuszenia
+      # pobrania fresh obrazu. Wymaga sekretu PORTAINER_API_KEY
+      # (Portainer -> Settings -> API keys, rola standard admin).
+      - name: Force Portainer image re-pull via API (CE-compatible)
+        if: ${{ env.PORTAINER_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+          BASE="$(printf '%s' "$PORTAINER_WEBHOOK_URL" | sed -E 's#(https?://[^/]+).*#\1#')"
+          API="$BASE/api"
+          AUTH=(-H "X-API-Key: $PORTAINER_API_KEY" -H 'Content-Type: application/json')
+
+          # 1. Znajdz stack i endpoint po nazwie.
+          STACKS="$(curl -fsS "${AUTH[@]}" "$API/stacks")"
+          STACK_JSON="$(printf '%s' "$STACKS" | jq --arg name "$PORTAINER_STACK_NAME" '
+            [.[] | select(.Name == $name)][0] // empty')"
+          if [ -z "$STACK_JSON" ]; then
+            echo "Stack '$PORTAINER_STACK_NAME' not found in Portainer; skipping re-pull (webhook-only deploy)." >&2
+            exit 0
+          fi
+          STACK_ID="$(printf '%s' "$STACK_JSON" | jq -r '.Id')"
+          ENDPOINT_ID="$(printf '%s' "$STACK_JSON" | jq -r '.EndpointId')"
+
+          # 2. Pobierz aktualny env stacka (PUT nadpisuje caly env wiec odsylamy
+          #    pobrany, podmieniajac wylacznie STAR_SIGN_IMAGE_TAG na SHA builda).
+          DETAIL="$(curl -fsS "${AUTH[@]}" "$API/stacks/$STACK_ID")"
+          ENV_JSON="$(printf '%s' "$DETAIL" | jq --arg tag "$IMAGE_TAG" '
+            [(.Env // [])[] |
+              (if .name == "STAR_SIGN_IMAGE_TAG" then {name, value: $tag} else . end)]
+            + (if ([(.Env // [])[] | .name] | index("STAR_SIGN_IMAGE_TAG")) == null
+               then [{name: "STAR_SIGN_IMAGE_TAG", value: $tag}] else [] end)')"
+
+          # 3. PUT z aktualnym plikiem stacka z repo + pullImage:true.
+          STACK_FILE_CONTENT="$(jq -Rs . < ops/portainer/star-sign-production-stack.yml)"
+          BODY="{\"stackFileContent\": $STACK_FILE_CONTENT, \"env\": $ENV_JSON, \"pullImage\": true, \"prune\": false}"
+
+          HTTP_CODE="$(curl -fsS -o /tmp/stack-update.json -w '%{http_code}' -X PUT \
+            "${AUTH[@]}" --data "$BODY" \
+            "$API/stacks/$STACK_ID?endpointId=$ENDPOINT_ID")"
+          echo "Portainer stack update (pullImage) HTTP $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then cat /tmp/stack-update.json >&2; exit 1; fi
 
   post-deploy:
     name: Post-deploy smoke and e2e
