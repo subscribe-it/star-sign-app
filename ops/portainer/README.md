@@ -230,6 +230,39 @@ image" przy webhooku jest dostępna dla stacków Repository (dokładnie tak
 działa ventiplan-prod na tym samym VPS) i rozwiązuje problem bez żadnego
 API Portainera w pipeline.
 
+### Pierwszy deploy stacka w Portainerze (jednorazowa konwersja)
+
+1. **Zbierz wartości ze starego stacka**: Portainer → stary stack →
+   „Editor" — skopiuj całą listę env (szczególnie: `POSTGRES_*`,
+   `JWT_SECRET`, `ADMIN_JWT_SECRET`, `API_TOKEN_SALT`,
+   `TRANSFER_TOKEN_SALT`, `APP_KEYS`, `ENCRYPTION_KEY`,
+   `AICO_AUDIT_IP_HASH_SALT`, `REDIS_PASSWORD`, `STRIPE_*`, `BREVO_*`,
+   R2/S3 vars). Alternatywnie użyj
+   `ops/portainer/portainer.env.example` jako szablonu (wzorzec VentiPlan).
+2. **Stacks → Add stack** → name `star_sign_production`
+3. Build method: **Repository**, Repo: `subscribe-it/star-sign-app`,
+   Branch `main`, Compose path: `ops/portainer/star-sign-production-stack.yml`
+4. Environment variables → **Advanced mode** → wklej uzupełnioną treść
+   z pkt 1 (lub `portainer.env.example`).
+5. **Zaznacz „Webhook"** — skopiuj wygenerowany URL (podmień sekret
+   `PORTAINER_WEBHOOK_URL` w GitHub Actions secrets na nowy).
+6. Authentication: repo prywatne → Portainer → Registries → GitHub →
+   PAT z `read:packages` (jak w VentiPlan §6 pkt 4).
+7. **Deploy the stack**.
+
+Weryfikacja po pierwszym deployu:
+
+```bash
+curl -fsS https://api.star-sign.pl/health
+curl -fsS https://star-sign.pl/ | head -3
+curl -fsS "https://star-sign.pl/api/app-settings/public" | grep -o seedMediaDiag   # OBECNE = świeży obraz
+curl -fsS "https://star-sign.pl/api/zodiac-signs?pagination%5BpageSize%5D=15&populate=image" | grep -o 'formats' | wc -l   # 12 = zdjęcia wgrane
+```
+
+Następny push na `main` (albo ręczne uruchomienie deploy workflow) ma już
+w pełni automatycznie: build → GHCR `:prod` → **webhook → re-pull →
+nowy kontener**. Rollback: Actions → „Production Rollback" → obraz + SHA.
+
 W obu trybach ustaw environment variables w Portainerze. Nie commituj produkcyjnego `.env` do repo.
 
 ## Zmienne Portainera
