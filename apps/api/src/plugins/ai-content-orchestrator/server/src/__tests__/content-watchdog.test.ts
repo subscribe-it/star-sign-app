@@ -61,21 +61,19 @@ const warsawUtcTimestamp = (hour: number): number =>
 const stubWarsawHour = (hour: number) => {
   const timestamp = warsawUtcTimestamp(hour);
   const real = Date;
-  vi.stubGlobal(
-    'Date',
-    class extends real {
-      constructor(...args: ConstructorParameters<typeof real>) {
-        if (args.length > 0) {
-          super(...(args as never[]));
-          return;
-        }
+  class MockDate extends real {
+    constructor(...args: [] | [string | number | Date] | [number, number, number, number, number, number, number]) {
+      if (args.length === 0) {
         super(timestamp);
+        return;
       }
-      static now() {
-        return timestamp;
-      }
-    } as unknown as DateConstructor,
-  );
+      super(args[0] as string | number | Date);
+    }
+    static now(): number {
+      return timestamp;
+    }
+  }
+  vi.stubGlobal('Date', MockDate as unknown as DateConstructor);
 };
 
 describe('contentWatchdog', () => {
