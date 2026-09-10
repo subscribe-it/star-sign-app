@@ -32,33 +32,34 @@
     "test:ts:back": "tsc -p server/tsconfig.json"
   },
   "dependencies": {
-    "cron-parser": "^4.2.0"
+    "cron-parser": "^4.2.0",
+    "twitter-api-v2": "^1.29.1"
   },
   "devDependencies": {
-    "@strapi/strapi": "^5.44.0",
-    "@strapi/sdk-plugin": "^6.1.0",
-    "prettier": "^3.8.3",
     "@strapi/design-system": "^2.2.0",
     "@strapi/icons": "^2.2.0",
-    "react-intl": "^6.8.9",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.30.3",
-    "styled-components": "^6.4.1",
+    "@strapi/sdk-plugin": "^6.1.0",
+    "@strapi/strapi": "^5.44.0",
+    "@strapi/typescript-utils": "^5.44.0",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
-    "@strapi/typescript-utils": "^5.44.0",
+    "prettier": "^3.8.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-intl": "^6.8.9",
+    "react-router-dom": "^6.30.3",
+    "styled-components": "^6.4.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.8"
   },
   "peerDependencies": {
-    "@strapi/strapi": "^5.44.0",
-    "@strapi/sdk-plugin": "^6.1.0",
     "@strapi/design-system": "^2.2.0",
     "@strapi/icons": "^2.2.0",
-    "react-intl": "^6.8.9",
+    "@strapi/sdk-plugin": "^6.1.0",
+    "@strapi/strapi": "^5.44.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-intl": "^6.8.9",
     "react-router-dom": "^6.30.3",
     "styled-components": "^6.4.1"
   },

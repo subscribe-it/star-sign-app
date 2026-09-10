@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
-import { createHash, createHmac, randomBytes } from 'crypto';
+import { createHash } from 'crypto';
+import { TwitterApi } from 'twitter-api-v2';
 
 import {
   DEFAULT_RETRY_BACKOFF_SECONDS,
@@ -24,9 +25,6 @@ import {
 import { getEntityService } from '../utils/entity-service';
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
-const X_UPLOAD_MEDIA_URL = 'https://upload.twitter.com/1.1/media/upload.json';
-const X_STATUS_UPDATE_URL = 'https://api.twitter.com/1.1/statuses/update.json';
-const X_VERIFY_URL = 'https://api.twitter.com/1.1/account/verify_credentials.json';
 const DEFAULT_SOCIAL_IMAGE_URL = getSocialDefaultImageUrl();
 const MAX_TICKET_BATCH = 50;
 const DEFAULT_AUTONOMOUS_MAX_POSTS_PER_RUN = 12;
@@ -577,75 +575,6 @@ const computeBackoffSeconds = (
 
 const sleep = async (ms: number): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, ms));
-};
-
-const oauthEncode = (value: string): string =>
-  encodeURIComponent(value).replace(
-    /[!'()*]/g,
-    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`
-  );
-
-const buildOAuthHeader = (input: {
-  method: 'GET' | 'POST';
-  url: string;
-  queryParams?: Record<string, string>;
-  bodyParams?: Record<string, string>;
-  consumerKey: string;
-  consumerSecret: string;
-  token: string;
-  tokenSecret: string;
-}): string => {
-  const oauthParams: Record<string, string> = {
-    oauth_consumer_key: input.consumerKey,
-    oauth_nonce: randomBytes(16).toString('hex'),
-    oauth_signature_method: 'HMAC-SHA1',
-    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_token: input.token,
-    oauth_version: '1.0',
-  };
-
-  const allParams: Array<[string, string]> = [];
-  for (const [key, value] of Object.entries(oauthParams)) {
-    allParams.push([key, value]);
-  }
-  for (const [key, value] of Object.entries(input.queryParams ?? {})) {
-    allParams.push([key, value]);
-  }
-  for (const [key, value] of Object.entries(input.bodyParams ?? {})) {
-    allParams.push([key, value]);
-  }
-
-  const encoded = allParams
-    .map(([key, value]) => [oauthEncode(key), oauthEncode(value)] as const)
-    .sort(([aKey, aValue], [bKey, bValue]) => {
-      if (aKey === bKey) {
-        return aValue.localeCompare(bValue);
-      }
-      return aKey.localeCompare(bKey);
-    })
-    .map(([key, value]) => `${key}=${value}`)
-    .join('&');
-
-  const signatureBase = [
-    input.method.toUpperCase(),
-    oauthEncode(input.url),
-    oauthEncode(encoded),
-  ].join('&');
-
-  const signingKey = `${oauthEncode(input.consumerSecret)}&${oauthEncode(input.tokenSecret)}`;
-  const signature = createHmac('sha1', signingKey).update(signatureBase).digest('base64');
-
-  const headerParams = {
-    ...oauthParams,
-    oauth_signature: signature,
-  };
-
-  const serialized = Object.entries(headerParams)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${oauthEncode(key)}="${oauthEncode(value)}"`)
-    .join(', ');
-
-  return `OAuth ${serialized}`;
 };
 
 const normalizeTeaserPayload = (
@@ -2084,85 +2013,41 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
         `X access token secret workflow #${input.workflow.id}`
       );
 
+      // twitter-api-v2 utrzymuje kompletne podpisywanie OAuth 1.0a,
+      // chunked media upload v1.1 oraz tweet v2 - zastepuje wlasna
+      // implementacje HMAC-SHA1 (buildOAuthHeader) dla X.
+      const client = new TwitterApi({
+        appKey: consumerKey,
+        appSecret: consumerSecret,
+        accessToken: token,
+        accessSecret: tokenSecret,
+      });
+
       const imageResponse = await axios.get<ArrayBuffer>(input.mediaUrl, {
         responseType: 'arraybuffer',
         timeout: 20_000,
       });
-      const mediaBase64 = Buffer.from(imageResponse.data).toString('base64');
+      const mediaBuffer = Buffer.from(imageResponse.data);
 
-      const mediaBody = {
-        media_data: mediaBase64,
-      };
-      const mediaAuthHeader = buildOAuthHeader({
-        method: 'POST',
-        url: X_UPLOAD_MEDIA_URL,
-        bodyParams: mediaBody,
-        consumerKey,
-        consumerSecret,
-        token,
-        tokenSecret,
-      });
-
-      const mediaUploadResponse = await axios.post(
-        X_UPLOAD_MEDIA_URL,
-        new URLSearchParams(mediaBody).toString(),
-        {
-          headers: {
-            Authorization: mediaAuthHeader,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          timeout: 30_000,
-        }
-      );
-
-      const mediaId = String(
-        mediaUploadResponse.data?.media_id_string || mediaUploadResponse.data?.media_id || ''
-      );
+      const mediaId = await client.v1.uploadMedia(mediaBuffer, { mimeType: 'image/jpeg' });
       if (!mediaId) {
         throw new PublishGuardrailError('X media upload nie zwrócił media_id.', {
           retryable: true,
           blockedReason: 'x_missing_media_id',
-          providerPayload: {
-            data: mediaUploadResponse.data as Record<string, unknown>,
-          },
         });
       }
 
-      const statusBody = {
-        status: input.caption,
-        media_ids: mediaId,
-      };
-
-      const statusAuthHeader = buildOAuthHeader({
-        method: 'POST',
-        url: X_STATUS_UPDATE_URL,
-        bodyParams: statusBody,
-        consumerKey,
-        consumerSecret,
-        token,
-        tokenSecret,
+      const tweetResult = await client.v2.tweet(input.caption, {
+        media: { media_ids: [mediaId] },
       });
 
-      const statusResponse = await axios.post(
-        X_STATUS_UPDATE_URL,
-        new URLSearchParams(statusBody).toString(),
-        {
-          headers: {
-            Authorization: statusAuthHeader,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          timeout: 20_000,
-        }
-      );
-
-      const postId = String(statusResponse.data?.id_str || statusResponse.data?.id || '');
+      const postId = String(tweetResult?.data?.id ?? '');
       if (!postId) {
         throw new PublishGuardrailError('X publish nie zwrócił ID posta.', {
           retryable: true,
           blockedReason: 'x_missing_post_id',
           providerPayload: {
             mediaId,
-            data: statusResponse.data as Record<string, unknown>,
           },
         });
       }
@@ -2285,36 +2170,21 @@ const socialPublisher = ({ strapi }: { strapi: Strapi }) => {
           `X access token secret workflow #${workflow.id}`
         );
 
-        const queryParams = {
-          include_entities: 'false',
-          skip_status: 'true',
-        };
-
-        const authHeader = buildOAuthHeader({
-          method: 'GET',
-          url: X_VERIFY_URL,
-          queryParams,
-          consumerKey,
-          consumerSecret,
-          token,
-          tokenSecret,
+        const client = new TwitterApi({
+          appKey: consumerKey,
+          appSecret: consumerSecret,
+          accessToken: token,
+          accessSecret: tokenSecret,
         });
-
-        const response = await axios.get(X_VERIFY_URL, {
-          params: queryParams,
-          headers: {
-            Authorization: authHeader,
-          },
-          timeout: 15_000,
-        });
+        const me = await client.v1.verifyCredentials({ skip_status: true });
 
         return {
           platform,
           status: 'ready',
           message: 'Połączenie X OK.',
           details: {
-            userId: response.data?.id_str,
-            screenName: response.data?.screen_name,
+            userId: me?.id_str,
+            screenName: me?.screen_name,
           },
         };
       } catch (error) {
