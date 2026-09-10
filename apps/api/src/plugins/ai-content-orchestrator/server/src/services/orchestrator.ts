@@ -52,6 +52,7 @@ import {
   type PolishContentKind,
 } from '../utils/polish-content-quality';
 import { getAicoPromptTemplate, renderAicoPromptTemplate } from '../utils/aico-contract';
+import { contentWatchdog } from './content-watchdog';
 import { recordSystemAuditEvent } from '../utils/audit-trail';
 import { buildEditorialContext } from '../utils/editorial-context';
 import {
@@ -470,6 +471,10 @@ const orchestrator = ({ strapi }: { strapi: Strapi }) => {
         if (await this.isAutoPublishGloballyEnabled()) {
           await socialPublisherService().publishPending(now);
         }
+        // Watchdog treści: godzinnego throttlingu, alertuje przez logi
+        // (Sentry) o cichych upadkach pipeline'u (brak horoskopu dnia,
+        // utkniete bilety social), zanim strona pustoszeje.
+        await contentWatchdog(strapi);
       };
       const locks = runtimeLocksService();
 
