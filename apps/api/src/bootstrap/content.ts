@@ -1017,7 +1017,7 @@ export const ensureDailyCardWorkflows = async (
   await upsertAicoWorkflows(strapi, ['daily_card']);
 };
 
-const upsertAicoWorkflows = async (
+export const upsertAicoWorkflows = async (
   strapi: Core.Strapi,
   workflowTypes: Array<'horoscope' | 'article' | 'daily_card'>,
 ): Promise<void> => {
