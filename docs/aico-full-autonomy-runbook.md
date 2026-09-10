@@ -36,8 +36,34 @@ Kolejne dźwignie: CTA premium w artykułach (round 3 już dodaje), newsletter�
   (home/premium/horoscope-reader). Bez ID sloty pozostają placeholderami (zero regresji).
 - Wymaga konta wydawcy AdSense właściciela (nie da się tego „włączyć" kodem).
 
-## 5. Co jeszcze blokuje pełną autonomię na prodzie (stan 2026-08-25)
-- Brak tokenów providerów w env prod (OpenRouter/image/social) — do uzupełnienia przez właściciela.
+## 5. Co jeszcze blokuje pełną autonomię na prodzie (stan 2026-09-10 — po rundach dopracowania)
+
+### Tryb „wklej tokeny i działa" (aktualny)
+Cała pętla content→publikacja jest kompletna w kodzie (testy 376/376):
+generacja (cron 23:00 dla horoskopów dziennych, wg harmonogramów w
+`aico-content-contract.json`) → publikacja strony (00:00) → teaser social →
+tickety → autopublish FB/IG/X. Seeding credentialy social z env działa
+automatycznie przy starcie (commit 0e19223), RBAC Editor auto-grant włączony
+w stacku (`AICO_SYNC_EDITOR_ROLE_PERMISSIONS=true`, commit fe1b832), watchdog
+treści alarmuje przez Sentry przy cichych upadkach (commit 459d81f).
+
+**Właściciel wkleja TYLKO do env stacka w Portainerze:**
+1. `AICO_OPENROUTER_TOKEN` (OpenRouter) → włącza generowanie treści.
+2. `AICO_FACEBOOK_PAGE_ID` + `AICO_FACEBOOK_ACCESS_TOKEN` → publikacja FB.
+3. `AICO_INSTAGRAM_USER_ID` + `AICO_INSTAGRAM_ACCESS_TOKEN` → publikacja IG.
+4. `AICO_X_API_KEY`/`AICO_X_API_SECRET`/`AICO_X_ACCESS_TOKEN`/`AICO_X_ACCESS_TOKEN_SECRET` → publikacja X.
+5. (opcjonalnie) `AICO_IMAGE_GEN_TOKEN` → generowanie obrazów do artykułów.
+
+Bez tokenów social dany kanał po prostu nie publikuje (fail-safe).
+Weryfikacja po wklejeniu: admin → AICO → POST `/social/test-connection`
+per kanał, potem `/social/dry-run`. Pierwszy horoskop pojawi się o 00:00
+następnego dnia (generacja 23:00).
+
+### Pozostałe blokady zewnętrzne
+- Kontener API na VPS może działać na zabytkowym obrazie (Portainer CE
+  webhook nie robi re-pull) — patrz `.codex/agent-workspace/.../12-deploy-status.md`;
+  mechanizm `PORTAINER_API_KEY` (PUT /stacks/{id} z pullImage) jest gotowy
+  w workflow, wymaga klucza od właściciela.
 - Tryb `guarded` domyślny — świadomie; przełączenie decyzją właściciela.
 
 ## Generowanie treści wrażliwych prawnie — reguły Lex Machina
