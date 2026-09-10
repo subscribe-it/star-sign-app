@@ -1,4 +1,6 @@
 import type { Core } from '@strapi/strapi';
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 import {
   AICO_LEGACY_WORKFLOW_NAMES,
   buildAicoWorkflowDefinitions,
@@ -1042,12 +1044,72 @@ const upsertAicoWorkflows = async (
     categoryId: defaultCatId,
   }).filter((definition) => workflowTypes.includes(definition.workflow_type));
 
+  // Social publishing: tokeny i identyfikatory kanałów trafiają do workflow
+  // z env (Portainer) przy każdym starcie, więc nie trzeba ich wpisywać
+  // ręcznie w admin UI. Zasada: env pusty => zachowaj istniejącą wartość.
+  const readEnv = (name: string): string | null => {
+    const value = process.env[name]?.trim();
+    return value ? value : null;
+  };
+  const encryptEnvToken = (name: string): string | null => {
+    const value = readEnv(name);
+    return value ? encryptToken(strapi, value) : null;
+  };
+  const socialTokenPayload = () => ({
+    fb_page_id: readEnv('AICO_FACEBOOK_PAGE_ID'),
+    fb_access_token_encrypted: encryptEnvToken('AICO_FACEBOOK_ACCESS_TOKEN'),
+    ig_user_id: readEnv('AICO_INSTAGRAM_USER_ID'),
+    ig_access_token_encrypted: encryptEnvToken('AICO_INSTAGRAM_ACCESS_TOKEN'),
+    x_api_key: readEnv('AICO_X_API_KEY'),
+    x_api_secret_encrypted: encryptEnvToken('AICO_X_API_SECRET'),
+    x_access_token_encrypted: encryptEnvToken('AICO_X_ACCESS_TOKEN'),
+    x_access_token_secret_encrypted: encryptEnvToken(
+      'AICO_X_ACCESS_TOKEN_SECRET',
+    ),
+  });
+  const socialChannels = readEnv('AICO_SOCIAL_CHANNELS')
+    ? (readEnv('AICO_SOCIAL_CHANNELS') as string)
+        .split(',')
+        .map((channel) => channel.trim())
+        .filter(Boolean)
+    : null;
+
   for (const definition of definitions) {
     const existing = await query.findOne({
       where: { name: definition.name },
     });
     const tokenToPersist =
       encryptedToken || existing?.llm_api_token_encrypted || null;
+
+    const envSocial = socialTokenPayload();
+    const mergedSocial = {
+      fb_page_id: envSocial.fb_page_id ?? existing?.fb_page_id ?? null,
+      fb_access_token_encrypted:
+        envSocial.fb_access_token_encrypted ??
+        existing?.fb_access_token_encrypted ??
+        null,
+      ig_user_id: envSocial.ig_user_id ?? existing?.ig_user_id ?? null,
+      ig_access_token_encrypted:
+        envSocial.ig_access_token_encrypted ??
+        existing?.ig_access_token_encrypted ??
+        null,
+      x_api_key: envSocial.x_api_key ?? existing?.x_api_key ?? null,
+      x_api_secret_encrypted:
+        envSocial.x_api_secret_encrypted ??
+        existing?.x_api_secret_encrypted ??
+        null,
+      x_access_token_encrypted:
+        envSocial.x_access_token_encrypted ??
+        existing?.x_access_token_encrypted ??
+        null,
+      x_access_token_secret_encrypted:
+        envSocial.x_access_token_secret_encrypted ??
+        existing?.x_access_token_secret_encrypted ??
+        null,
+      enabled_channels: socialChannels
+        ? (socialChannels as unknown as JsonValue)
+        : (existing?.enabled_channels ?? undefined),
+    };
 
     await upsertOne(
       strapi,
@@ -1057,6 +1119,7 @@ const upsertAicoWorkflows = async (
         ...definition,
         llm_api_token_encrypted: tokenToPersist,
         enabled: tokenToPersist ? definition.enabled : false,
+        ...mergedSocial,
       },
     );
   }
