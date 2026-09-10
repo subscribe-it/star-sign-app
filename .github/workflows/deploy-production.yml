@@ -249,7 +249,7 @@ jobs:
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.API_IMAGE }}:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.API_IMAGE }}:main
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.API_IMAGE }}:prod
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -275,7 +275,7 @@ jobs:
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.FRONTEND_IMAGE }}:main
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.FRONTEND_IMAGE }}:prod
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -299,99 +299,35 @@ jobs:
     needs: build-and-push
     env:
       PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
-      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-      PORTAINER_USER: ${{ secrets.PORTAINER_USER }}
-      PORTAINER_PASSWORD: ${{ secrets.PORTAINER_PASSWORD }}
       PORTAINER_STACK_NAME: star-sign
       IMAGE_TAG: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Trigger Portainer stack webhook
+
+
+      # Wzorzec VentiPlan/konstruo (deploy/vps/docker-compose.portainer.yml +
+      # .github/workflows/release-images.yml): obrazy referowane przez
+      # ENV stacka (STAR_SIGN_API_IMAGE/FRONTEND_IMAGE) z ruchomym tagiem
+      # :prod, redeploy wyzwalany samym webhookiem z 3x retry, a rollback
+      # to przepiecie :prod na stary SHA + ponowny webhook. Zero API
+      # Portainera w pipeline - tylko sekret PORTAINER_WEBHOOK_URL.
+      - name: Trigger Portainer stack webhook (with retry)
         run: |
           if [ -z "${PORTAINER_WEBHOOK_URL:-}" ]; then
             echo "Missing GitHub secret PORTAINER_WEBHOOK_URL." >&2
             exit 2
           fi
-          curl -fsS -X POST "$PORTAINER_WEBHOOK_URL"
-
-      # Portainer CE nie robi re-pull obrazu z webhooka. Zamiast tego
-      # pipeline od razu po webhooku zapisuje stack przez API z flaga
-      # pullImage:true i tagiem SHA — Swarm musi pobrac nowy obraz z GHCR.
-      # Autoryzacja: PORTAINER_API_KEY (X-API-Key) LUB login/haslo
-      # (POST /auth -> JWT) przez sekrety PORTAINER_USER/PORTAINER_PASSWORD.
-      - name: Resolve Portainer auth token
-        id: auth
-        run: |
-          set -euo pipefail
-          if [ -n "${PORTAINER_API_KEY:-}" ]; then
-            echo "mode=apikey" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ -n "${PORTAINER_USER:-}" ] && [ -n "${PORTAINER_PASSWORD:-}" ]; then
-            BASE="$(printf '%s' "$PORTAINER_WEBHOOK_URL" | sed -E 's#(https?://[^/]+).*#\1#')"
-            JWT="$(curl -fsS -X POST "$BASE/api/auth" \
-              -H 'Content-Type: application/json' \
-              -d "{\"Username\":\"$PORTAINER_USER\",\"Password\":\"$PORTAINER_PASSWORD\"}" \
-              | jq -r .jwt)"
-            if [ -n "$JWT" ] && [ "$JWT" != "null" ]; then
-              echo "jwt=$JWT" >> "$GITHUB_OUTPUT"
-              echo "mode=jwt" >> "$GITHUB_OUTPUT"
+          for attempt in 1 2 3; do
+            if curl -fsS --connect-timeout 10 --max-time 30 -X POST -- "$PORTAINER_WEBHOOK_URL"; then
+              echo "Portainer webhook accepted (attempt $attempt)."
               exit 0
             fi
-          fi
-          echo "mode=none" >> "$GITHUB_OUTPUT"
-          echo "No PORTAINER_API_KEY nor PORTAINER_USER/PASSWORD - skipping force re-pull (webhook-only)." >&2
-
-      # Portainer CE: webhook robi "force update" BEZ pull obrazu, przez co
-      # Swarm tygodniami trzymal zabytkowy :main (issue portainer/portainer#8373).
-      # PUT /stacks/{id} z pullImage:true to jedyny CE-owy sposob wymuszenia
-      # pobrania fresh obrazu. Wymaga sekretu PORTAINER_API_KEY
-      # (Portainer -> Settings -> API keys, rola standard admin).
-      - name: Force Portainer image re-pull via API (CE-compatible)
-        if: ${{ steps.auth.outputs.mode != 'none' }}
-        env:
-          AUTH_MODE: ${{ steps.auth.outputs.mode }}
-          AUTH_JWT: ${{ steps.auth.outputs.jwt }}
-        run: |
-          set -euo pipefail
-          BASE="$(printf '%s' "$PORTAINER_WEBHOOK_URL" | sed -E 's#(https?://[^/]+).*#\1#')"
-          API="$BASE/api"
-          if [ "$AUTH_MODE" = "jwt" ]; then
-            AUTH=(-H "Authorization: Bearer $AUTH_JWT" -H 'Content-Type: application/json')
-          else
-            AUTH=(-H "X-API-Key: $PORTAINER_API_KEY" -H 'Content-Type: application/json')
-          fi
-
-          # 1. Znajdz stack i endpoint po nazwie.
-          STACKS="$(curl -fsS "${AUTH[@]}" "$API/stacks")"
-          STACK_JSON="$(printf '%s' "$STACKS" | jq --arg name "$PORTAINER_STACK_NAME" '
-            [.[] | select(.Name == $name)][0] // empty')"
-          if [ -z "$STACK_JSON" ]; then
-            echo "Stack '$PORTAINER_STACK_NAME' not found in Portainer; skipping re-pull (webhook-only deploy)." >&2
-            exit 0
-          fi
-          STACK_ID="$(printf '%s' "$STACK_JSON" | jq -r '.Id')"
-          ENDPOINT_ID="$(printf '%s' "$STACK_JSON" | jq -r '.EndpointId')"
-
-          # 2. Pobierz aktualny env stacka (PUT nadpisuje caly env wiec odsylamy
-          #    pobrany, podmieniajac wylacznie STAR_SIGN_IMAGE_TAG na SHA builda).
-          DETAIL="$(curl -fsS "${AUTH[@]}" "$API/stacks/$STACK_ID")"
-          ENV_JSON="$(printf '%s' "$DETAIL" | jq --arg tag "$IMAGE_TAG" '
-            [(.Env // [])[] |
-              (if .name == "STAR_SIGN_IMAGE_TAG" then {name, value: $tag} else . end)]
-            + (if ([(.Env // [])[] | .name] | index("STAR_SIGN_IMAGE_TAG")) == null
-               then [{name: "STAR_SIGN_IMAGE_TAG", value: $tag}] else [] end)')"
-
-          # 3. PUT z aktualnym plikiem stacka z repo + pullImage:true.
-          STACK_FILE_CONTENT="$(jq -Rs . < ops/portainer/star-sign-production-stack.yml)"
-          BODY="{\"stackFileContent\": $STACK_FILE_CONTENT, \"env\": $ENV_JSON, \"pullImage\": true, \"prune\": false}"
-
-          HTTP_CODE="$(curl -fsS -o /tmp/stack-update.json -w '%{http_code}' -X PUT \
-            "${AUTH[@]}" --data "$BODY" \
-            "$API/stacks/$STACK_ID?endpointId=$ENDPOINT_ID")"
-          echo "Portainer stack update (pullImage) HTTP $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then cat /tmp/stack-update.json >&2; exit 1; fi
+            echo "Webhook attempt $attempt failed; retrying in 10s…"
+            sleep 10
+          done
+          echo "Portainer webhook FAILED after 3 attempts." >&2
+          exit 1
 
   post-deploy:
     name: Post-deploy smoke and e2e

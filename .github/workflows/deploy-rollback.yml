@@ -1,0 +1,65 @@
+name: Production Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Which image to roll back
+        required: true
+        type: choice
+        options:
+          - api
+          - frontend
+      tag:
+        description: GHCR tag to re-point :prod at (commit SHA or digest)
+        required: true
+      confirm:
+        description: Type YES to confirm
+        required: true
+        default: "NO"
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  rollback:
+    name: Rollback ${{ inputs.image }} → :prod
+    runs-on: ubuntu-latest
+    if: inputs.confirm == 'YES'
+    env:
+      IMAGE_REPO: ${{ inputs.image == 'api' && 'ghcr.io/subscribe-it/star-sign-api' || 'ghcr.io/subscribe-it/star-sign-frontend' }}
+      WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+    steps:
+      - name: Validate Portainer webhook
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "ERROR: PORTAINER_WEBHOOK_URL is not configured; refusing to redeploy." >&2
+            exit 1
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Re-point :prod to requested tag
+        run: |
+          docker pull "$IMAGE_REPO:${{ inputs.tag }}"
+          docker tag  "$IMAGE_REPO:${{ inputs.tag }}" "$IMAGE_REPO:prod"
+          docker push "$IMAGE_REPO:prod"
+          echo "Rolled back $IMAGE_REPO:prod -> ${{ inputs.tag }}"
+
+      - name: Trigger Portainer redeploy
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "ERROR: PORTAINER_WEBHOOK_URL is not configured; refusing to redeploy." >&2
+            exit 1
+          fi
+          curl -fsS --connect-timeout 10 --max-time 30 -X POST -- "$WEBHOOK"

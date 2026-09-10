@@ -221,6 +221,15 @@ Możliwe tryby:
 - `Repository`: Portainer pobiera stack z repo, branch `main`, path `ops/portainer/star-sign-production-stack.yml`.
 - `Web editor`: wklejasz zawartość pliku ręcznie. To jest mniej wygodne, ale działa.
 
+**WYMAGANE od 2026-09-10 (wzorzec VentiPlan)**: wybierz tryb
+`Repository` i w kreatorze stacka zaznacz **Webhook → "Re-pull image and
+redeploy"**. Stack typu Web editor z samym webhookiem nie pulluje nowych
+obrazów (Portainer CE robi tylko force-update z lokalnej kopii), przez co
+kontener API tygodniami działał na zabytkowym obrazie. Opcja "Re-pull
+image" przy webhooku jest dostępna dla stacków Repository (dokładnie tak
+działa ventiplan-prod na tym samym VPS) i rozwiązuje problem bez żadnego
+API Portainera w pipeline.
+
 W obu trybach ustaw environment variables w Portainerze. Nie commituj produkcyjnego `.env` do repo.
 
 ## Zmienne Portainera
@@ -237,7 +246,7 @@ Poniżej są zmienne runtime dla stacka. Wartości w nawiasach to rekomendacje s
 | `API_DOMAIN` | tak | `api.star-sign.pl` |
 | `UPLOAD_ASSET_CSP_ORIGINS` | tak | `https://cdn.star-sign.pl` |
 
-`STAR_SIGN_IMAGE_TAG=main` oznacza zawsze najnowszy deploy z `main`. Do rollbacku ustaw konkretny SHA obrazu.
+`STAR_SIGN_IMAGE_TAG=prod` (ruchomy tag) oznacza zawsze najnowszy release — workflow przepina `:prod` na każdy SHA i rolluje webhook. Do rollbacku użyj workflow **Production Rollback** (Actions → "Production Rollback" → wybierz obraz + SHA) albo ręcznie ustaw konkretny SHA.
 
 ### Feature flags i publiczne integracje
 
