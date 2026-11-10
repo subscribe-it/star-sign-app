@@ -6,6 +6,7 @@ import {
   ensureDailyCardWorkflows,
 } from './bootstrap/content';
 import { syncContentApiReadPermissions } from './utils/public-permissions';
+import { isAicoPluginEnabled } from './utils/aico';
 
 export default {
   /**
@@ -72,6 +73,13 @@ export default {
         'Nie udało się zsynchronizować publicznych uprawnień Content API.',
         error,
       );
+    }
+
+    if (!isAicoPluginEnabled(strapi)) {
+      strapi.log.info(
+        'Wtyczka AICO jest wyłączona - pomijam rejestrację workflowów.',
+      );
+      return;
     }
 
     try {

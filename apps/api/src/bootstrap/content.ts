@@ -6,6 +6,7 @@ import {
   buildAicoWorkflowDefinitions,
 } from './aico-contract';
 import { ensureSeedMedia } from './seed-media';
+import { isAicoPluginEnabled } from '../utils/aico';
 import { toBoolean } from '../utils/features';
 import { evaluatePremiumContentQuality } from '../utils/premium-quality';
 
@@ -1032,6 +1033,10 @@ export const upsertAicoWorkflows = async (
   strapi: Core.Strapi,
   workflowTypes: Array<'horoscope' | 'article' | 'daily_card'>,
 ): Promise<void> => {
+  if (!isAicoPluginEnabled(strapi)) {
+    return;
+  }
+
   const token = resolveOpenRouterToken();
   const encryptedToken = encryptToken(strapi, token);
   const enableWorkflows =
@@ -1155,6 +1160,10 @@ export const upsertAicoWorkflows = async (
 export const ensureGlobalSettings = async (
   strapi: Core.Strapi,
 ): Promise<void> => {
+  if (!isAicoPluginEnabled(strapi)) {
+    return;
+  }
+
   const store = strapi.store({
     type: 'plugin',
     name: 'ai-content-orchestrator',

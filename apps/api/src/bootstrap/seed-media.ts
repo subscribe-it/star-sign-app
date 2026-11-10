@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Core } from '@strapi/strapi';
+import { isAicoPluginEnabled } from '../utils/aico';
 
 type UploadFileRecord = {
   id: number;
@@ -1037,6 +1038,10 @@ const ensureAicoMediaAsset = async (
   asset: SeedMediaAsset,
   file: UploadFileRecord,
 ): Promise<boolean> => {
+  if (!isAicoPluginEnabled(strapi)) {
+    return false;
+  }
+
   const query = strapi.db.query('plugin::ai-content-orchestrator.media-asset');
   const existing = await query.findOne({
     where: { asset_key: asset.assetKey },
@@ -1086,6 +1091,10 @@ const ensureBlogPlaceholderMediaAsset = async (
   strapi: Core.Strapi,
   file: UploadFileRecord,
 ): Promise<BlogPlaceholderMediaAssetResult> => {
+  if (!isAicoPluginEnabled(strapi)) {
+    return { changed: false, previousFileId: null };
+  }
+
   const query = strapi.db.query('plugin::ai-content-orchestrator.media-asset');
   const existing = await query.findOne({
     where: { asset_key: BLOG_PLACEHOLDER_ASSET_KEY },
@@ -1131,6 +1140,10 @@ const findLinkedMediaAssets = async (
   strapi: Core.Strapi,
   purposes: SeedMediaPurpose[],
 ): Promise<LinkedMediaAsset[]> => {
+  if (!isAicoPluginEnabled(strapi)) {
+    return [];
+  }
+
   const rows = asMediaAssetArray(
     await strapi.db
       .query('plugin::ai-content-orchestrator.media-asset')
@@ -1170,6 +1183,10 @@ const findLinkedMediaAssets = async (
 const ensureDiscoveredUploadMediaAssets = async (
   strapi: Core.Strapi,
 ): Promise<number> => {
+  if (!isAicoPluginEnabled(strapi)) {
+    return 0;
+  }
+
   const uploadFiles = asRecordArray(
     await strapi.db.query('plugin::upload.file').findMany({
       limit: 1000,
@@ -1523,6 +1540,90 @@ const ensureArticleImages = async (
   return linked;
 };
 
+/**
+ * Tryb bez AICO: katalog media-asset nie istnieje, więc ilustracje znaków
+ * podpinamy bezpośrednio z uploadowanych plików seedowych (slug znaku z seeda).
+ */
+const linkZodiacSignImagesDirect = async (
+  strapi: Core.Strapi,
+  files: Array<{ signSlug: string; file: UploadFileRecord }>,
+): Promise<number> => {
+  if (files.length === 0) {
+    return 0;
+  }
+
+  const query = strapi.db.query('api::zodiac-sign.zodiac-sign');
+  const signs = (await query.findMany({
+    populate: ['image'],
+    limit: 100,
+  })) as ZodiacSignRecord[];
+  let linked = 0;
+
+  for (const sign of signs) {
+    const entry = files.find(
+      (item) => normalizeText(item.signSlug) === normalizeText(sign.slug),
+    );
+
+    if (!entry || !shouldLinkMedia(sign.image, entry.file)) {
+      continue;
+    }
+
+    await query.update({
+      where: { id: sign.id },
+      data: { image: entry.file.id },
+    });
+    linked += 1;
+  }
+
+  return linked;
+};
+
+/**
+ * Tryb bez AICO: seedowane artykuły bez okładki dostają domyślny placeholder
+ * bloga (albo przepinamy ze starego placeholdera).
+ */
+const linkArticlePlaceholderDirect = async (
+  strapi: Core.Strapi,
+  articleSlugs: string[],
+  placeholder: UploadFileRecord,
+  knownPlaceholderFileIds: ReadonlySet<number>,
+): Promise<number> => {
+  if (articleSlugs.length === 0) {
+    return 0;
+  }
+
+  const query = strapi.db.query('api::article.article');
+  const articles = (await query.findMany({
+    where: { slug: { $in: articleSlugs } },
+    populate: ['image'],
+    limit: articleSlugs.length,
+  })) as ArticleRecord[];
+  let linked = 0;
+
+  for (const article of articles) {
+    const currentImageId = extractRelationId(article.image);
+    const currentIsPlaceholder =
+      (typeof currentImageId === 'number' &&
+        knownPlaceholderFileIds.has(currentImageId)) ||
+      isBlogPlaceholderUpload(article.image);
+
+    if (
+      currentImageId === placeholder.id ||
+      (!currentIsPlaceholder && !shouldLinkMedia(article.image, placeholder))
+    ) {
+      continue;
+    }
+
+    await query.update({
+      where: { id: article.id },
+      data: { image: placeholder.id },
+    });
+    linked += 1;
+  }
+
+  return linked;
+};
+
 const replaceLegacyBlogPlaceholderArticleRelations = async (
   strapi: Core.Strapi,
   currentFileId: number,
@@ -1634,6 +1735,9 @@ export const ensureSeedMedia = async (
     firstUploadError,
   };
 
+  const zodiacUploads: Array<{ signSlug: string; file: UploadFileRecord }> =
+    [];
+
   for (const asset of ZODIAC_PROFILE_SEED_ASSETS) {
     if (!fs.existsSync(path.join(uploadsDir, asset.fileName))) {
       continue;
@@ -1649,6 +1753,10 @@ export const ensureSeedMedia = async (
       if (ensured.uploaded) {
         result.uploaded += 1;
         seedMediaDiag.uploaded = result.uploaded;
+      }
+
+      if (asset.signSlug) {
+        zodiacUploads.push({ signSlug: asset.signSlug, file: ensured.file });
       }
 
       if (await ensureAicoMediaAsset(strapi, asset, ensured.file)) {
@@ -1717,12 +1825,27 @@ export const ensureSeedMedia = async (
     }
 
     result.mediaAssets += await ensureDiscoveredUploadMediaAssets(strapi);
-    result.zodiacLinked = await ensureZodiacSignImages(strapi);
-    result.articleLinked = await ensureArticleImages(
-      strapi,
-      options.articleSlugs ?? [],
-      knownPlaceholderFileIds,
-    );
+    if (isAicoPluginEnabled(strapi)) {
+      result.zodiacLinked = await ensureZodiacSignImages(strapi);
+      result.articleLinked = await ensureArticleImages(
+        strapi,
+        options.articleSlugs ?? [],
+        knownPlaceholderFileIds,
+      );
+    } else {
+      result.zodiacLinked = await linkZodiacSignImagesDirect(
+        strapi,
+        zodiacUploads,
+      );
+      result.articleLinked = placeholder
+        ? await linkArticlePlaceholderDirect(
+            strapi,
+            options.articleSlugs ?? [],
+            placeholder.file,
+            knownPlaceholderFileIds,
+          )
+        : 0;
+    }
 
     if (placeholder) {
       result.articleLinked += await replaceLegacyBlogPlaceholderArticleRelations(

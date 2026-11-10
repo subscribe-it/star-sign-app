@@ -1,6 +1,7 @@
 import Replicate from 'replicate';
 import { factories } from '@strapi/strapi';
 import axios from 'axios';
+import { isAicoPluginEnabled } from '../../../utils/aico';
 
 const MASTER_PROMPT = `CRITICAL MANDATORY REQUIREMENT: This card MUST feature ONLY two elements of text/symbolism: A large [ZODIAC_ICON] symbol at the TOP and the single Polish word „[NAZWA]" at the BOTTOM. ABSOLUTELY NO OTHER WORDS, NO TITLES, NO CAPTIONS, NO EXTRA LETTERS, NO MODEL NAMES, NO SECONDARY TEXT allowed anywhere on the composition.
 
@@ -259,22 +260,25 @@ export default factories.createCoreService(
 
           // 4. Przypisanie do Media Catalog (AICO)
           const assetKey = `tarot_${cardData.cardName.toLowerCase()}`;
-          await strapi.entityService.create(
-            'plugin::ai-content-orchestrator.media-asset',
-            {
-              data: {
-                asset_key: assetKey,
-                label: `Tarot Card: ${cardData.cardName}`,
-                purpose: 'horoscope_sign', // Poprawiona wartość na zgodną z walidacją
-                sign_slug: cardData.cardName.toLowerCase(),
-                active: true,
-                asset: fileId,
-                notes: `Generated from specialized Flux 2 Pro prompt. Color: ${cardData.colorMotif}`,
-                mapping_source: 'seed',
-                mapping_confidence: 1.0,
-              } as any,
-            },
-          );
+          if (isAicoPluginEnabled(strapi)) {
+            await strapi.entityService.create(
+              // Typ wtyczki znika z wygenerowanych typów, gdy AICO jest wyłączone.
+              'plugin::ai-content-orchestrator.media-asset' as any,
+              {
+                data: {
+                  asset_key: assetKey,
+                  label: `Tarot Card: ${cardData.cardName}`,
+                  purpose: 'horoscope_sign', // Poprawiona wartość na zgodną z walidacją
+                  sign_slug: cardData.cardName.toLowerCase(),
+                  active: true,
+                  asset: fileId,
+                  notes: `Generated from specialized Flux 2 Pro prompt. Color: ${cardData.colorMotif}`,
+                  mapping_source: 'seed',
+                  mapping_confidence: 1.0,
+                } as any,
+              },
+            );
+          }
 
           // 5. Aktualizacja/Utworzenie wpisu TarotCard (opcjonalnie, jeśli istnieje model)
           const existingCards = await strapi.entityService.findMany(
