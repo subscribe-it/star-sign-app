@@ -48,28 +48,26 @@
   --article-orb-line: rgba(176, 104, 126, 0.28);
   --article-orb-shadow: rgba(176, 104, 126, 0.18);
 
-  background:
-    radial-gradient(
-      circle at 44% 38%,
-      rgba(255, 255, 255, 0.62) 0%,
-      rgba(209, 167, 180, 0.34) 22%,
-      rgba(209, 167, 180, 0.12) 58%,
-      rgba(209, 167, 180, 0.02) 100%
-    );
+  background: radial-gradient(
+    circle at 44% 38%,
+    rgba(255, 255, 255, 0.62) 0%,
+    rgba(209, 167, 180, 0.34) 22%,
+    rgba(209, 167, 180, 0.12) 58%,
+    rgba(209, 167, 180, 0.02) 100%
+  );
 }
 
 .article-hero__orb--gold {
   --article-orb-line: rgba(168, 128, 34, 0.28);
   --article-orb-shadow: rgba(168, 128, 34, 0.16);
 
-  background:
-    radial-gradient(
-      circle at 50% 48%,
-      rgba(255, 255, 255, 0.56) 0%,
-      rgba(212, 175, 55, 0.28) 24%,
-      rgba(212, 175, 55, 0.11) 60%,
-      rgba(212, 175, 55, 0.02) 100%
-    );
+  background: radial-gradient(
+    circle at 50% 48%,
+    rgba(255, 255, 255, 0.56) 0%,
+    rgba(212, 175, 55, 0.28) 24%,
+    rgba(212, 175, 55, 0.11) 60%,
+    rgba(212, 175, 55, 0.02) 100%
+  );
 }
 
 #article-content,

@@ -40,19 +40,19 @@
 
       <div class="max-w-4xl">
         <div class="mb-6 flex flex-wrap gap-3">
-        @if (currentArticle.category) {
-        <span
-          class="bg-white/90 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs font-bold text-mystic-rose tracking-widest uppercase shadow-sm"
-        >
-          {{ currentArticle.category.name }}
-        </span>
-        } @if (hasPremiumExtension(currentArticle)) {
-        <span
-          class="bg-mystic-gold/90 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs font-bold text-white tracking-[0.2em] shadow-sm inline-flex items-center gap-2"
-        >
-          ✦ PREMIUM
-        </span>
-        }
+          @if (currentArticle.category) {
+          <span
+            class="bg-white/90 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs font-bold text-mystic-rose tracking-widest uppercase shadow-sm"
+          >
+            {{ currentArticle.category.name }}
+          </span>
+          } @if (hasPremiumExtension(currentArticle)) {
+          <span
+            class="bg-mystic-gold/90 backdrop-blur-sm px-4 py-1.5 rounded-full text-xs font-bold text-white tracking-[0.2em] shadow-sm inline-flex items-center gap-2"
+          >
+            ✦ PREMIUM
+          </span>
+          }
         </div>
 
         <h1
@@ -66,19 +66,9 @@
         >
           <div class="flex items-center gap-2">
             <ng-icon name="heroUser" class="text-mystic-rose" />
-            @if (authorKey(currentArticle); as authorKey) {
-            <a
-              [routerLink]="['/redakcja', authorKey]"
-              class="hover:text-mystic-rose transition-colors underline-offset-4 hover:underline"
-              data-test="blog-detail-author-link"
+            <span data-test="blog-detail-author"
+              >{{ authorByline(currentArticle) }}</span
             >
-              {{ authorByline(currentArticle) }}
-            </a>
-            } @else {
-            <span data-test="blog-detail-author">{{
-              authorByline(currentArticle)
-            }}</span>
-            }
           </div>
           @if (currentArticle.read_time_minutes) {
           <div class="flex items-center gap-2">
@@ -140,12 +130,13 @@
 
           <!-- Treść właściwa -->
           <div class="relative">
-            <div
-              class="text-mystic-cocoa text-base sm:text-lg leading-relaxed space-y-8 font-light break-words"
-            >
-              {{ currentArticle.content || 'Treść jest chwilowo niedostępna.
-              Wróć za moment albo sprawdź Kartę Dnia.' }}
-            </div>
+            <app-markdown-content
+              class="block text-mystic-cocoa text-base sm:text-lg leading-relaxed font-light break-words"
+              [content]="
+                currentArticle.content ||
+                'Treść jest chwilowo niedostępna. Wróć za moment albo sprawdź Kartę Dnia.'
+              "
+            />
 
             <app-premium-preview-block
               id="article-premium"

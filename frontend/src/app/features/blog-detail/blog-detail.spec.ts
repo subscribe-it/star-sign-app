@@ -272,7 +272,7 @@ describe('BlogDetail', () => {
         title: 'Premium Article',
         slug: 'premium-article',
         excerpt: 'Premium excerpt',
-        content: 'Public premium article intro',
+        content: '## Public premium article intro\n\n- punkt',
         isPremium: true,
         hasPremiumContent: true,
         read_time_minutes: 9,
@@ -290,6 +290,11 @@ describe('BlogDetail', () => {
 
     const text = (fixture.nativeElement as HTMLElement).textContent || '';
     expect(text).toContain('Premium Article');
+    expect(text).not.toContain('##');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('#article-text h2')
+        ?.textContent,
+    ).toBe('Public premium article intro');
     expect(text).toContain('Public premium article intro');
     expect(text).toContain('Rozszerzenie Premium do artykułu');
     expect(text).toContain('PREMIUM');

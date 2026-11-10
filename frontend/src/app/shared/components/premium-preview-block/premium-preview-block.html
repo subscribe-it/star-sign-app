@@ -10,7 +10,10 @@
   @if (intro()) {
   <p class="premium-preview__intro">{{ intro() }}</p>
   }
-  <p class="premium-preview__content">{{ premiumContent() }}</p>
+  <app-markdown-content
+    class="premium-preview__content block"
+    [content]="premiumContent()"
+  />
   } @else {
   <div class="premium-preview__eyebrow">Magiczny Krąg</div>
   <h3 class="premium-preview__title">{{ title() }}</h3>

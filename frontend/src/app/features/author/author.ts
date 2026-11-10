@@ -68,7 +68,7 @@ export class Author {
         if (!author?.key) {
           return of([] as Article[]);
         }
-        return this.articleService.getArticlesByPersonaKey(author.key);
+        return this.articleService.getRecentArticles(6);
       }),
     ),
     { initialValue: [] as Article[] },
