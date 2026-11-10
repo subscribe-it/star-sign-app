@@ -671,6 +671,36 @@ const getWarsawDate = (date = new Date()) =>
 const plusDaysIso = (days) =>
   new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
+const toBoolean = (value, fallback = false) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+      return false;
+    }
+  }
+
+  return fallback;
+};
+
+const isShopEnabled = () => toBoolean(process.env.SHOP_ENABLED, false);
+
+const upsertOne = async (strapi, uid, where, data) => {
+  const query = strapi.db.query(uid);
+  const existing = await query.findOne({ where });
+
+  if (existing) {
+    return query.update({
+      where: { id: existing.id },
+      data,
+    });
+  }
+
+  return query.create({ data });
+};
+
 const setPermission = (permissions, actionId, enabled) => {
   const [typeName, controllerName, actionName] = actionId.split('.');
   const action =
