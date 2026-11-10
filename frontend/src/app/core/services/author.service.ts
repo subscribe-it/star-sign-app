@@ -2,9 +2,8 @@ import { Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
 
 /**
- * Public, audience-facing author used on the public author page. Persony
- * redakcyjne (plugin AICO) zostały wygaszone - serwis nie wykonuje żadnych
- * zapytań HTTP i zwraca wyłącznie redakcję Star Sign.
+ * Public, audience-facing author used on the public author page. Serwis nie
+ * wykonuje żadnych zapytań HTTP i zwraca wyłącznie redakcję Star Sign.
  */
 export interface PublicAuthor {
   key: string;

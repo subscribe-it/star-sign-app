@@ -19,12 +19,6 @@ const config = ({
   };
 
   const pluginConfig: Core.Config.Plugin = {
-    // AICO wyłączone: treści generuje zewnętrzny stack (marketing-os) i zapisuje
-    // je przez REST API. Kod wtyczki zostaje w repo, ale się nie ładuje.
-    'ai-content-orchestrator': {
-      enabled: false,
-      resolve: 'src/plugins/ai-content-orchestrator',
-    },
     email: {
       config: {
         provider: 'nodemailer',
