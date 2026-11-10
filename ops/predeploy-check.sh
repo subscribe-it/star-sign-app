@@ -9,10 +9,7 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 PREDEPLOY_SCOPE="${PREDEPLOY_SCOPE:-local}"
 RUN_FRONTEND_FULL="${RUN_FRONTEND_FULL:-false}"
 RUN_E2E="${RUN_E2E:-false}"
-RUN_DOMAIN_AUDITS="${RUN_DOMAIN_AUDITS:-auto}"
 RUN_ENV_GUARD="${RUN_ENV_GUARD:-auto}"
-RUN_AICO_OPENROUTER_SMOKE="${RUN_AICO_OPENROUTER_SMOKE:-auto}"
-RUN_AICO_POST_SEED_PREFLIGHT="${RUN_AICO_POST_SEED_PREFLIGHT:-auto}"
 RUN_SECURITY_HEADERS="${RUN_SECURITY_HEADERS:-auto}"
 API_AUDIT_LEVEL="${API_AUDIT_LEVEL:-critical}"
 
@@ -87,16 +84,6 @@ resolve_compose_env_file() {
   esac
 }
 
-run_aico_post_seed_preflight() {
-  AICO_PREFLIGHT_ENV_FILE="$(resolve_compose_env_file)" \
-    npm exec -- nx run api:aico-post-seed-preflight --outputStyle=static
-}
-
-run_aico_openrouter_smoke() {
-  AICO_SMOKE_ENV_FILE="$(resolve_compose_env_file)" \
-    npm exec -- nx run api:aico-openrouter-smoke --outputStyle=static
-}
-
 run "npm ci dry-run" npm ci --dry-run
 run "apps/api npm ci dry-run" npm --prefix apps/api ci --dry-run
 run "nx sync check" npm exec -- nx sync:check
@@ -109,10 +96,9 @@ run "root production npm audit high gate" npm audit --omit=dev --audit-level=hig
 run "api production npm audit ${API_AUDIT_LEVEL} gate" npm --prefix apps/api audit --omit=dev --audit-level="$API_AUDIT_LEVEL"
 run "docker compose config (${COMPOSE_FILE}, ${COMPOSE_ENV_FILE})" docker compose -f "$COMPOSE_FILE" --env-file "$COMPOSE_ENV_FILE" config --quiet
 run "workspace typecheck" npm exec -- nx run-many -t typecheck --projects=frontend,api,cart,@org/types,frontend-e2e --outputStyle=static
-run "workspace lint" npm exec -- nx run-many -t lint --projects=frontend,api,cart,@org/types,frontend-e2e,ai-content-orchestrator --outputStyle=static
+run "workspace lint" npm exec -- nx run-many -t lint --projects=frontend,api,cart,@org/types,frontend-e2e --outputStyle=static
 run "api tests" npm exec -- nx run api:test --outputStyle=static
 run "cart tests" npm exec -- nx run cart:test --outputStyle=static
-run "aico plugin checks" npm exec -- nx run-many --targets=test:unit,test:ts:back,test:ts:front,verify --projects=ai-content-orchestrator --outputStyle=static
 run "api production build" npm exec -- nx run api:build --outputStyle=static
 
 if is_true "$RUN_FRONTEND_FULL"; then
@@ -120,25 +106,6 @@ if is_true "$RUN_FRONTEND_FULL"; then
   run "frontend production build" npm exec -- nx run frontend:build:production --outputStyle=static
 else
   skip "frontend full test/build; set RUN_FRONTEND_FULL=true for release candidate validation"
-fi
-
-if should_run_required_check "$RUN_DOMAIN_AUDITS"; then
-  run "premium content audit" npm exec -- nx run api:premium-content-audit --outputStyle=static
-  run "AICO contract audit" npm exec -- nx run api:aico-contract-audit --outputStyle=static
-else
-  skip "domain DB audits; set RUN_DOMAIN_AUDITS=true or PREDEPLOY_SCOPE=staging"
-fi
-
-if should_run_required_check "$RUN_AICO_OPENROUTER_SMOKE"; then
-  run "AICO OpenRouter smoke" run_aico_openrouter_smoke
-else
-  skip "AICO OpenRouter smoke; set RUN_AICO_OPENROUTER_SMOKE=true or PREDEPLOY_SCOPE=staging"
-fi
-
-if should_run_required_check "$RUN_AICO_POST_SEED_PREFLIGHT"; then
-  run "AICO post-seed preflight" run_aico_post_seed_preflight
-else
-  skip "AICO post-seed preflight; set RUN_AICO_POST_SEED_PREFLIGHT=true or PREDEPLOY_SCOPE=staging"
 fi
 
 if should_run_required_check "$RUN_SECURITY_HEADERS"; then

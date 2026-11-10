@@ -87,23 +87,6 @@ jobs:
           SECRET__TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           SECRET__STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           SECRET__STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          SECRET__AICO_OPENROUTER_TOKEN: ${{ secrets.AICO_OPENROUTER_TOKEN }}
-          SECRET__AICO_AUDIT_IP_HASH_SALT: ${{ secrets.AICO_AUDIT_IP_HASH_SALT }}
-          SECRET__AICO_IMAGE_GEN_TOKEN: ${{ secrets.AICO_IMAGE_GEN_TOKEN }}
-          SECRET__AICO_VIDEO_GEN_TOKEN: ${{ secrets.AICO_VIDEO_GEN_TOKEN }}
-          SECRET__AICO_FACEBOOK_ACCESS_TOKEN: ${{ secrets.AICO_FACEBOOK_ACCESS_TOKEN }}
-          SECRET__AICO_INSTAGRAM_ACCESS_TOKEN: ${{ secrets.AICO_INSTAGRAM_ACCESS_TOKEN }}
-          SECRET__AICO_X_API_KEY: ${{ secrets.AICO_X_API_KEY }}
-          SECRET__AICO_X_API_SECRET: ${{ secrets.AICO_X_API_SECRET }}
-          SECRET__AICO_X_ACCESS_TOKEN: ${{ secrets.AICO_X_ACCESS_TOKEN }}
-          SECRET__AICO_X_ACCESS_TOKEN_SECRET: ${{ secrets.AICO_X_ACCESS_TOKEN_SECRET }}
-          SECRET__AICO_TIKTOK_ACCESS_TOKEN: ${{ secrets.AICO_TIKTOK_ACCESS_TOKEN }}
-          SECRET__AICO_YOUTUBE_CLIENT_SECRET: ${{ secrets.AICO_YOUTUBE_CLIENT_SECRET }}
-          SECRET__AICO_YOUTUBE_REFRESH_TOKEN: ${{ secrets.AICO_YOUTUBE_REFRESH_TOKEN }}
-          SECRET__AICO_META_ADS_ACCESS_TOKEN: ${{ secrets.AICO_META_ADS_ACCESS_TOKEN }}
-          SECRET__AICO_GOOGLE_ADS_DEVELOPER_TOKEN: ${{ secrets.AICO_GOOGLE_ADS_DEVELOPER_TOKEN }}
-          SECRET__AICO_GOOGLE_ADS_CLIENT_SECRET: ${{ secrets.AICO_GOOGLE_ADS_CLIENT_SECRET }}
-          SECRET__AICO_GOOGLE_ADS_REFRESH_TOKEN: ${{ secrets.AICO_GOOGLE_ADS_REFRESH_TOKEN }}
           SECRET__SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SECRET__FRONTEND_SENTRY_DSN: ${{ secrets.FRONTEND_SENTRY_DSN }}
           SECRET__BUGSINK_SECRET_KEY: ${{ secrets.BUGSINK_SECRET_KEY }}
@@ -172,9 +155,6 @@ jobs:
       - name: Lint frontend e2e
         run: npm exec -- nx run frontend-e2e:lint --outputStyle=static
 
-      - name: Lint AICO plugin
-        run: npm exec -- nx run ai-content-orchestrator:lint --outputStyle=static
-
       - name: Typecheck shared types
         run: npm exec -- nx run @org/types:typecheck --outputStyle=static
 
@@ -198,21 +178,6 @@ jobs:
 
       - name: Test cart
         run: npm exec -- nx run cart:test --outputStyle=static
-
-      - name: Test AICO unit
-        run: npm exec -- nx run ai-content-orchestrator:test:unit --outputStyle=static
-
-      - name: Typecheck AICO backend
-        run: npm exec -- nx run ai-content-orchestrator:test:ts:back --outputStyle=static
-
-      - name: Typecheck AICO admin
-        run: npm exec -- nx run ai-content-orchestrator:test:ts:front --outputStyle=static
-
-      - name: Build AICO plugin
-        run: npm exec -- nx run ai-content-orchestrator:build --outputStyle=static
-
-      - name: Verify AICO plugin package
-        run: npm exec -- nx run ai-content-orchestrator:verify --outputStyle=static
 
       - name: Build api
         run: npm exec -- nx run api:build --outputStyle=static

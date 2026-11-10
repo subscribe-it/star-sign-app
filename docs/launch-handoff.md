@@ -6,8 +6,8 @@ Ostatnia aktualizacja: 2026-04-28
 
 - API: Strapi 5, publiczne RBAC dla contentu, sklep domyślnie ukryty przez `SHOP_ENABLED=false`. Domena produkcyjna: `https://api.star-sign.pl/`.
 - Frontend: Angular SSR, sklep ukryty przez `features.shopEnabled=false` i `FRONTEND_SHOP_ENABLED=false`. Domena produkcyjna: `https://star-sign.pl/`.
-- Dane: seed dev/prod zapewnia znaki zodiaku, tarot, numerologię, artykuły, horoskopy, daily tarot i workflow AICO.
-- AICO: `Run now`, `Stop`, `Delete workflow`, monitoring runów, kroki, prompt, raw response, parsed JSON i błędy.
+- Dane: seed dev/prod zapewnia znaki zodiaku, tarot, numerologię, artykuły, horoskopy, daily tarot.
+- Treści (horoskopy, karta dnia, artykuły): zewnętrzny marketing-os przez REST API (token API Strapi z create/update/publish na articles, horoscopes, daily-tarot-draws, upload).
 - Mail: Brevo jako newsletter i SMTP przez Strapi email provider. Skonfigurowane pod `star-sign.pl`.
 - VPS: przygotowany Dockerfile multi-target, `docker-compose.yml`, Caddy, Postgres, smoke script i backup Postgresa.
 
@@ -25,7 +25,6 @@ Start z `.env.example`. Na VPS skopiować do `.env` i uzupełnić realne wartoś
 - baza: `POSTGRES_*`, `DATABASE_*`
 - media: `R2_*`
 - newsletter/mail: `BREVO_API_KEY`, `BREVO_LIST_ID`, `BREVO_SMTP_*`, `BREVO_WEBHOOK_SECRET`
-- AI: `AICO_OPENROUTER_TOKEN`, `AICO_ENABLE_WORKFLOWS`, `AICO_BACKUP_ENABLED`
 - observability: `SENTRY_DSN`
 
 Sekrety z lokalnych `.env` należy rotować przed produkcją.
@@ -60,8 +59,6 @@ PREDEPLOY_SCOPE=staging \
 RUN_ENV_GUARD=true \
 RUN_FRONTEND_FULL=true \
 RUN_E2E=true \
-RUN_DOMAIN_AUDITS=true \
-RUN_AICO_POST_SEED_PREFLIGHT=true \
 RUN_SECURITY_HEADERS=true \
 FRONTEND_BASE_URL=https://star-sign.pl \
 API_BASE_URL=https://api.star-sign.pl/api \
@@ -129,5 +126,5 @@ POSTGRES_DB=star_sign POSTGRES_USER=star_sign ./ops/backup-postgres.sh
 - [x] Infinite Scroll dla listy artykułów (bloga).
 - Dodać docelową domenę, DNS, SPF, DKIM i DMARC dla Brevo.
 - Zdecydować, czy przed launch przenosimy auth z JWT w `localStorage` do cookie `Secure HttpOnly`.
-- Ustawić docelowe limity AICO i dodać realny token OpenRouter.
+- Utworzyć token API Strapi dla marketing-os (create/update/publish na articles, horoscopes, daily-tarot-draws, upload).
 - [x] Po pierwszym buildzie admina sprawdzić ręcznie plugin SEO w Strapi Admin i dodać komponent `seo` do content type, jeśli ma być zarządzany edytorsko. (Komponent shared.seo dodany do Article, ZodiacSign, Horoscope, NumerologyProfile)

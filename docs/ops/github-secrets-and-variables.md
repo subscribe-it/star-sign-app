@@ -1,6 +1,6 @@
-# GitHub Secrets i Variables — kompletna konfiguracja deployu (Star Sign + plugin AICO)
+# GitHub Secrets i Variables — kompletna konfiguracja deployu
 
-Ten dokument opisuje **wszystkie** sekrety i zmienne potrzebne do pełnego działania aplikacji oraz pluginu **AICO** na produkcji, oraz jak je ustawić.
+Ten dokument opisuje **wszystkie** sekrety i zmienne potrzebne do pełnego działania aplikacji na produkcji, oraz jak je ustawić.
 
 ## Jak działa deploy (kontekst)
 
@@ -24,7 +24,7 @@ Push na `main` → GitHub Actions (`.github/workflows/deploy-production.yml`) bu
 | `STAR_SIGN_PRODUCTION_ENV` | secret | tylko legacy | Całe `.env` w jednym sekrecie (fallback). Po migracji usuń. |
 | `GITHUB_TOKEN` | auto | — | Wstrzykiwany automatycznie przez Actions (push do GHCR). Nie ustawiać. |
 
-## Sekrety i zmienne aplikacji + AICO (wchodzą do `.env.production`)
+## Sekrety i zmienne aplikacji (wchodzą do `.env.production`)
 
 Legenda: **S** = GitHub Secret (wrażliwe), **V** = GitHub Variable (jawne). „Wymóg": ✅ zawsze · 🔶 warunkowo (gdy dana funkcja włączona) · ⚪ opcjonalnie.
 
@@ -38,7 +38,7 @@ Legenda: **S** = GitHub Secret (wrażliwe), **V** = GitHub Variable (jawne). „
 | `ADMIN_JWT_SECRET` | S | ✅ | `openssl rand -base64 32`. |
 | `TRANSFER_TOKEN_SALT` | S | ✅ | `openssl rand -base64 32`. |
 | `JWT_SECRET` | S | ✅ | `openssl rand -base64 32`. |
-| `ENCRYPTION_KEY` | S | ✅ | **hex, min 32 znaki** (szyfruje tokeny AICO): `openssl rand -hex 32`. |
+| `ENCRYPTION_KEY` | S | ✅ | **hex, min 32 znaki** (szyfruje dane Strapi): `openssl rand -hex 32`. |
 
 ### URL-e i CORS (zawsze)
 
@@ -46,7 +46,7 @@ Legenda: **S** = GitHub Secret (wrażliwe), **V** = GitHub Variable (jawne). „
 | --- | --- | --- | --- |
 | `PRODUCTION_DOMAIN` / `FRONTEND_DOMAIN` / `API_DOMAIN` / `BUGSINK_DOMAIN` | V | ✅/⚪ | Domeny (Traefik/Caddy). |
 | `FRONTEND_URL` | V | ✅ | `https://star-sign.pl` (HTTPS, nie-localhost). |
-| `API_PUBLIC_URL`, `SERVER_URL` | V | ✅ | `https://api.star-sign.pl` (`SERVER_URL` wymagany dla mediów social/AICO). |
+| `API_PUBLIC_URL`, `SERVER_URL` | V | ✅ | `https://api.star-sign.pl` (`SERVER_URL` wymagany dla linków do mediów). |
 | `API_URL` | V | ✅ | Wewnętrzny URL API dla SSR, np. `http://api:1337/api`. |
 | `CORS_ORIGIN` | V | ✅ | CSV dozwolonych originów (HTTPS), np. `https://star-sign.pl`. |
 | `UPLOAD_ASSET_CSP_ORIGINS` | V | ⚪ | Origin CDN do CSP, np. `https://cdn.star-sign.pl`. |
@@ -105,16 +105,12 @@ Legenda: **S** = GitHub Secret (wrażliwe), **V** = GitHub Variable (jawne). „
 | `TURNSTILE_SECRET_KEY` | S | 🔶 | Klucz tajny. |
 | `TURNSTILE_FAIL_OPEN` | V | ⚪ | `false`. |
 
-### Analityka — GA4 (measurement zawsze; reszta dla autonomii AICO)
+### Analityka — GA4
 
 | Klucz | Typ | Wymóg | Opis |
 | --- | --- | --- | --- |
 | `GA4_MEASUREMENT_ID` | V | ✅ | `G-XXXX` (publiczny). |
 | `GTM_CONTAINER_ID` | V | ⚪ | `GTM-XXXX`. |
-| `GA4_PROPERTY_ID` | V | 🔶 | Property ID (dla insightów AICO). |
-| `AICO_GA4_ACCESS_TOKEN` | S | 🔶 | Token dostępu GA4 Data API. |
-| `GA4_SERVICE_ACCOUNT_JSON` | S | 🔶 | JSON konta serwisowego (jeśli wieloliniowy — zakoduj base64 i odkoduj w starcie, albo trzymaj jako jedno-liniowy JSON). |
-| `GOOGLE_APPLICATION_CREDENTIALS` | V | ⚪ | Ścieżka do pliku poświadczeń (alternatywa). |
 
 ### Płatności — Stripe (gdy `STRIPE_REQUIRED=true`)
 
@@ -125,48 +121,6 @@ Legenda: **S** = GitHub Secret (wrażliwe), **V** = GitHub Variable (jawne). „
 | `STRIPE_WEBHOOK_SECRET` | S | 🔶 | `whsec_...`. |
 | `STRIPE_PREMIUM_MONTHLY_PRICE_ID` / `STRIPE_PREMIUM_ANNUAL_PRICE_ID` | V | 🔶 | `price_...` (nie tajne). |
 | `SHOP_ENABLED`/`FRONTEND_SHOP_ENABLED`/`PREMIUM_MODE` | V | ⚪ | Flagi sklepu. |
-
-### AICO — rdzeń (gdy `AICO_ENABLE_WORKFLOWS=true`)
-
-| Klucz | Typ | Wymóg | Opis |
-| --- | --- | --- | --- |
-| `AICO_ENABLE_WORKFLOWS` | V | ⚪ | `true` włącza silnik AICO. |
-| `AICO_OPENROUTER_TOKEN` | S | 🔶 | Token OpenRouter `sk-or-v1-...`. **Rotuj** (wyciek 2026-06-11). Ustaw limit USD. |
-| `AICO_AUDIT_IP_HASH_SALT` | S | 🔶 | `openssl rand -base64 32`. |
-| `AICO_ALLOW_MISSING_TOKEN`/`AICO_RUNTIME_LOCKS_DISABLED`/`AICO_SOCIAL_CONTENT_SAFETY_DISABLED` | V | 🔶 | Muszą być `false` na prod. |
-| `AICO_OPENROUTER_MODEL`, `AICO_BACKUP_ENABLED`, `AICO_AUDIT_TRAIL_STRICT`, `AICO_STRICT_AUDIT_REQUIRED`, `AICO_PROVIDER_READINESS_MAX_AGE_HOURS`, `AICO_INSIGHTS_ENABLED` | V | ⚪ | Strojenie/flagi. |
-
-### AICO — obraz / wideo (gdy włączone providery)
-
-| Klucz | Typ | Opis |
-| --- | --- | --- |
-| `AICO_IMAGE_GEN_TOKEN` | S | Token generacji obrazów (OpenRouter). |
-| `AICO_IMAGE_GEN_MODEL`, `AICO_MEDIA_GEN_REQUIRED` | V | Model/flagi. |
-| `AICO_VIDEO_PROVIDER_MODE` | V | `disabled`→`replicate`. **Domyślnie disabled** (bezpiecznie). |
-| `AICO_VIDEO_GEN_TOKEN` | S | Token Replicate `r8_...`. |
-| `AICO_VIDEO_GEN_MODEL`, `AICO_VIDEO_GEN_CANCEL_AFTER`, `AICO_VIDEO_GEN_INPUT_JSON` | V | Konfiguracja renderu. |
-
-### AICO — social (gdy `AICO_SOCIAL_PUBLISH_REQUIRED=true`)
-
-| Klucz | Typ | Opis |
-| --- | --- | --- |
-| `AICO_SOCIAL_PUBLISH_REQUIRED`, `AICO_AUTO_PUBLISH_ENABLED`, `AICO_SOCIAL_CHANNELS`, `AICO_SOCIAL_CONNECTION_PREFLIGHT` | V | Flagi i lista kanałów. |
-| `AICO_PUBLIC_FRONTEND_URL`, `AICO_SOCIAL_DEFAULT_IMAGE_URL` | V | URL-e publiczne. |
-| `AICO_FACEBOOK_PAGE_ID`, `AICO_INSTAGRAM_USER_ID`, `AICO_YOUTUBE_CLIENT_ID` | V | Identyfikatory. |
-| `AICO_FACEBOOK_ACCESS_TOKEN`, `AICO_INSTAGRAM_ACCESS_TOKEN` | S | Tokeny Meta. |
-| `AICO_X_API_KEY`, `AICO_X_API_SECRET`, `AICO_X_ACCESS_TOKEN`, `AICO_X_ACCESS_TOKEN_SECRET` | S | X/Twitter. |
-| `AICO_TIKTOK_ACCESS_TOKEN`, `AICO_YOUTUBE_CLIENT_SECRET`, `AICO_YOUTUBE_REFRESH_TOKEN` | S | TikTok/YouTube. |
-
-### AICO — reklamy (gdy `AICO_ADS_PROVIDER_MODE` = controlled/live)
-
-| Klucz | Typ | Opis |
-| --- | --- | --- |
-| `AICO_ADS_PROVIDER_MODE` | V | `disabled`→`sandbox`→`controlled`→`live`. **Domyślnie disabled.** `live` wydaje realne pieniądze (wymaga `AICO_CONTROLLED_LIVE_ENABLED=true` + kompletu credentiali + ready provider-status). |
-| `AICO_CONTROLLED_LIVE_ENABLED`, `AICO_ADMIN_RUN_NOW_ENABLED`, `AICO_ADS_TARGET_URL_PREFLIGHT_REQUIRED`, `AICO_ADS_PROVIDER_TIMEOUT_MS`, `AICO_META_GRAPH_API_VERSION`, `AICO_GOOGLE_ADS_API_VERSION` | V | Bramki/wersje API. |
-| `AICO_META_AD_ACCOUNT_ID`, `AICO_GOOGLE_ADS_CLIENT_ID`, `AICO_GOOGLE_ADS_CUSTOMER_ID`, `AICO_GOOGLE_ADS_LOGIN_CUSTOMER_ID` | V | Identyfikatory kont. |
-| `AICO_META_ADS_ACCESS_TOKEN` | S | Token System User Meta. |
-| `AICO_GOOGLE_ADS_DEVELOPER_TOKEN`, `AICO_GOOGLE_ADS_CLIENT_SECRET`, `AICO_GOOGLE_ADS_REFRESH_TOKEN` | S | Google Ads. |
-| `AICO_FULL_AUTONOMY_REQUIRED`, `AICO_STRATEGY_AUTOPILOT_ENABLED`, `AICO_STRATEGY_AUTO_APPROVE_PLAN`, `AICO_STRATEGY_MIN_TOPIC_BACKLOG`, `AICO_STRATEGY_MAX_PLAN_ITEMS_PER_TICK` | V | Sterowanie autonomią (patrz panel „Centrum Autonomii"). |
 
 ### Obserwowalność (opcjonalnie)
 
@@ -179,9 +133,11 @@ Legenda: **S** = GitHub Secret (wrażliwe), **V** = GitHub Variable (jawne). „
 | `OPS_ALERT_WEBHOOK_URL` | S | Webhook alertów (Discord/Slack). |
 | `STRAPI_DOCUMENTATION_ENABLED`, `STRAPI_SEO_PLUGIN_ENABLED`, `ALLOW_PRODUCTION_SEED`, `BACKUP_RETENTION_DAYS` | V | Pozostałe flagi. |
 
-## Minimalny zestaw do startu (bez autonomii AICO)
+## Minimalny zestaw do startu
 
-Strapi core (7) + URL-e/CORS + DB/Redis + `RATE_LIMIT_ENABLED=true` + `GA4_MEASUREMENT_ID` + R2 (jeśli upload) + Brevo (jeśli newsletter). AICO: `AICO_ENABLE_WORKFLOWS=true` z `AICO_ADS_PROVIDER_MODE=disabled` i `AICO_VIDEO_PROVIDER_MODE=disabled` → agent generuje treści, ale **nie wydaje pieniędzy i nie publikuje na żywo**. Pełna autonomia/wideo/reklamy: dołóż odpowiednie sekcje + przełącz tryby (patrz panel admina AICO).
+Strapi core (7) + URL-e/CORS + DB/Redis + `RATE_LIMIT_ENABLED=true` + `GA4_MEASUREMENT_ID` + R2 (jeśli upload) + Brevo (jeśli newsletter).
+
+Treści: zewnętrzny marketing-os przez REST API — osobny token API Strapi (create/update/publish na articles, horoscopes, daily-tarot-draws, upload), nie jest to sekret GitHub Actions.
 
 ## Jak ustawić
 
@@ -214,5 +170,5 @@ Szczegółowy przewodnik per-provider: [docs/ops/secrets-setup.md](secrets-setup
 
 ## Bezpieczeństwo
 - Sekretów **nie commituj** ani nie wklejaj do logów. `.env*` jest w `.gitignore` (poza `.env.example`).
-- Po wdrożeniu zrotuj sekrety, które kiedykolwiek pojawiły się poza GitHub Secrets (czat, historia powłoki) — zwł. Stripe, DB, OpenRouter.
+- Po wdrożeniu zrotuj sekrety, które kiedykolwiek pojawiły się poza GitHub Secrets (czat, historia powłoki) — zwł. Stripe, DB.
 - `gitleaks` skanuje repo; `production-env-check.sh` odrzuca placeholdery/`localhost`/sqlite na prod.

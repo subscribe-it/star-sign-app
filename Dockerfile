@@ -5,14 +5,12 @@ ENV CI=true
 
 COPY package*.json ./
 COPY libs/shared/types/package.json libs/shared/types/package.json
-COPY apps/api/src/plugins/ai-content-orchestrator/package.json apps/api/src/plugins/ai-content-orchestrator/package.json
 RUN npm ci
 
 COPY apps/api/package*.json apps/api/
 RUN cd apps/api && npm ci
 
 COPY . .
-RUN npm exec nx run ai-content-orchestrator:build
 RUN npm exec nx run api:build
 RUN npm exec nx run frontend:build
 RUN cd apps/api && npm prune --omit=dev

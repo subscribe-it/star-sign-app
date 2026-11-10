@@ -56,9 +56,6 @@ jobs:
       - name: Lint frontend e2e
         run: npm exec -- nx run frontend-e2e:lint --outputStyle=static
 
-      - name: Lint AICO plugin
-        run: npm exec -- nx run ai-content-orchestrator:lint --outputStyle=static
-
       - name: Typecheck shared types
         run: npm exec -- nx run @org/types:typecheck --outputStyle=static
 
@@ -82,21 +79,6 @@ jobs:
 
       - name: Test cart
         run: npm exec -- nx run cart:test --outputStyle=static
-
-      - name: Test AICO unit
-        run: npm exec -- nx run ai-content-orchestrator:test:unit --outputStyle=static
-
-      - name: Typecheck AICO backend
-        run: npm exec -- nx run ai-content-orchestrator:test:ts:back --outputStyle=static
-
-      - name: Typecheck AICO admin
-        run: npm exec -- nx run ai-content-orchestrator:test:ts:front --outputStyle=static
-
-      - name: Build AICO plugin
-        run: npm exec -- nx run ai-content-orchestrator:build --outputStyle=static
-
-      - name: Verify AICO plugin package
-        run: npm exec -- nx run ai-content-orchestrator:verify --outputStyle=static
 
       - name: Build shared types
         run: npm exec -- nx run @org/types:build --outputStyle=static

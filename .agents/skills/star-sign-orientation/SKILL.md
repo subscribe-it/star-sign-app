@@ -15,7 +15,6 @@ Headless: Angular SSR z przodu, Strapi 5 z tyłu, monorepo **Nx 22.7** (npm work
 |---|---|
 | `frontend/` | Angular 21 SSR (standalone, signals), design „Lumina Silk"; features w `src/app/features`, usługi/guardy w `src/app/core` |
 | `apps/api/` | Strapi v5; content-typy w `src/api/*`, skrypty seedów w `scripts/` |
-| `apps/api/src/plugins/ai-content-orchestrator` | AICO — autonomiczny orkiestrator treści AI (workflow, personas, ads, media); osobne node_modules |
 | `libs/frontend/cart` / `libs/shared/types` | koszyk; współdzielone typy TS |
 | `frontend-e2e/` | Playwright (mock API + prod build) |
 | `.serena/memories/` | pamięć projektu (czytaj przed decyzjami!) |
@@ -47,7 +46,7 @@ npm run ops:smoke              # smoke po deployu
 - README mówi „Angular 19", ale faktycznie jest **Angular 21.2** (package.json).
 - Sklep domyślnie ukryty: `SHOP_ENABLED=false` / `FRONTEND_SHOP_ENABLED=false`.
 - Sekrety w `.env*` — nie commitować, rotacja przed produkcją; deploy: push na `main` → GH Actions → GHCR → Portainer webhooks.
-- AICO domyślnie bezpiecznie: reklamy/wideo disabled, autonomia guarded (nie wydaje pieniędzy bez ręcznego włączenia).
+- Treści (horoskopy, karta dnia, artykuły) tworzy zewnętrzny `marketing-os` przez REST API (token API Strapi: create/update/publish na articles, horoscopes, daily-tarot-draws, upload). Star Sign nie ma własnego generatora treści.
 
 ## Kontekst biznesowy (skrót)
 
