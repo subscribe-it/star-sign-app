@@ -19,14 +19,14 @@
     "upgrade:dry": "npx @strapi/upgrade latest --dry"
   },
   "dependencies": {
-    "@strapi/plugin-cloud": "^5.44.0",
-    "@strapi/plugin-documentation": "^5.44.0",
-    "@strapi/plugin-sentry": "^5.44.0",
-    "@strapi/plugin-users-permissions": "^5.44.0",
-    "@strapi/provider-email-nodemailer": "^5.44.0",
-    "@strapi/provider-upload-aws-s3": "^5.44.0",
-    "@strapi/strapi": "^5.44.0",
-    "axios": "^1.15.2",
+    "@strapi/plugin-cloud": "^5.61.1",
+    "@strapi/plugin-documentation": "^5.61.1",
+    "@strapi/plugin-sentry": "^5.61.1",
+    "@strapi/plugin-users-permissions": "^5.61.1",
+    "@strapi/provider-email-nodemailer": "^5.61.1",
+    "@strapi/provider-upload-aws-s3": "^5.61.1",
+    "@strapi/strapi": "^5.61.1",
+    "axios": "^1.21.1",
     "better-sqlite3": "12.8.0",
     "cron-parser": "^4.2.0",
     "ioredis": "^5.10.1",
@@ -38,7 +38,7 @@
     "sharp": "0.33.5",
     "styled-components": "^6.0.0",
     "twitter-api-v2": "^1.29.1",
-    "zod": "^4.4.1"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -48,12 +48,57 @@
   },
   "overrides": {
     "@rushstack/node-core-library": "5.20.3",
-    "axios": "$axios",
     "lodash": "4.18.1",
     "yaml": "1.10.3",
     "ws": "^8.21.0",
     "cheerio": {
       "undici": "^7.28.0"
+    },
+    "undici": "^7.30.2",
+    "fast-uri": "^3.1.9",
+    "source-map-js": "^1.2.2",
+    "follow-redirects": "^1.16.3",
+    "brace-expansion": "^5.0.13",
+    "js-yaml": "^4.3.2",
+    "axios": "^1.21.1",
+    "@strapi/admin": {
+      "zod": "^4.6.7"
+    },
+    "@strapi/content-manager": {
+      "zod": "^4.6.7"
+    },
+    "@strapi/content-type-builder": {
+      "zod": "^4.6.7"
+    },
+    "@strapi/core": {
+      "zod": "^4.6.7"
+    },
+    "@strapi/email": {
+      "zod": "^4.6.7"
+    },
+    "@strapi/i18n": {
+      "zod": "^4.6.7"
+    },
+    "@strapi/openapi": {
+      "zod": "^4.6.7"
+    },
+    "@strapi/plugin-users-permissions": {
+      "zod": "^4.6.7"
+    },
+    "@strapi/types": {
+      "zod": "^4.6.7"
+    },
+    "@strapi/upload": {
+      "zod": "^4.6.7"
+    },
+    "@strapi/utils": {
+      "zod": "^4.6.7"
+    },
+    "koa-session": {
+      "zod": "3.25.76"
+    },
+    "koa-body": {
+      "zod": "3.25.76"
     }
   },
   "engines": {
