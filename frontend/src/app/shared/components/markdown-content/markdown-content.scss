@@ -1,0 +1,113 @@
+/* Treść markdown z CMS (artykuły, premium) - patrz app-markdown-content */
+.markdown-body {
+  > :first-child {
+    margin-top: 0;
+  }
+
+  h2,
+  h3,
+  h4 {
+    font-family: 'Playfair Display', serif;
+    color: #4a3737;
+    line-height: 1.25;
+  }
+
+  h2 {
+    font-size: 2rem;
+    margin: 3rem 0 1.25rem;
+  }
+
+  h3 {
+    font-size: 1.5rem;
+    margin: 2.25rem 0 1rem;
+  }
+
+  h4 {
+    font-size: 1.25rem;
+    margin: 1.75rem 0 0.75rem;
+  }
+
+  p {
+    margin: 0 0 1.5rem;
+  }
+
+  strong {
+    color: #c291a1;
+    font-weight: 600;
+  }
+
+  ul,
+  ol {
+    margin: 0 0 1.75rem;
+    padding-left: 1.5rem;
+  }
+
+  ul {
+    list-style: disc;
+  }
+
+  ol {
+    list-style: decimal;
+  }
+
+  li {
+    margin-bottom: 0.5rem;
+    padding-left: 0.25rem;
+
+    &::marker {
+      color: #c291a1;
+    }
+  }
+
+  a {
+    color: #8b5e6b;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+
+    &:hover {
+      color: #4a3737;
+    }
+  }
+
+  blockquote {
+    margin: 2rem 0;
+    padding: 0.25rem 0 0.25rem 1.25rem;
+    border-left: 4px solid #d4af37;
+    font-style: italic;
+    color: #4a3737;
+  }
+
+  hr {
+    margin: 2.5rem 0;
+    border: 0;
+    border-top: 1px solid rgb(194 145 161 / 0.3);
+  }
+}
+
+/* Markdown na ciemnym tle (blok Premium) */
+.premium-preview .markdown-body {
+  h2,
+  h3,
+  h4,
+  blockquote {
+    color: #fff;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    margin-top: 2rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+    margin-top: 1.5rem;
+  }
+
+  a {
+    color: #d4af37;
+
+    &:hover {
+      color: #fff;
+    }
+  }
+}

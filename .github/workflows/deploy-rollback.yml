@@ -29,7 +29,7 @@ permissions:
 jobs:
   rollback:
     name: Rollback ${{ inputs.image }} → :prod
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: inputs.confirm == 'YES'
     env:
       IMAGE_REPO: ${{ inputs.image == 'api' && 'ghcr.io/subscribe-it/star-sign-api' || 'ghcr.io/subscribe-it/star-sign-frontend' }}

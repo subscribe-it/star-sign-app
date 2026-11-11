@@ -1,12 +1,6 @@
 import type { Core } from '@strapi/strapi';
 
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
-import {
-  AICO_LEGACY_WORKFLOW_NAMES,
-  buildAicoWorkflowDefinitions,
-} from './aico-contract';
 import { ensureSeedMedia } from './seed-media';
-import { toBoolean } from '../utils/features';
 import { evaluatePremiumContentQuality } from '../utils/premium-quality';
 
 const WARSAW_TIMEZONE = 'Europe/Warsaw';
@@ -608,55 +602,6 @@ const upsertOne = async (
   return query.create({ data });
 };
 
-const resolveOpenRouterToken = (): string => {
-  const env = process.env.NODE_ENV === 'production' ? 'PROD' : 'DEV';
-  const candidates = [
-    process.env[`AICO_OPENROUTER_TOKEN_${env}`],
-    process.env[`OPENROUTER_API_KEY_${env}`],
-    process.env.AICO_OPENROUTER_TOKEN,
-    process.env.OPENROUTER_API_KEY,
-  ];
-
-  return (
-    candidates
-      .find((value) => typeof value === 'string' && value.trim().length > 0)
-      ?.trim() || ''
-  );
-};
-
-const resolveOpenRouterModel = (): string =>
-  process.env.AICO_OPENROUTER_MODEL ||
-  process.env.OPENROUTER_MODEL ||
-  'openai/gpt-4.1-mini';
-
-const resolveImageGenToken = (): string => {
-  const env = process.env.NODE_ENV === 'production' ? 'PROD' : 'DEV';
-  const candidates = [
-    process.env[`AICO_IMAGE_GEN_TOKEN_${env}`],
-    process.env[`REPLICATE_API_TOKEN_${env}`],
-    process.env.AICO_IMAGE_GEN_TOKEN,
-    process.env.REPLICATE_API_TOKEN,
-    process.env.OPENAI_API_KEY,
-  ];
-
-  return (
-    candidates
-      .find((value) => typeof value === 'string' && value.trim().length > 0)
-      ?.trim() || ''
-  );
-};
-
-const resolveImageGenModel = (): string =>
-  process.env.AICO_IMAGE_GEN_MODEL || 'openai/gpt-image-2';
-
-const encryptToken = (strapi: Core.Strapi, token: string): string | null => {
-  if (!token) {
-    return null;
-  }
-
-  return strapi.service('admin::encryption').encrypt(token);
-};
-
 const seedZodiacSigns = async (
   strapi: Core.Strapi,
 ): Promise<Map<string, SeededEntity>> => {
@@ -703,7 +648,7 @@ const seedArticles = async (
 ): Promise<void> => {
   // Autonomiczna strona nie może mieć nadpisywanych dat publikacji przy
   // każdym restarcie: upsert tylko gdy rekordu brak (seed-when-missing),
-  // żeby treści AICO zachowały chronologię i sygnatury SEO.
+  // żeby treści z zewnętrznego silnika zachowały chronologię i sygnatury SEO.
   const articleQuery = strapi.db.query('api::article.article');
   const existingSlugs = new Set(
     (await articleQuery.findMany({ where: { slug: { $in: ARTICLES.map((a) => a.slug) } } }))
@@ -1007,177 +952,4 @@ export const ensureBootstrapContent = async (
   await seedNumerology(strapi);
   await seedHoroscopes(strapi, signs);
   await backfillPremiumContent(strapi);
-  await ensureGlobalSettings(strapi);
-};
-
-export const ensureHoroscopeWorkflows = async (
-  strapi: Core.Strapi,
-): Promise<void> => {
-  await upsertAicoWorkflows(strapi, ['horoscope']);
-};
-
-export const ensureArticleWorkflows = async (
-  strapi: Core.Strapi,
-): Promise<void> => {
-  await upsertAicoWorkflows(strapi, ['article']);
-};
-
-export const ensureDailyCardWorkflows = async (
-  strapi: Core.Strapi,
-): Promise<void> => {
-  await upsertAicoWorkflows(strapi, ['daily_card']);
-};
-
-export const upsertAicoWorkflows = async (
-  strapi: Core.Strapi,
-  workflowTypes: Array<'horoscope' | 'article' | 'daily_card'>,
-): Promise<void> => {
-  const token = resolveOpenRouterToken();
-  const encryptedToken = encryptToken(strapi, token);
-  const enableWorkflows =
-    Boolean(encryptedToken) &&
-    toBoolean(process.env.AICO_ENABLE_WORKFLOWS, false);
-  const model = resolveOpenRouterModel();
-  const query = strapi.db.query('plugin::ai-content-orchestrator.workflow');
-
-  const categories = (await strapi.entityService.findMany(
-    'api::category.category',
-    {
-      limit: 10,
-    },
-  )) as any[];
-  const defaultCatId = categories[0]?.id || null;
-
-  const definitions = buildAicoWorkflowDefinitions({
-    model,
-    encryptedToken,
-    enableWorkflows,
-    categoryId: defaultCatId,
-  }).filter((definition) => workflowTypes.includes(definition.workflow_type));
-
-  // Social publishing: tokeny i identyfikatory kanałów trafiają do workflow
-  // z env (Portainer) przy każdym starcie, więc nie trzeba ich wpisywać
-  // ręcznie w admin UI. Zasada: env pusty => zachowaj istniejącą wartość.
-  const readEnv = (name: string): string | null => {
-    const value = process.env[name]?.trim();
-    return value ? value : null;
-  };
-  const encryptEnvToken = (name: string): string | null => {
-    const value = readEnv(name);
-    return value ? encryptToken(strapi, value) : null;
-  };
-  const socialTokenPayload = () => ({
-    fb_page_id: readEnv('AICO_FACEBOOK_PAGE_ID'),
-    fb_access_token_encrypted: encryptEnvToken('AICO_FACEBOOK_ACCESS_TOKEN'),
-    ig_user_id: readEnv('AICO_INSTAGRAM_USER_ID'),
-    ig_access_token_encrypted: encryptEnvToken('AICO_INSTAGRAM_ACCESS_TOKEN'),
-    x_api_key: readEnv('AICO_X_API_KEY'),
-    x_api_secret_encrypted: encryptEnvToken('AICO_X_API_SECRET'),
-    x_access_token_encrypted: encryptEnvToken('AICO_X_ACCESS_TOKEN'),
-    x_access_token_secret_encrypted: encryptEnvToken(
-      'AICO_X_ACCESS_TOKEN_SECRET',
-    ),
-  });
-  const socialChannels = readEnv('AICO_SOCIAL_CHANNELS')
-    ? (readEnv('AICO_SOCIAL_CHANNELS') as string)
-        .split(',')
-        .map((channel) => channel.trim())
-        .filter(Boolean)
-    : null;
-
-  for (const definition of definitions) {
-    const existing = await query.findOne({
-      where: { name: definition.name },
-    });
-    const tokenToPersist =
-      encryptedToken || existing?.llm_api_token_encrypted || null;
-
-    const envSocial = socialTokenPayload();
-    const mergedSocial = {
-      fb_page_id: envSocial.fb_page_id ?? existing?.fb_page_id ?? null,
-      fb_access_token_encrypted:
-        envSocial.fb_access_token_encrypted ??
-        existing?.fb_access_token_encrypted ??
-        null,
-      ig_user_id: envSocial.ig_user_id ?? existing?.ig_user_id ?? null,
-      ig_access_token_encrypted:
-        envSocial.ig_access_token_encrypted ??
-        existing?.ig_access_token_encrypted ??
-        null,
-      x_api_key: envSocial.x_api_key ?? existing?.x_api_key ?? null,
-      x_api_secret_encrypted:
-        envSocial.x_api_secret_encrypted ??
-        existing?.x_api_secret_encrypted ??
-        null,
-      x_access_token_encrypted:
-        envSocial.x_access_token_encrypted ??
-        existing?.x_access_token_encrypted ??
-        null,
-      x_access_token_secret_encrypted:
-        envSocial.x_access_token_secret_encrypted ??
-        existing?.x_access_token_secret_encrypted ??
-        null,
-      enabled_channels: socialChannels
-        ? (socialChannels as unknown as JsonValue)
-        : (existing?.enabled_channels ?? undefined),
-    };
-
-    await upsertOne(
-      strapi,
-      'plugin::ai-content-orchestrator.workflow',
-      { name: definition.name },
-      {
-        ...definition,
-        llm_api_token_encrypted: tokenToPersist,
-        enabled: tokenToPersist ? definition.enabled : false,
-        ...mergedSocial,
-      },
-    );
-  }
-
-  for (const legacyName of AICO_LEGACY_WORKFLOW_NAMES) {
-    const legacyWorkflow = await query.findOne({
-      where: { name: legacyName },
-    });
-
-    if (legacyWorkflow?.id) {
-      await query.update({
-        where: { id: legacyWorkflow.id },
-        data: {
-          enabled: false,
-          status: 'idle',
-        },
-      });
-    }
-  }
-};
-
-export const ensureGlobalSettings = async (
-  strapi: Core.Strapi,
-): Promise<void> => {
-  const store = strapi.store({
-    type: 'plugin',
-    name: 'ai-content-orchestrator',
-    key: 'settings',
-  });
-  const current = (await store.get()) as Record<string, unknown> | null;
-
-  if (!current || !current.image_gen_model) {
-    const model = resolveImageGenModel();
-    const token = resolveImageGenToken();
-    const encryptedToken = token ? encryptToken(strapi, token) : null;
-
-    await store.set({
-      value: {
-        timezone: WARSAW_TIMEZONE,
-        locale: 'pl',
-        image_gen_model: model,
-        image_gen_api_token_encrypted: encryptedToken,
-        ...(current || {}),
-      },
-    });
-    strapi.log.info(
-      '[aico] Global settings seeded or updated with Media Gen config.',
-    );
-  }
 };

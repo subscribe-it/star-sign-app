@@ -6,11 +6,12 @@ import {
   output,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { MarkdownContent } from '../markdown-content/markdown-content';
 import { PREMIUM_PREVIEW_ITEMS } from './premium-preview.config';
 
 @Component({
   selector: 'app-premium-preview-block',
-  imports: [RouterLink],
+  imports: [RouterLink, MarkdownContent],
   templateUrl: './premium-preview-block.html',
   styleUrl: './premium-preview-block.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -19,10 +19,6 @@ const config = ({
   };
 
   const pluginConfig: Core.Config.Plugin = {
-    'ai-content-orchestrator': {
-      enabled: true,
-      resolve: 'src/plugins/ai-content-orchestrator',
-    },
     email: {
       config: {
         provider: 'nodemailer',

@@ -24,7 +24,7 @@ describe('release env helpers', () => {
       process.chdir(directory);
 
       const candidates = getReleaseEnvFileCandidates({
-        AICO_AUDIT_ENV_FILE: 'ops/.env.production',
+        COMPOSE_ENV_FILE: 'ops/.env.production',
       });
 
       expect(getAppDir()).toMatch(/apps\/api$/);

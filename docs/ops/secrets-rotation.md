@@ -7,7 +7,7 @@
 3. Redis URLs/passwords if Redis auth is enabled.
 4. R2/S3: `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`.
 5. Brevo: `BREVO_API_KEY`, SMTP user/password, `BREVO_WEBHOOK_SECRET`.
-6. OpenRouter/AICO: `AICO_OPENROUTER_TOKEN`.
+6. Token API Strapi używany przez marketing-os (utwórz nowy, unieważnij stary).
 7. Turnstile: `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`.
 8. Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`.
 9. Bugsink: `BUGSINK_SECRET_KEY`, admin password, project DSNs if compromised.

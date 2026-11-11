@@ -257,26 +257,7 @@ export default factories.createCoreService(
 
           const fileId = uploadedFiles[0].id;
 
-          // 4. Przypisanie do Media Catalog (AICO)
-          const assetKey = `tarot_${cardData.cardName.toLowerCase()}`;
-          await strapi.entityService.create(
-            'plugin::ai-content-orchestrator.media-asset',
-            {
-              data: {
-                asset_key: assetKey,
-                label: `Tarot Card: ${cardData.cardName}`,
-                purpose: 'horoscope_sign', // Poprawiona wartość na zgodną z walidacją
-                sign_slug: cardData.cardName.toLowerCase(),
-                active: true,
-                asset: fileId,
-                notes: `Generated from specialized Flux 2 Pro prompt. Color: ${cardData.colorMotif}`,
-                mapping_source: 'seed',
-                mapping_confidence: 1.0,
-              } as any,
-            },
-          );
-
-          // 5. Aktualizacja/Utworzenie wpisu TarotCard (opcjonalnie, jeśli istnieje model)
+          // 4. Aktualizacja/Utworzenie wpisu TarotCard (opcjonalnie, jeśli istnieje model)
           const existingCards = await strapi.entityService.findMany(
             'api::tarot-card.tarot-card',
             {

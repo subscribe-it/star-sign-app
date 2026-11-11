@@ -1,10 +1,5 @@
 import type { Core } from '@strapi/strapi';
-import {
-  ensureBootstrapContent,
-  ensureHoroscopeWorkflows,
-  ensureArticleWorkflows,
-  ensureDailyCardWorkflows,
-} from './bootstrap/content';
+import { ensureBootstrapContent } from './bootstrap/content';
 import { syncContentApiReadPermissions } from './utils/public-permissions';
 
 export default {
@@ -72,15 +67,6 @@ export default {
         'Nie udało się zsynchronizować publicznych uprawnień Content API.',
         error,
       );
-    }
-
-    try {
-      await ensureHoroscopeWorkflows(strapi);
-      await ensureArticleWorkflows(strapi);
-      await ensureDailyCardWorkflows(strapi);
-      strapi.log.info('Produkcyjne workflowy AICO są zarejestrowane.');
-    } catch (error) {
-      strapi.log.warn('Nie udało się zarejestrować workflowów AICO.', error);
     }
   },
 };

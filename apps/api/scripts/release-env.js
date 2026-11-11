@@ -19,7 +19,6 @@ const resolveFromApp = (filename) =>
 
 const getReleaseEnvFileCandidates = (env = process.env) => {
   const explicit = firstNonEmpty([
-    env.AICO_AUDIT_ENV_FILE,
     env.COMPOSE_ENV_FILE,
   ]);
   const candidates = [

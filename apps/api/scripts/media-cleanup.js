@@ -38,12 +38,6 @@ const referenceSources = [
     populate: ['image'],
     fields: ['image'],
   },
-  {
-    uid: 'plugin::ai-content-orchestrator.media-asset',
-    label: 'aico.media-asset.asset',
-    populate: ['asset'],
-    fields: ['asset'],
-  },
 ];
 
 const toPositiveInteger = (value, fallback) => {

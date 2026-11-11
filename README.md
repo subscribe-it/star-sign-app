@@ -77,12 +77,11 @@ npx nx e2e frontend-e2e --ui
 
 Deploy: push na `main` → GitHub Actions buduje obrazy → **GHCR** → webhook **Portainera** stawia stack na VPS.
 
-- **Sekrety i zmienne (komplet + instrukcja):** [docs/ops/github-secrets-and-variables.md](docs/ops/github-secrets-and-variables.md) — wszystkie wymagane sekrety/variables aplikacji i pluginu **AICO**, podział secret/variable, jak wygenerować i ustawić (`gh` / UI), tryb indywidualny vs bundled.
+- **Sekrety i zmienne (komplet + instrukcja):** [docs/ops/github-secrets-and-variables.md](docs/ops/github-secrets-and-variables.md) — wszystkie wymagane sekrety/variables aplikacji, podział secret/variable, jak wygenerować i ustawić (`gh` / UI), tryb indywidualny vs bundled.
 - **Generowanie sekretów per provider:** [docs/ops/secrets-setup.md](docs/ops/secrets-setup.md).
-- **Audyt i roadmapa:** [docs/audit-2026-06-16.md](docs/audit-2026-06-16.md). **Panel autonomii AICO:** [docs/aico-admin-panel-plan.md](docs/aico-admin-panel-plan.md).
 - **Bramki przed deployem:** `npm run ops:predeploy:staging` (lint/typecheck/test/build/env/audit), po deployu `npm run ops:smoke` + `npm run ops:headers`.
 
-> Domyślnie bezpiecznie: AICO ma reklamy i wideo `disabled`, autonomię `guarded` — świeży deploy nie wydaje pieniędzy ani nie publikuje na żywo, dopóki nie włączysz tego w panelu/zmiennych.
+> Treści (horoskopy, karta dnia, artykuły) tworzy zewnętrzny silnik `marketing-os` przez REST API Strapi (token API z create/update/publish na `articles`, `horoscopes`, `daily-tarot-draws`, `upload`). Star Sign nie generuje treści samodzielnie.
 
 ## ⚖️ Zgodność Prawna
 

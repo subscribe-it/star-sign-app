@@ -1,14 +1,9 @@
-import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
-import { catchError, map, timeout } from 'rxjs/operators';
-import { environment } from '../../../environments/environment';
-import { API_REQUEST_TIMEOUT_MS } from './api-timeout';
 
 /**
- * Public, audience-facing author (editor persona) used for E-E-A-T authorship
- * on the public site. Mirrors the safe fields returned by the AICO plugin's
- * public personas endpoint — never any LLM internals.
+ * Public, audience-facing author used on the public author page. Serwis nie
+ * wykonuje żadnych zapytań HTTP i zwraca wyłącznie redakcję Star Sign.
  */
 export interface PublicAuthor {
   key: string;
@@ -21,44 +16,26 @@ export interface PublicAuthor {
   } | null;
 }
 
-type AuthorResponse<T> = { data: T };
+export const FALLBACK_AUTHOR: PublicAuthor = {
+  key: 'redakcja-star-sign',
+  byline: 'Redakcja Star Sign',
+  bio: 'Zespół redakcyjny Star Sign.',
+  specialization: 'Astrologia, tarot i numerologia',
+  avatar: null,
+};
 
-/**
- * Reads public author (editor persona) data from the AI Content Orchestrator
- * plugin's read-only content-api. Plugin content-api routes are mounted under
- * /api/<plugin-id>/..., hence the ai-content-orchestrator prefix.
- */
 @Injectable({
   providedIn: 'root',
 })
 export class AuthorService {
-  private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiUrl}/ai-content-orchestrator/editor-personas`;
-
-  /** Active authors (safe fields only). Empty array on any error. */
   public getAuthors(): Observable<PublicAuthor[]> {
-    return this.http.get<AuthorResponse<PublicAuthor[]>>(this.baseUrl).pipe(
-      timeout(API_REQUEST_TIMEOUT_MS),
-      map((response) => response.data ?? []),
-      catchError(() => of([] as PublicAuthor[])),
-    );
+    return of([FALLBACK_AUTHOR]);
   }
 
-  /** Single author by key. Returns undefined when missing/inactive or on error. */
+  /** Only the editorial fallback author exists; any other key is "not found". */
   public getAuthorByKey(key: string): Observable<PublicAuthor | undefined> {
-    const trimmed = key?.trim();
-    if (!trimmed) {
-      return of(undefined);
-    }
-
-    return this.http
-      .get<
-        AuthorResponse<PublicAuthor>
-      >(`${this.baseUrl}/${encodeURIComponent(trimmed)}`)
-      .pipe(
-        timeout(API_REQUEST_TIMEOUT_MS),
-        map((response) => response.data ?? undefined),
-        catchError(() => of(undefined)),
-      );
+    return of(
+      key?.trim() === FALLBACK_AUTHOR.key ? FALLBACK_AUTHOR : undefined,
+    );
   }
 }
