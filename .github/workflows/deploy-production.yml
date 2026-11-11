@@ -23,7 +23,7 @@ env:
 jobs:
   release-gate:
     name: Main release gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       STAR_SIGN_PRODUCTION_ENV: ${{ secrets.STAR_SIGN_PRODUCTION_ENV }}
       FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
@@ -190,7 +190,7 @@ jobs:
 
   build-and-push:
     name: Build and push GHCR images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: release-gate
     steps:
       - uses: actions/checkout@v4
@@ -260,7 +260,7 @@ jobs:
 
   deploy:
     name: Trigger Portainer deploy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: build-and-push
     env:
       PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
@@ -296,7 +296,7 @@ jobs:
 
   post-deploy:
     name: Post-deploy smoke and e2e
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: deploy
     env:
       FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
