@@ -1,7 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
+  ElementRef,
   ViewEncapsulation,
+  afterNextRender,
   computed,
   inject,
   input,
@@ -62,20 +65,29 @@ export function renderMarkdown(source: string | null | undefined): string {
  */
 @Component({
   selector: 'app-markdown-content',
-  template: `<div
-    class="markdown-body"
-    [innerHTML]="html()"
-    (click)="onClick($event)"
-  ></div>`,
+  template: `<div class="markdown-body" [innerHTML]="html()"></div>`,
   styleUrl: './markdown-content.scss',
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MarkdownContent {
   private readonly router = inject(Router);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly destroyRef = inject(DestroyRef);
 
   public readonly content = input<string | null | undefined>(null);
   public readonly html = computed(() => renderMarkdown(this.content()));
+
+  constructor() {
+    // Delegacja klików bez wiązania (click) na nieinteraktywnym kontenerze:
+    // linki pozostają natywnie fokusowalne, a lint a11y jest spełniony.
+    afterNextRender(() => {
+      const el = this.host.nativeElement;
+      const handler = (event: MouseEvent) => this.onClick(event);
+      el.addEventListener('click', handler);
+      this.destroyRef.onDestroy(() => el.removeEventListener('click', handler));
+    });
+  }
 
   public onClick(event: MouseEvent): void {
     if (
