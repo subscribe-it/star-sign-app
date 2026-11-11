@@ -21,10 +21,10 @@
     "@analogjs/vitest-angular": "~2.1.2",
     "@angular-devkit/core": "21.2.13",
     "@angular-devkit/schematics": "21.2.13",
-    "@angular/build": "21.2.13",
-    "@angular/cli": "21.2.13",
-    "@angular/compiler-cli": "^21.2.21",
-    "@angular/language-service": "^21.2.21",
+    "@angular/build": "^21.2.25",
+    "@angular/cli": "^21.2.25",
+    "@angular/compiler-cli": "^21.2.25",
+    "@angular/language-service": "^21.2.25",
     "@eslint/js": "^9.8.0",
     "@noble/hashes": "^2.3.0",
     "@nx/angular": "^22.7.0",
@@ -90,5 +90,8 @@
     "marked": "^18.2.0",
     "ngx-cookie-service": "^21.3.1",
     "rxjs": "~7.8.0"
+  },
+  "overrides": {
+    "fast-uri": "^3.1.9"
   }
 }
